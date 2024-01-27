@@ -1,1 +1,18 @@
-/.vs
+################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/.vs/ElectricField/FileContentIndex/0b5841d4-6c60-430c-a769-392aa3701564.vsidx
+/.vs/ElectricField/v17/.suo
+/.vs/ElectricField/v17/.wsuo
+/.vs/ElectricField/v17/Browse.VC.db
+/.vs/ElectricField/v17/fileList.bin
+/.vs/ElectricField/v17/Solution.VC.db
+/.vs/ProjectSettings.json
+/.vs/slnx.sqlite
+/.vs/VSWorkspaceState.json
+/x64/Debug/ElectricField.exe
+/x64/Debug/ElectricField.pdb
+/.vs/ElectricField/v17/Browse.VC.db-shm
+/.vs/ElectricField/v17/Browse.VC.db-wal
+/.vs/ElectricField/v17/Browse.VC.opendb

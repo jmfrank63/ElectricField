@@ -1,0 +1,38 @@
+﻿  stdafx.cpp
+  Charge.cpp
+  ChildFrm.cpp
+  ComputationPropertyPage.cpp
+  ComputationThread.cpp
+  ConfigDocs.cpp
+  DrawPropertyPage.cpp
+  ElectricField.cpp
+  ElectricFieldDoc.cpp
+  ElectricFieldView.cpp
+  FieldLine.cpp
+  FieldLinesCalculator.cpp
+C:\Users\jmfra\source\repos\jmfrank63\ElectricField\ElectricField\FieldLinesCalculator.cpp(37,16): warning C4457: declaration of 'job' hides function parameter
+  (compiling source file '/FieldLinesCalculator.cpp')
+  C:\Users\jmfra\source\repos\jmfrank63\ElectricField\ElectricField\FieldLinesCalculator.cpp(23,109):
+  see declaration of 'job'
+  C:\Users\jmfra\source\repos\jmfrank63\ElectricField\ElectricField\FieldLinesCalculator.cpp(37,1):
+  the template instantiation context (the oldest one first) is
+  	C:\Users\jmfra\source\repos\jmfrank63\ElectricField\ElectricField\FieldLinesCalculator.cpp(290,7):
+  	see reference to class template instantiation 'FieldLinesCalculator::CalcThread<RungeKutta::Euler<Vector2D<double>>>' being compiled
+  	C:\Users\jmfra\source\repos\jmfrank63\ElectricField\ElectricField\FieldLinesCalculator.cpp(154,1):
+  	while compiling class template member function 'void FieldLinesCalculator::CalcThread<RungeKutta::Euler<Vector2D<double>>>::Calculate(void)'
+  	C:\Users\jmfra\source\repos\jmfrank63\ElectricField\ElectricField\FieldLinesCalculator.cpp(180,1):
+  	while compiling class template member function 'void FieldLinesCalculator::CalcThread<RungeKutta::Euler<Vector2D<double>>>::ProcessJob(FieldLinesCalculator::FieldLineJob &)'
+  	C:\Users\jmfra\source\repos\jmfrank63\ElectricField\ElectricField\FieldLinesCalculator.cpp(52,1):
+  	while compiling class template member function 'void FieldLinesCalculator::CalcThread<RungeKutta::Euler<Vector2D<double>>>::CalculateElectricFieldLine(FieldLinesCalculator::FieldLineJob &)'
+  	C:\Users\jmfra\source\repos\jmfrank63\ElectricField\ElectricField\FieldLinesCalculator.cpp(24,1):
+  	while compiling class template member function 'void FieldLinesCalculator::CalcThread<RungeKutta::Euler<Vector2D<double>>>::PostCalculateEquipotential(FieldLinesCalculator::FieldLineJob &)'
+  
+  MainFrm.cpp
+  Options.cpp
+  OptionsPropertySheet.cpp
+  PrecisionTimer.cpp
+  RungeKutta.inl
+  TheElectricField.cpp
+  Vector2D.cpp
+  Generating Code...
+  ElectricField.vcxproj -> C:\Users\jmfra\source\repos\jmfrank63\ElectricField\x64\Debug\ElectricField.exe

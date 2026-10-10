@@ -1,5 +1,6 @@
 #include "ef/svg.hpp"
 
+#include <cmath>
 #include <cstdio>
 
 namespace ef {
@@ -8,9 +9,14 @@ namespace {
 
 // printf-style numbers are locale-dependent only if the program calls setlocale(); the core never does.
 void appendNum(std::string& s, float v) {
-  char buf[32];
+  if (!std::isfinite(v)) v = 0.0f;  // NaN/Inf would print "nan"/"inf": invalid SVG numbers
+  char buf[64];                     // FLT_MAX prints as 39 integer digits + ".xx" + sign: always fits
   const int n = std::snprintf(buf, sizeof buf, "%.2f", static_cast<double>(v));
-  int len = n;
+  if (n <= 0) {  // encoding error: emit a valid number rather than reading garbage
+    s += '0';
+    return;
+  }
+  int len = n < static_cast<int>(sizeof buf) ? n : static_cast<int>(sizeof buf) - 1;  // snprintf returns the would-be length
   // trim trailing zeros: "12.50" -> "12.5", "12.00" -> "12"
   if (len > 0) {
     while (len > 0 && buf[len - 1] == '0') --len;

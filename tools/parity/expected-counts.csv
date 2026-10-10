@@ -1,0 +1,10 @@
+slug,charges,field_lines,equipotentials
+dipole,2,16,75
+two-equal-charges,2,32,74
+two-unequal-charges-same-sign,2,48,113
+two-unequal-charges-different-signs,2,32,113
+quadrupole,4,32,142
+four-charges-same-sign,4,64,128
+two-dipoles-same-direction,4,32,138
+two-dipoles-opposed-direction,4,32,130
+parallel-dipoles,4,32,136

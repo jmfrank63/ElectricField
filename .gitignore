@@ -25,6 +25,7 @@ Release/
 # ---- scratch / local ----
 /build/
 /out/
+/parity-out/
 *.log
 
 # ImGui writes imgui.ini to the working directory on shutdown (smoke / run)

@@ -77,7 +77,10 @@ void ComputeSession::fail(const char* what) {
     std::lock_guard<std::mutex> lk(m_);
     if (!failed_) {
       failed_ = true;
-      error_ = what;
+      try {
+        error_ = what;
+      } catch (...) {  // out of memory while recording the message: the failed flag alone is still reported
+      }
     }
   }
   cancel();
@@ -137,43 +140,53 @@ void ComputeSession::workerLoop(Solver& solver) {
 }
 
 void ComputeSession::finish() {
-  std::vector<std::shared_ptr<const KeyedElectricLine>> e;
-  std::vector<std::shared_ptr<const KeyedPotentialLine>> p;
-  {
-    std::lock_guard<std::mutex> lk(m_);
-    if (stop_.load() || failed_) {
-      cancelled_ = !failed_;
-      done_ = true;
-      doneCv_.notify_all();
-      return;
-    }
-    e = allE_;
-    p = allP_;
-  }
-
-  // D-04: deterministic order regardless of which worker finished first
-  std::sort(e.begin(), e.end(), [](const auto& a, const auto& b) { return a->key < b->key; });
-  std::sort(p.begin(), p.end(), [](const auto& a, const auto& b) { return a->key < b->key; });
-  std::vector<FieldLine> rawE;
-  std::vector<PotentialLine> rawP;
-  rawE.reserve(e.size());
-  rawP.reserve(p.size());
-  for (const auto& x : e) rawE.push_back(x->line);
-  for (const auto& x : p) rawP.push_back(x->line);
-
+  // Runs on the last worker thread, outside workerMain's try/catch: nothing may escape (std::terminate), and done_ must
+  // ALWAYS be published or wait() blocks forever. Every throwing step (copies, sort, reserve, finalize) is therefore guarded.
   FieldResult r;
+  bool haveR = false;
   try {
-    r = ef::finalize(std::move(rawE), std::move(rawP), field_, params_);
+    std::vector<std::shared_ptr<const KeyedElectricLine>> e;
+    std::vector<std::shared_ptr<const KeyedPotentialLine>> p;
+    bool proceed = false;
+    {
+      std::lock_guard<std::mutex> lk(m_);
+      if (!stop_.load() && !failed_) {
+        e = std::move(allE_);  // all workers are done: allE_/allP_ have no further users, so hand them over without copying
+        p = std::move(allP_);
+        proceed = true;
+      }
+    }
+    if (proceed) {
+      // D-04: deterministic order regardless of which worker finished first
+      std::sort(e.begin(), e.end(), [](const auto& a, const auto& b) { return a->key < b->key; });
+      std::sort(p.begin(), p.end(), [](const auto& a, const auto& b) { return a->key < b->key; });
+      std::vector<FieldLine> rawE;
+      std::vector<PotentialLine> rawP;
+      rawE.reserve(e.size());
+      rawP.reserve(p.size());
+      for (const auto& x : e) rawE.push_back(x->line);  // lines are shared immutable objects (UI may still hold them): copy
+      for (const auto& x : p) rawP.push_back(x->line);
+      e.clear();
+      p.clear();
+
+      r = ef::finalize(std::move(rawE), std::move(rawP), field_, params_);
+      haveR = true;
+    }
   } catch (const std::exception& ex) {
     fail(ex.what());
+  } catch (...) {
+    fail("unknown exception while finalizing the result");
   }
+
   {
     std::lock_guard<std::mutex> lk(m_);
-    if (!failed_) {
+    if (failed_) {
+      cancelled_ = false;
+    } else if (haveR) {
       result_ = std::move(r);
       haveResult_ = true;
     } else {
-      cancelled_ = false;
+      cancelled_ = true;  // stop was requested before finalization started
     }
     done_ = true;
   }

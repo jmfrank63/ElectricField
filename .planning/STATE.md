@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 01
 current_phase_name: foundation-portable-physics-core
-status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-10-10T09:12:51.543Z"
+status: verifying
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-10-10T10:14:25.504Z"
 last_activity: 2026-10-10
 last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-10-10)
 
 Phase: 01 (foundation-portable-physics-core) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-10 — Phase 01 execution started
 
-Progress: [████████░░] 75%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -61,6 +61,7 @@ Progress: [████████░░] 75%
 | Phase 01 P01 | 25min | 3 tasks | 16 files |
 | Phase 01 P02 | 25min | 2 tasks | 11 files |
 | Phase 01 P03 | 12min | 3 tasks | 8 files |
+| Phase 01 P04 | 60min | 3 tasks | 24 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,7 @@ Recent decisions affecting current work:
 - [Phase ?]: 01-01: Added imgui.ini to .gitignore (ImGui writes it to cwd on smoke/run); main.cpp left verbatim
 - [Phase ?]: [Phase 01 P02]: MFC baseline recorded with MSVC 14.51.36231 / v145, 96 DPI; compare against docs/baseline/mfc with fuzz 10%, never byte equality
 - [Phase ?]: [01-03] DP error weights: keep vs fix is an open Phase 2 decision; MFC behaviour kept and pinned by characterisation test
+- [Phase ?]: [Phase 01 P04] D-12 gate GO: Zig 0.17 + SDL3 + ImGui green on windows/linux/macos-arm64 on first CI run (run 38040977802, head d17dd2f); Qt 6 + CMake fallback not triggered
 
 ### Pending Todos
 
@@ -84,7 +86,7 @@ None yet.
 
 ### Blockers/Concerns
 
-- [Phase 1]: Linux and macOS execution of the Zig + SDL3 + ImGui stack is unverified (only Windows was spiked); CI gate decides go/no-go
+- [Phase 1] RESOLVED 2026-10-10: Linux and macOS execution of the Zig + SDL3 + ImGui stack verified by CI run 38040977802 (head d17dd2f, windows/linux/macos-arm64 all green, smoke presets=9); D-12 gate = GO
 - [Phase 1]: QA-05 baseline needs the MSVC v145 toolset with MFC on the dev machine; capture it before any MFC deletion
 - [Phase 1]: Zig 0.17 build API churn (C/C++ calls live on Module); start from `zig init` of the installed version
 - [Phase 2]: `FieldLineJob job(job)` self-copy behaviour under MSVC needs reproduction; use tolerance-based tests, never bit-exact geometry
@@ -100,6 +102,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-10-10T09:12:51.524Z
-Stopped at: Completed 01-03-PLAN.md
+Last session: 2026-10-10T10:14:25.484Z
+Stopped at: Completed 01-04-PLAN.md
 Resume file: None

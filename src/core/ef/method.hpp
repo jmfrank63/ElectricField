@@ -1,6 +1,8 @@
 #pragma once
 #include <array>
 #include <cstddef>
+#include <optional>
+#include <stdexcept>
 #include <string_view>
 
 #include "ef/rk.hpp"
@@ -46,7 +48,15 @@ inline constexpr std::array<MethodInfo, kMethodCount> kMethods{{
     {Method::AdaptiveDormandPrince, "adaptive-dormand-prince", "Dormand Prince (adaptive)", true, 5},
 }};
 
-inline constexpr const MethodInfo& info(Method m) { return kMethods[static_cast<std::size_t>(m)]; }
+// D-15 (WR-03): bounds-checked; throws std::out_of_range for a Method value outside the 11 known ones.
+inline constexpr const MethodInfo& info(Method m) { return kMethods.at(static_cast<std::size_t>(m)); }
+
+// Persistence key -> Method (nullopt for unknown names; callers fall back to the default explicitly).
+inline constexpr std::optional<Method> methodFromName(std::string_view name) {
+  for (const auto& mi : kMethods)
+    if (mi.name == name) return mi.method;
+  return std::nullopt;
+}
 
 // Calls visitor(solver) with a freshly constructed solver of the right static type (one per thread).
 // Mirrors FieldLinesCalculator::StartComputingThread's switch, but keeps the hot loop non-virtual.
@@ -66,8 +76,7 @@ decltype(auto) withSolver(Method m, V&& visitor) {
     case Method::AdaptiveFehlberg: { rk::AdaptiveFehlberg<S> s; return visitor(s); }
     case Method::AdaptiveDormandPrince: { rk::AdaptiveDormandPrince<S> s; return visitor(s); }
   }
-  rk::Euler<S> s;  // unreachable for valid enum values
-  return visitor(s);
+  throw std::invalid_argument("ef::withSolver: invalid Method value");  // D-15: no silent fallback to Euler
 }
 
 }  // namespace ef

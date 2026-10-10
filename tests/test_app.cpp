@@ -119,7 +119,6 @@ TEST_CASE("a new tab shows its charges at once and finishes with a cached scene"
 }
 
 TEST_CASE("closing a computing tab and closeAll() return promptly and leave no session") {
-  Workspace ws(lightParams());
   ef::ComputeParams heavy;  // MFC defaults: the heaviest realistic session
   Workspace wsHeavy(heavy);
   for (std::size_t i = 0; i < ef::kPresetCount; ++i) wsHeavy.open(i);

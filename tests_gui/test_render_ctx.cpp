@@ -35,11 +35,14 @@ struct GuiLikeContext {
   SDL_Renderer* renderer = nullptr;
   ImGuiContext* ctx = nullptr;
 
+  bool ok = false;  // construction succeeded; tests REQUIRE(gui.ok) (a REQUIRE inside a constructor would leak the partial state)
+  bool backend = false;
+
   GuiLikeContext() {
     surface = SDL_CreateSurface(320, 240, SDL_PIXELFORMAT_RGBA32);
-    REQUIRE(surface != nullptr);
+    if (!surface) return;
     renderer = SDL_CreateSoftwareRenderer(surface);
-    REQUIRE(renderer != nullptr);
+    if (!renderer) return;
     ctx = ImGui::CreateContext();
     ImGui::SetCurrentContext(ctx);  // the GUI does exactly this once at start-up (first context: CreateContext keeps it current)
     ImGuiIO& io = ImGui::GetIO();
@@ -47,17 +50,20 @@ struct GuiLikeContext {
     io.DisplaySize = ImVec2(320.f, 240.f);
     io.DeltaTime = 1.f / 60.f;
     ImGui::GetStyle().CurveTessellationTol = 0.7f;  // a value the export must not leak into (its own value is 0.3)
-    REQUIRE(ImGui_ImplSDLRenderer3_Init(renderer));
+    backend = ImGui_ImplSDLRenderer3_Init(renderer);
+    if (!backend) return;
     frame();
     frame();
+    ok = true;
   }
   ~GuiLikeContext() {
-    ImGui::SetCurrentContext(ctx);
-    ImGui_ImplSDLRenderer3_Shutdown();
-    ImGui::DestroyContext(ctx);
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroySurface(surface);
+    if (ctx) ImGui::SetCurrentContext(ctx);
+    if (backend) ImGui_ImplSDLRenderer3_Shutdown();
+    if (ctx) ImGui::DestroyContext(ctx);
+    if (renderer) SDL_DestroyRenderer(renderer);
+    if (surface) SDL_DestroySurface(surface);
   }
+
   void frame() {
     ImGui_ImplSDLRenderer3_NewFrame();
     ImGui::NewFrame();
@@ -107,6 +113,7 @@ TEST_CASE("renderSurface inside a running GUI context: no assert, caller context
   SDL_Surface* alone = render(scene, 200, 150);  // reference: same call without any GUI context
 
   GuiLikeContext gui;
+  REQUIRE(gui.ok);
   ImGuiIO& io = ImGui::GetIO();
   void* const backend = io.BackendRendererUserData;
   REQUIRE(backend != nullptr);
@@ -129,6 +136,7 @@ TEST_CASE("renderSurface inside a running GUI context: no assert, caller context
 TEST_CASE("renderSurface repeatedly inside a GUI context (export button pressed many times)") {
   const ef::FieldScene scene = dipoleScene();
   GuiLikeContext gui;
+  REQUIRE(gui.ok);
   for (int i = 0; i < 5; ++i) {
     SDL_Surface* px = render(scene, 160 + i, 120);
     SDL_DestroySurface(px);
@@ -140,6 +148,7 @@ TEST_CASE("renderSurface repeatedly inside a GUI context (export button pressed 
 TEST_CASE("renderPng inside a GUI context writes a PNG and restores the context") {
   const ef::FieldScene scene = dipoleScene();
   GuiLikeContext gui;
+  REQUIRE(gui.ok);
   const std::filesystem::path out = std::filesystem::temp_directory_path() / "ef-render-ctx-test.png";
   std::filesystem::remove(out);
   ef::View view;

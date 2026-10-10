@@ -22,6 +22,8 @@ param(
   [string]$BackupDir = $env:TEMP
 )
 $ErrorActionPreference = 'Stop'
+# D-18: validate -Exe before anything else (no Add-Type, no registry backup/delete happens for a bad path).
+if (-not (Test-Path -LiteralPath $Exe -PathType Leaf)) { throw "Exe not found: $Exe" }
 Add-Type -AssemblyName System.Drawing
 $Presets = $PresetList.Split(',') | ForEach-Object { [int]$_ }
 
@@ -46,11 +48,12 @@ public class W {
   [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr w, StringBuilder l);
   [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr dlg, int id);
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
-  // near-black pixels: field lines are black by default, charges blue/red, equipotentials grey(192)
+  // near-black OPAQUE pixels (BGRA, alpha 255): field lines are black by default, charges blue/red, equipotentials grey(192).
+  // Transparent black (a failed or empty grab) must not count as ink (D-18).
   public static int Dark(Bitmap b) {
     var d = b.LockBits(new Rectangle(0,0,b.Width,b.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
     byte[] buf = new byte[d.Stride * b.Height]; Marshal.Copy(d.Scan0, buf, 0, buf.Length); b.UnlockBits(d);
-    int n = 0; for (int i = 0; i + 3 < buf.Length; i += 4) if (buf[i] < 80 && buf[i+1] < 80 && buf[i+2] < 80) n++;
+    int n = 0; for (int i = 0; i + 3 < buf.Length; i += 4) if (buf[i] < 80 && buf[i+1] < 80 && buf[i+2] < 80 && buf[i+3] == 255) n++;
     return n;
   }
 }
@@ -91,7 +94,10 @@ function Wait-For($block, $sec, $what) {
 function Grab($h) {   # PW_CLIENTONLY (1) | PW_RENDERFULLCONTENT (2): works for the Direct2D HWND render target
   $r = New-Object W+RECT; [void][W]::GetClientRect($h, [ref]$r)
   $bmp = New-Object System.Drawing.Bitmap ($r.R - $r.L), ($r.B - $r.T)
-  $g = [System.Drawing.Graphics]::FromImage($bmp); $hdc = $g.GetHdc(); [void][W]::PrintWindow($h, $hdc, 3); $g.ReleaseHdc($hdc); $g.Dispose()
+  $g = [System.Drawing.Graphics]::FromImage($bmp); $hdc = $g.GetHdc()
+  $ok = [W]::PrintWindow($h, $hdc, 3)
+  $g.ReleaseHdc($hdc); $g.Dispose()
+  if (-not $ok) { $bmp.Dispose(); return $null }   # D-18: a failed PrintWindow is "no frame", never an (empty) image
   $bmp
 }
 function Hash($bmp) { $ms = New-Object System.IO.MemoryStream; $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); [BitConverter]::ToString([Security.Cryptography.SHA1]::Create().ComputeHash($ms.ToArray())) }
@@ -156,14 +162,18 @@ try {
       # 3. the view paints lines only once ALL worker threads are done (OnTimer -> GetData): wait for lines + 2 s of stable pixels
       $last = ''; $stable = [Diagnostics.Stopwatch]::StartNew(); $wait = [Diagnostics.Stopwatch]::StartNew(); $done = $false; $dark = 0
       while ($wait.Elapsed.TotalSeconds -lt $TimeoutSec) {
-        $b = Grab $view; $dark = [W]::Dark($b); $h = Hash $b; $b.Dispose()
+        $b = Grab $view
+        if ($null -eq $b) { Start-Sleep -Milliseconds 500; continue }   # no frame this round: retry until the timeout
+        $dark = [W]::Dark($b); $h = Hash $b; $b.Dispose()
         if ($h -ne $last) { $last = $h; $stable.Restart() } elseif ($dark -gt 1500 -and $stable.Elapsed.TotalSeconds -ge 2.0) { $done = $true; break }
         Start-Sleep -Milliseconds 500
       }
       if (-not $done) { throw "not finished within $TimeoutSec s (dark pixels: $dark) - human-assisted fallback needed" }
 
       # 4. capture
-      $b = Grab $view; $file = Join-Path $OutDir ("{0}.png" -f $expected[$idx].slug)
+      $b = Grab $view
+      if ($null -eq $b) { throw "PrintWindow failed for $($expected[$idx].slug)" }
+      $file = Join-Path $OutDir ("{0}.png" -f $expected[$idx].slug)
       $b.Save($file, [System.Drawing.Imaging.ImageFormat]::Png); $b.Dispose()
       "{0}: {1}x{2} dark={3} total={4}s -> {5}" -f $expected[$idx].slug, $ClientW, $ClientH, $dark, [math]::Round($sw.Elapsed.TotalSeconds, 1), $file
     }

@@ -38,6 +38,7 @@ int main(int argc, char** argv) {
 
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
+  if (smoke) ImGui::GetIO().IniFilename = nullptr;  // IN-03: the headless check must not write imgui.ini into the cwd
   ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
   ImGui_ImplSDLRenderer3_Init(renderer);
 

@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 3
-current_phase_name: GUI Shell
+current_phase: 03
+current_phase_name: gui-shell
 status: executing
-stopped_at: Phase 3 UI-SPEC approved
-last_updated: "2026-10-10T17:14:57.405Z"
-last_activity: 2026-10-10
-last_activity_desc: Phase 2 complete, transitioned to Phase 3
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-10-10T17:34:12.111Z"
+last_activity: 2026-10-11
+last_activity_desc: Phase 03 execution started
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 11
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-10 after Phase 2)
 
 **Core value:** The physics and visual output must stay correct and recognisable: the same charge configurations produce the same field lines and equipotentials, now buildable and runnable on Windows, Linux and macOS without Visual Studio.
-**Current focus:** Phase 03 — GUI Shell (Dear ImGui + SDL3)
+**Current focus:** Phase 03 — gui-shell
 
 ## Current Position
 
-Phase: 3 — GUI Shell
-Plan: Not started
+Phase: 03 (gui-shell) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-10-10 — Phase 2 complete, transitioned to Phase 3
+Last activity: 2026-10-11 — Phase 03 execution started
 
-Progress: [██████████] 100%
+Progress: [████████░░] 82%
 
 ## Performance Metrics
 
@@ -66,6 +66,7 @@ Progress: [██████████] 100%
 | Phase 02 P02 | 25min | 2 tasks | 8 files |
 | Phase 02 P03 | 20min | 2 tasks | 13 files |
 | Phase 02 P04 | 40min | 2 tasks | 3 files |
+| Phase 03 P01 | 40min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 02 P04] CI gate green on windows/linux/macos-arm64/tsan-linux (runs 38054538292, 38055102426); macOS arm64 parity counts identical to Windows/Linux, so A1 holds and the tolerance is unchanged
 
 - [Phase 2]: Verified (human-approved MFC side-by-side); code review 3 iterations, 11/11 warnings fixed; final CI run 38058493194 green incl. tsan-linux
+- [Phase ?]: [Phase 03 P01] efapp (std-only tab model, ISession seam) and efrender with ImGui context rule copied byte-for-byte from the prototype; Wave 0 pacer/scripted-session tests mutation-proven; TSan clean on Linux (78 cases)
 
 ### Pending Todos
 
@@ -114,9 +116,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-10-10T14:46:42.306Z
-Stopped at: Phase 3 UI-SPEC approved
-Resume file: .planning/phases/03-gui-shell/03-UI-SPEC.md
+Last session: 2026-10-10T17:34:12.082Z
+Stopped at: Completed 03-01-PLAN.md
+Resume file: None
 
 ## Deferred Verification
 

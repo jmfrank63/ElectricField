@@ -29,10 +29,10 @@ Requirements for the cross-platform release. Each maps to roadmap phases.
 
 ### Configurations & Display
 
-- [ ] **VIEW-01**: User can open any of the 9 preset charge configurations (Dipole, Two equal charges, Two unequal charges same sign, Two unequal charges different sign, Quadrupole, Four charges same sign, Two dipoles same direction, Two dipoles different direction, Parallel dipoles) from a menu, each in its own tab, with charge positions/magnitudes identical to the MFC version
-- [ ] **VIEW-02**: User can have several configurations open at once and close any tab, including while it is still computing
-- [ ] **VIEW-03**: User sees charges drawn as filled circles colored by sign and field/equipotential lines drawn anti-aliased with Bezier smoothing, y-up, centered, at the original scale (100 px per unit), correct on HiDPI displays
-- [ ] **VIEW-04**: User sees a busy indicator while a configuration is computing, and the completed field lines and equipotentials once computation finishes (parity behaviour)
+- [x] **VIEW-01**: User can open any of the 9 preset charge configurations (Dipole, Two equal charges, Two unequal charges same sign, Two unequal charges different sign, Quadrupole, Four charges same sign, Two dipoles same direction, Two dipoles different direction, Parallel dipoles) from a menu, each in its own tab, with charge positions/magnitudes identical to the MFC version
+- [x] **VIEW-02**: User can have several configurations open at once and close any tab, including while it is still computing
+- [x] **VIEW-03**: User sees charges drawn as filled circles colored by sign and field/equipotential lines drawn anti-aliased with Bezier smoothing, y-up, centered, at the original scale (100 px per unit), correct on HiDPI displays
+- [x] **VIEW-04**: User sees a busy indicator while a configuration is computing, and the completed field lines and equipotentials once computation finishes (parity behaviour)
 - [ ] **VIEW-05**: App runs as a GUI application (no console window on Windows) with an About box including the project/blog links
 
 ### Options
@@ -106,10 +106,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CORE-05 | Phase 2 | Complete |
 | CORE-06 | Phase 2 | Complete |
 | CORE-07 | Phase 2 | Complete |
-| VIEW-01 | Phase 3 | Pending |
-| VIEW-02 | Phase 3 | Pending |
-| VIEW-03 | Phase 3 | Pending |
-| VIEW-04 | Phase 3 | Pending |
+| VIEW-01 | Phase 3 | Complete |
+| VIEW-02 | Phase 3 | Complete |
+| VIEW-03 | Phase 3 | Complete |
+| VIEW-04 | Phase 3 | Complete |
 | VIEW-05 | Phase 3 | Pending |
 | OPT-01 | Phase 4 | Pending |
 | OPT-02 | Phase 4 | Pending |

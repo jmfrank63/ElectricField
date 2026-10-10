@@ -144,10 +144,14 @@ void aboutModal(UiState& ui, const UiEnv& env) {
     const char* url;
   };
   const Link links[] = {{"Blog description", kBlogUrl}, {"GitHub repository", kRepoUrl}, {"Original repository", kUpstreamUrl}};
+  bool linkActivated = false;  // Enter / Space on a focused link activates it; that same Enter must not also close the dialog
   for (const Link& l : links) {
-    if (ImGui::TextLink(l.label) && !SDL_OpenURL(l.url)) {
-      SDL_SetClipboardText(l.url);
-      ui.linkNote = "Could not open a browser. The link was copied to the clipboard.";
+    if (ImGui::TextLink(l.label)) {
+      linkActivated = true;
+      if (!SDL_OpenURL(l.url)) {
+        SDL_SetClipboardText(l.url);
+        ui.linkNote = "Could not open a browser. The link was copied to the clipboard.";
+      }
     }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", l.url);
   }
@@ -164,7 +168,8 @@ void aboutModal(UiState& ui, const UiEnv& env) {
   ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - bw);
   const bool close = ImGui::Button("Close About");
   ImGui::SetItemDefaultFocus();
-  if (close || ImGui::IsKeyPressed(ImGuiKey_Escape) || ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter)) {
+  const bool enterClose = !linkActivated && (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter));
+  if (close || ImGui::IsKeyPressed(ImGuiKey_Escape) || enterClose) {
     ui.linkNote.clear();
     ImGui::CloseCurrentPopup();
   }

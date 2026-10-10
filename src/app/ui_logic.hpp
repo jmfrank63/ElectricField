@@ -31,7 +31,7 @@ float clampScale(float k);
 struct IntSize {
   int w = 0, h = 0;
 };
-// Default window: (1024 x 824) * k, clamped to 90% of the usable bounds, never below (640 x 480) * k limited by the bounds.
+// Default window: (1024 x 824) * k, clamped to 90% of the usable bounds (no lower bound here; the minimum is minimumWindowSize).
 IntSize defaultWindowSize(float k, int usableW, int usableH);
 IntSize minimumWindowSize(float k);
 

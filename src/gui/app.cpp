@@ -248,6 +248,12 @@ bool App::checkCanvas(unsigned serial, int w, int h, std::string& report) {
   frames(4);
   const efapp::Tab* t = ws_.find(serial);
   if (!t) return false;
+  // The comparison below maps logical canvas coordinates 1:1 onto the read-back surface, which is only exact at pixel density 1
+  // (always the case with the headless dummy video driver this check runs under).
+  if (SDL_GetWindowPixelDensity(window_) != 1.f) {
+    report = "pixel density " + std::to_string(static_cast<double>(SDL_GetWindowPixelDensity(window_))) + " != 1: the canvas comparison needs density 1";
+    return false;
+  }
   const int cx0 = static_cast<int>(ui_.canvasMin.x), cy0 = static_cast<int>(ui_.canvasMin.y);
   const int cw = static_cast<int>(ui_.canvasMax.x - ui_.canvasMin.x), ch = static_cast<int>(ui_.canvasMax.y - ui_.canvasMin.y);
 

@@ -124,7 +124,12 @@ if ($ResetOptions) {
   $keyExisted = ((Invoke-Reg query $regKey) -eq 0)
   if ($keyExisted) {
     $rc = Invoke-Reg export $regKey $bak /y
-    if ($rc -ne 0 -or -not (Test-Path -LiteralPath $bak)) { throw "could not back up $regKey to $bak (reg export exit $rc)" }
+    if ($rc -ne 0 -or -not (Test-Path -LiteralPath $bak)) {
+      # nothing was deleted yet (the key is intact): drop a possibly partial export so the next run is not blocked by the
+      # "interrupted run" guard above, which would tell the user to import an incomplete file
+      Remove-Item -LiteralPath $bak -Force -ErrorAction SilentlyContinue
+      throw "could not back up $regKey to $bak (reg export exit $rc)"
+    }
     [void](Invoke-Reg delete $regKey /f)      # -> Options::Options() defaults apply on next start
     "options reset (backup: $bak)"
   } else {

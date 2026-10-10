@@ -17,6 +17,24 @@ struct SurfaceDeleter {
 struct RendererDeleter {
   void operator()(SDL_Renderer* r) const { SDL_DestroyRenderer(r); }
 };
+
+// The export borrows the process-wide "current ImGui context" slot: whatever happens (including a throw from renderScene),
+// the temporary context must be destroyed and the caller's (e.g. the GUI's) context made current again. Destruction order
+// is the reverse of declaration, so BackendGuard (needs the temp context current) runs before CtxGuard.
+struct CtxGuard {
+  ImGuiContext* prev;
+  ImGuiContext* ctx;
+  CtxGuard(ImGuiContext* previous, ImGuiContext* created) : prev(previous), ctx(created) {}
+  ~CtxGuard() {
+    ImGui::DestroyContext(ctx);
+    ImGui::SetCurrentContext(prev);
+  }
+  CtxGuard(const CtxGuard&) = delete;
+  CtxGuard& operator=(const CtxGuard&) = delete;
+};
+struct BackendGuard {  // only constructed after a successful ImGui_ImplSDLRenderer3_Init
+  ~BackendGuard() { ImGui_ImplSDLRenderer3_Shutdown(); }
+};
 }  // namespace
 
 std::string renderPng(const ef::FieldScene& scene, const ef::DrawStyle& style, const ef::View& view, const char* path) {
@@ -28,6 +46,7 @@ std::string renderPng(const ef::FieldScene& scene, const ef::DrawStyle& style, c
   IMGUI_CHECKVERSION();
   ImGuiContext* const prev = ImGui::GetCurrentContext();  // the GUI (Phase 4 export) has its own context: restore it afterwards
   ImGuiContext* ctx = ImGui::CreateContext();
+  CtxGuard ctxGuard(prev, ctx);
   ImGuiIO& io = ImGui::GetIO();
   io.IniFilename = nullptr;  // never write imgui.ini
   io.DisplaySize = ImVec2(static_cast<float>(view.widthPx), static_cast<float>(view.heightPx));
@@ -41,6 +60,7 @@ std::string renderPng(const ef::FieldScene& scene, const ef::DrawStyle& style, c
   if (!ImGui_ImplSDLRenderer3_Init(renderer.get())) {
     err = "ImGui_ImplSDLRenderer3_Init failed";
   } else {
+    BackendGuard backendGuard;
     // 1st frame creates the font atlas texture; draw in the 2nd (same as src/gui/main.cpp --smoke)
     for (int frame = 0; frame < 2; ++frame) {
       ImGui_ImplSDLRenderer3_NewFrame();
@@ -57,10 +77,7 @@ std::string renderPng(const ef::FieldScene& scene, const ef::DrawStyle& style, c
       err = std::string("SDL_RenderReadPixels failed: ") + SDL_GetError();
     else if (!SDL_SavePNG(pixels.get(), path))
       err = std::string("SDL_SavePNG failed: ") + SDL_GetError();
-    ImGui_ImplSDLRenderer3_Shutdown();
   }
-  ImGui::DestroyContext(ctx);
-  ImGui::SetCurrentContext(prev);
   return err;
 }
 

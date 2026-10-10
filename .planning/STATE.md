@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 02
 current_phase_name: compute-engine-headless-parity
-status: executing
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-10-10T13:03:18.475Z"
+status: verifying
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-10-10T13:25:20.584Z"
 last_activity: 2026-10-10
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 2
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # Project State
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-10-10)
 
 Phase: 02 (compute-engine-headless-parity) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-10 — Phase 02 execution started
 
-Progress: [█████████░] 88%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -65,6 +65,7 @@ Progress: [█████████░] 88%
 | Phase 02 P01 | 8min | 2 tasks | 11 files |
 | Phase 02 P02 | 25min | 2 tasks | 8 files |
 | Phase 02 P03 | 20min | 2 tasks | 13 files |
+| Phase 02 P04 | 40min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 02 P01] Engine from research-ref overlay; kCancelStride=1024; latency budget 200 ms (1000 ms only under TSan); research-ref rk.hpp (D-16) left for a later plan
 - [Phase ?]: [Phase 02 P02] Core test gates run -Dgui=false with lazy SDL3/ImGui; TSan verified on WSL Ubuntu for the whole 52-case suite; Dormand-Prince low weights and other MFC quirks stay pinned
 - [Phase ?]: [Phase 02 P03] ef-cli PNG = ImGui ImDrawList on SDL software renderer (offscreen surface, AA texture off, tessellation 0.3); ink recall 0.988-0.993 vs MFC; Windows and Linux counts identical; renderPng must run on the UI thread between frames
+- [Phase ?]: [Phase 02 P04] CI gate green on windows/linux/macos-arm64/tsan-linux (runs 38054538292, 38055102426); macOS arm64 parity counts identical to Windows/Linux, so A1 holds and the tolerance is unchanged
 
 ### Pending Todos
 
@@ -108,8 +110,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-10-10T13:03:18.452Z
-Stopped at: Completed 02-03-PLAN.md
+Last session: 2026-10-10T13:25:20.560Z
+Stopped at: Completed 02-04-PLAN.md
 Resume file: None
 
 ## Deferred Verification

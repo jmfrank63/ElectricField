@@ -63,7 +63,7 @@ Plans:
   3. The known portability defects (unqualified `abs(double)`, `M_PI` redefinition, `FieldLineJob job(job)` self-copy, unguarded `AdjustForBezier` divide-by-zero) no longer reproduce, each with a regression test, and the core compiles warning-clean with Clang using `-ffp-contract=off` and no fast-math
   4. A headless CLI renders any of the 9 presets to SVG and PNG without a display, and CI runs it on windows, ubuntu and macos-arm64 as a parity check whose outputs agree across OSes in charge and line counts within tolerance
 
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans executed
 
 Plans:
 **Wave 1**
@@ -80,7 +80,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 02-04-PLAN.md — CI gate: 3-OS headless parity + artifacts and tsan-linux job green for the pushed head; D-18 capture-script hardening, IN-03, research-ref removal, final green verdict (wave 4)
+- [x] 02-04-PLAN.md — CI gate: 3-OS headless parity + artifacts and tsan-linux job green for the pushed head; D-18 capture-script hardening, IN-03, research-ref removal, final green verdict (wave 4)
 
 ### Phase 3: GUI Shell
 
@@ -124,6 +124,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & Portable Physics Core | 4/4 | In Progress|  |
-| 2. Compute Engine & Headless Parity | 3/4 | In Progress|  |
+| 2. Compute Engine & Headless Parity | 4/4 | In Progress|  |
 | 3. GUI Shell | 0/TBD | Not started | - |
 | 4. Options, Export & MFC Removal | 0/TBD | Not started | - |

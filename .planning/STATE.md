@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 03
 current_phase_name: gui-shell
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-10-10T17:34:12.111Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-10-10T17:55:12.806Z"
 last_activity: 2026-10-11
 last_activity_desc: Phase 03 execution started
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 11
-  completed_plans: 9
+  completed_plans: 10
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-10-10 after Phase 2)
 ## Current Position
 
 Phase: 03 (gui-shell) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-10-11 — Phase 03 execution started
 
-Progress: [████████░░] 82%
+Progress: [█████████░] 91%
 
 ## Performance Metrics
 
@@ -67,6 +67,7 @@ Progress: [████████░░] 82%
 | Phase 02 P03 | 20min | 2 tasks | 13 files |
 | Phase 02 P04 | 40min | 2 tasks | 3 files |
 | Phase 03 P01 | 40min | 2 tasks | 11 files |
+| Phase 03 P02 | 60min | 2 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,7 @@ Recent decisions affecting current work:
 
 - [Phase 2]: Verified (human-approved MFC side-by-side); code review 3 iterations, 11/11 warnings fixed; final CI run 38058493194 green incl. tsan-linux
 - [Phase ?]: [Phase 03 P01] efapp (std-only tab model, ISession seam) and efrender with ImGui context rule copied byte-for-byte from the prototype; Wave 0 pacer/scripted-session tests mutation-proven; TSan clean on Linux (78 cases)
+- [Phase ?]: [Phase 03 P02] GUI shell copied byte-for-byte from the prototype; About git hash generated at make time (ef_git_hash.h via has_side_effects Run step, empty fallback without git); Linux pre-flight script must run zig build (install) before running the exe
 
 ### Pending Todos
 
@@ -116,8 +118,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-10-10T17:34:12.082Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-10-10T17:55:12.780Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None
 
 ## Deferred Verification

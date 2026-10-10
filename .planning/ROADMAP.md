@@ -96,7 +96,7 @@ Plans:
   4. User sees charges as filled circles colored by sign and field and equipotential lines anti-aliased with Bezier smoothing, y-up and centered at 100 px per unit, sharp and correctly scaled on a HiDPI display, visually matching the Phase 1 MFC reference images
   5. User can open an About box showing the project and blog links
 
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 **Wave 1**
@@ -105,7 +105,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 03-02-PLAN.md — The real GUI: src/gui + assets from the prototype, GUI subsystem exe with icon, full UI smoke, real-window idle check; make-time git hash for About; Linux pre-flight in WSL (wave 2)
+- [x] 03-02-PLAN.md — The real GUI: src/gui + assets from the prototype, GUI subsystem exe with icon, full UI smoke, real-window idle check; make-time git hash for About; Linux pre-flight in WSL (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -139,5 +139,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Foundation & Portable Physics Core | 4/4 | In Progress|  |
 | 2. Compute Engine & Headless Parity | 4/4 | Complete    | 2026-10-10 |
-| 3. GUI Shell | 1/3 | In Progress|  |
+| 3. GUI Shell | 2/3 | In Progress|  |
 | 4. Options, Export & MFC Removal | 0/TBD | Not started | - |

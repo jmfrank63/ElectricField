@@ -33,7 +33,7 @@ Requirements for the cross-platform release. Each maps to roadmap phases.
 - [x] **VIEW-02**: User can have several configurations open at once and close any tab, including while it is still computing
 - [x] **VIEW-03**: User sees charges drawn as filled circles colored by sign and field/equipotential lines drawn anti-aliased with Bezier smoothing, y-up, centered, at the original scale (100 px per unit), correct on HiDPI displays
 - [x] **VIEW-04**: User sees a busy indicator while a configuration is computing, and the completed field lines and equipotentials once computation finishes (parity behaviour)
-- [ ] **VIEW-05**: App runs as a GUI application (no console window on Windows) with an About box including the project/blog links
+- [x] **VIEW-05**: App runs as a GUI application (no console window on Windows) with an About box including the project/blog links
 
 ### Options
 
@@ -110,7 +110,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VIEW-02 | Phase 3 | Complete |
 | VIEW-03 | Phase 3 | Complete |
 | VIEW-04 | Phase 3 | Complete |
-| VIEW-05 | Phase 3 | Pending |
+| VIEW-05 | Phase 3 | Complete |
 | OPT-01 | Phase 4 | Pending |
 | OPT-02 | Phase 4 | Pending |
 | OPT-03 | Phase 4 | Pending |

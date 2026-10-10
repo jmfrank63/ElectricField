@@ -96,7 +96,21 @@ Plans:
   4. User sees charges as filled circles colored by sign and field and equipotential lines anti-aliased with Bezier smoothing, y-up and centered at 100 px per unit, sharp and correctly scaled on a HiDPI display, visually matching the Phase 1 MFC reference images
   5. User can open an About box showing the project and blog links
 
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — Tab model (efapp) over real ComputeSessions + render-context rule (renderSurface) from the prototype, wired into build.zig with doctests and test-render; Wave 0 FramePacer/scripted-session tests, Linux TSan (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 03-02-PLAN.md — The real GUI: src/gui + assets from the prototype, GUI subsystem exe with icon, full UI smoke, real-window idle check; make-time git hash for About; Linux pre-flight in WSL (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 03-03-PLAN.md — CI gate: test-render, Windows subsystem check, GUI screenshots on 3 OSes, pushed and green incl. tsan-linux; research-ref removed, final green verdict (wave 3)
+
 **UI hint**: yes
 
 ### Phase 4: Options, Export & MFC Removal
@@ -125,5 +139,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Foundation & Portable Physics Core | 4/4 | In Progress|  |
 | 2. Compute Engine & Headless Parity | 4/4 | Complete    | 2026-10-10 |
-| 3. GUI Shell | 0/TBD | Not started | - |
+| 3. GUI Shell | 0/3 | Planned | - |
 | 4. Options, Export & MFC Removal | 0/TBD | Not started | - |

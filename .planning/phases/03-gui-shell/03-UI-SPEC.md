@@ -202,6 +202,8 @@ The 9 File > New entries (exact display names, from `src/core/ef/presets.cpp`):
 | At startup (D-03) | opened automatically on the first frame; Close Chooser (same label in every context) leaves the empty state |
 | Re-entrancy | Ctrl+N while the chooser or About is open is ignored; opening one modal from the other is not possible |
 
+> **Approved deviation (user, 2026-10-11):** when the preset chooser opens, keyboard focus is on the preselected list row (Up/Down work immediately; Enter or double-click opens = Open Configuration), not on the Open Configuration button.
+
 ### About modal (D-13)
 
 | Property | Value |

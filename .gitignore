@@ -26,6 +26,7 @@ Release/
 /build/
 /out/
 /parity-out/
+/gui-out/
 *.log
 
 # ImGui writes imgui.ini to the working directory on shutdown (smoke / run)

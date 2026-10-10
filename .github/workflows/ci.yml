@@ -2,6 +2,7 @@ name: CI
 
 # D-11 (phase 1): every push to the working branch and every pull request, on all three desktop OSes.
 # Phase 2 adds: headless parity step (D-12) on every OS + a Linux ThreadSanitizer job (D-20).
+# Phase 3 adds: render-context tests, the Windows GUI-subsystem check, the full GUI smoke and headless GUI screenshots.
 on:
   push:
     branches: [feature/cross-platform, master] # IN-04: master too, so a merge is built
@@ -53,8 +54,32 @@ jobs:
       - name: Build everything (core lib + tests + GUI exe + ef-cli)
         run: zig build -Doptimize=ReleaseFast --summary all
 
+      # Render-context regression tests (D-16): the efrender ImGui/SDL context rule, headless.
+      - name: Render-context regression tests (headless)
+        run: zig build test-render -Doptimize=ReleaseFast --summary all
+
+      # VIEW-05: the exe must be a GUI-subsystem PE (Subsystem = 2), so no console window opens on Windows.
+      # e_lfanew = 4 bytes at offset 60; the optional-header Subsystem is 2 bytes at e_lfanew + 92.
+      - name: Windows GUI subsystem (VIEW-05 - no console window)
+        if: runner.os == 'Windows'
+        run: |
+          exe=zig-out/bin/ElectricField.exe
+          lfanew=$(od -An -tu4 -j60 -N4 "$exe" | tr -d ' ')
+          sub=$(od -An -tu2 -j$((lfanew + 92)) -N2 "$exe" | tr -d ' ')
+          echo "PE subsystem=$sub"
+          test "$sub" -eq 2
+
+      # Full UI smoke (D-16): scripted session through the real GUI code path on the dummy driver.
       - name: Headless GUI start-up (SDL dummy video driver + software renderer)
         run: zig build smoke -Doptimize=ReleaseFast --summary all
+
+      # Real-UI screenshots (software renderer): finished Dipole tab, About modal, chooser at --scale 2. Uploaded below.
+      - name: Headless GUI screenshots
+        run: |
+          mkdir -p gui-out
+          ./zig-out/bin/ElectricField --screenshot dipole gui-out/gui-dipole.png --size 1024x820 | tee -a gui-out/screenshots.txt
+          ./zig-out/bin/ElectricField --screenshot dipole gui-out/gui-about.png --size 1024x820 --modal about | tee -a gui-out/screenshots.txt
+          ./zig-out/bin/ElectricField --screenshot dipole gui-out/gui-chooser-k2.png --size 2048x1648 --scale 2 --modal chooser | tee -a gui-out/screenshots.txt
 
       # D-12 / QA-04: render all 9 presets with the MFC default options to SVG + PNG without a display. ef-cli exits 1 when
       # charges / field lines differ from, or equipotentials are outside the tolerance of, the committed expectations.
@@ -70,6 +95,14 @@ jobs:
         with:
           name: parity-${{ matrix.name }}
           path: parity-out
+          retention-days: 14
+
+      - name: Upload GUI screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: gui-${{ matrix.name }}
+          path: gui-out
           retention-days: 14
 
   # D-20 / QA-03: ThreadSanitizer on the core tests (incl. the session/cancel stress tests) + a threaded ef-cli run.

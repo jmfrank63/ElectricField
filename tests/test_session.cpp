@@ -342,3 +342,62 @@ TEST_CASE("cancel() and destruction return within the latency budget for every p
                                           << " ms (" << worstDestroyAt << "); best of up to " << kLatencyAttempts << " per measurement, " << gLatencyRetries
                                           << " retries; contract " << kLatencyBudgetMs << " ms");
 }
+
+// IN-07 / WR-11: cancellation around the finalization and publication of the result. Which side of the publication a cancel()
+// lands on depends on the scheduler, so these cases assert only INVARIANTS that must hold for every interleaving (no timing
+// thresholds): the session always ends done and not failed, `cancelled` and "a result can be taken" are exact opposites, and
+// a cancel() issued after done never revokes the result. The finalizer's own stop handling is covered deterministically in
+// test_finalizer.cpp (pre-set stop flag).
+TEST_CASE("cancel() after the session is done is a no-op: the result stays available (documented contract)") {
+  ComputeSession s(makeSystem(presetBySlug("dipole")), lightParams());
+  const SessionStatus st = s.wait();
+  REQUIRE(st.done);
+  REQUIRE_FALSE(st.cancelled);
+  s.cancel();
+  s.cancel();  // idempotent
+  PollBatch b;
+  const SessionStatus after = s.poll(b);
+  CHECK(after.done);
+  CHECK_FALSE(after.cancelled);
+  CHECK_FALSE(after.failed);
+  FieldResult r;
+  CHECK(s.takeResult(r));
+  CHECK_FALSE(r.electric.empty());
+  CHECK_FALSE(s.takeResult(r));  // exactly once
+}
+
+TEST_CASE("a cancel() issued once all jobs are complete (finalization or publication) ends consistently: cancelled XOR result") {
+  ComputeParams p = lightParams();
+  int cancelled = 0, completed = 0;
+  for (const char* slug : {"dipole", "quadrupole", "parallel-dipoles"}) {
+    for (int rep = 0; rep < 8; ++rep) {
+      CAPTURE(slug);
+      CAPTURE(rep);
+      ComputeSession s(makeSystem(presetBySlug(slug)), p);
+      // spin (no timing assumption) until every known job has completed: from here on the session is finalizing or already done
+      PollBatch drain;
+      SessionStatus st;
+      do {
+        st = s.poll(drain);
+        if (st.done) break;
+        std::this_thread::yield();
+      } while (st.jobsCompleted < st.jobsKnown || st.jobsKnown == 0);
+      s.cancel();
+      st = s.wait();
+      REQUIRE(st.done);
+      CHECK_FALSE(st.failed);
+      FieldResult r;
+      const bool haveResult = s.takeResult(r);
+      CHECK(st.cancelled == !haveResult);  // never both, never neither
+      if (haveResult) {
+        CHECK_FALSE(r.electric.empty());
+        ++completed;
+      } else {
+        CHECK(r.electric.empty());
+        CHECK(r.potential.empty());
+        ++cancelled;
+      }
+    }
+  }
+  MESSAGE("cancel after all jobs completed: " << cancelled << " ended cancelled, " << completed << " kept the result");
+}

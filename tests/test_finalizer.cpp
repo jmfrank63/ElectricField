@@ -1,5 +1,6 @@
 #include "doctest/doctest.h"
 
+#include <atomic>
 #include <vector>
 
 #include "ef/finalizer.hpp"
@@ -78,4 +79,28 @@ TEST_CASE("de-dup boundary: weight centres exactly 2*chargeRadius apart are dupl
     std::vector<PotentialLine> raw{eq(0.4, 0, 0), eq(0.4, 0.5000001, 0), eq(0.8, 0, 0)};
     CHECK(dedupEquipotentials(raw, four, p).size() == 3);
   }
+}
+
+// IN-07 / WR-02: finalize() with a stop flag. The flag is pre-set, so the outcome is fully deterministic (no timing involved):
+// the function returns right after the first stage with a PARTIAL result that the caller must discard.
+TEST_CASE("finalize honours a set stop flag: partial result, de-dup and Bezier stages skipped") {
+  const ChargeSystem four = preset("four-charges-same-sign");
+  ComputeParams p;
+  FieldLine real;
+  for (int i = 0; i < 7; ++i) real.points.emplace_back(i * 1.0, (i % 2) * 0.2);
+
+  std::atomic<bool> stopTrue{true};
+  const auto stopped = finalize({real}, {eq(0.4, 0, 0), eq(0.4, 0.1, 0), eq(0.8, 0, 0)}, four, p, &stopTrue);
+  REQUIRE(stopped.electric.size() == 1);                       // the empty-line filter (stage 1) ran
+  CHECK(stopped.electric[0].points == real.points);            // the Bezier fit (stage 3) did not
+  CHECK(stopped.potential.empty());                            // the de-dup (stage 2) did not
+
+  std::atomic<bool> stopFalse{false};
+  const auto full = finalize({real}, {eq(0.4, 0, 0), eq(0.4, 0.1, 0), eq(0.8, 0, 0)}, four, p, &stopFalse);
+  const auto plain = finalize({real}, {eq(0.4, 0, 0), eq(0.4, 0.1, 0), eq(0.8, 0, 0)}, four, p);
+  REQUIRE(full.electric.size() == 1);
+  CHECK_FALSE(full.electric[0].points[1] == real.points[1]);  // an unset flag changes nothing
+  CHECK_FALSE(full.potential.empty());
+  CHECK(full.electric[0].points == plain.electric[0].points);
+  CHECK(full.potential.size() == plain.potential.size());
 }

@@ -29,21 +29,59 @@ void quietCrashDialogs() {
 #endif
 }
 
+const char* const kUsage =
+    "Usage:\n"
+    "  ElectricField                                  interactive application\n"
+    "  ElectricField --smoke                          headless start-up check\n"
+    "  ElectricField --screenshot <slug> <out.png> [--size WxH] [--scale k] [--modal about|chooser]\n";
+
+// Malformed command line: usage on stderr, exit code 2. The message box (the only channel on the Windows GUI subsystem, which has no
+// console) is shown only for the interactive mode; any invocation that names a headless mode must never block on a modal box.
+int usageError(const std::string& problem, bool headlessRequested) {
+  const std::string text = problem + "\n\n" + kUsage;
+  std::fprintf(stderr, "%s", text.c_str());
+  if (!headlessRequested) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Electric Field", text.c_str(), nullptr);
+  return 2;
+}
+
 int run(int argc, char** argv) {
   efgui::AppOptions opt;
+  bool headlessRequested = false;  // even a malformed headless invocation counts: it must not show a message box
   for (int i = 1; i < argc; ++i) {
-    if (std::strcmp(argv[i], "--smoke") == 0) {
+    if (std::strcmp(argv[i], "--smoke") == 0 || std::strcmp(argv[i], "--screenshot") == 0) headlessRequested = true;
+  }
+  for (int i = 1; i < argc; ++i) {
+    const std::string a = argv[i];
+    if (a == "--smoke") {
       opt.smoke = true;
-    } else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 2 < argc) {
+    } else if (a == "--screenshot") {
+      if (i + 2 >= argc) return usageError("--screenshot needs <slug> and <out.png>.", headlessRequested);
       opt.screenshot = true;
       opt.slug = argv[++i];
       opt.out = argv[++i];
-    } else if (std::strcmp(argv[i], "--size") == 0 && i + 1 < argc) {
-      std::sscanf(argv[++i], "%dx%d", &opt.width, &opt.height);
-    } else if (std::strcmp(argv[i], "--modal") == 0 && i + 1 < argc) {
+    } else if (a == "--size") {
+      if (i + 1 >= argc) return usageError("--size needs WxH.", headlessRequested);
+      int w = 0, h = 0;
+      if (std::sscanf(argv[++i], "%dx%d", &w, &h) != 2 || w <= 0 || h <= 0)
+        return usageError(std::string("Invalid --size \"") + argv[i] + "\" (expected WxH, e.g. 1024x820).", headlessRequested);
+      opt.width = w;
+      opt.height = h;
+    } else if (a == "--modal") {
+      if (i + 1 >= argc) return usageError("--modal needs about or chooser.", headlessRequested);
       opt.modal = argv[++i];
-    } else if (std::strcmp(argv[i], "--scale") == 0 && i + 1 < argc) {
-      opt.scaleOverride = static_cast<float>(std::atof(argv[++i]));
+      if (opt.modal != "about" && opt.modal != "chooser")
+        return usageError("Invalid --modal \"" + opt.modal + "\" (expected about or chooser).", headlessRequested);
+    } else if (a == "--scale") {
+      if (i + 1 >= argc) return usageError("--scale needs a factor.", headlessRequested);
+      char* endp = nullptr;
+      const double k = std::strtod(argv[++i], &endp);
+      if (endp == argv[i] || *endp != 0 || !(k > 0.0))
+        return usageError(std::string("Invalid --scale \"") + argv[i] + "\" (expected a number > 0).", headlessRequested);
+      opt.scaleOverride = static_cast<float>(k);
+    } else if (a.rfind("-psn_", 0) == 0) {
+      // macOS passes a process serial number to apps launched from Finder; not an option
+    } else {
+      return usageError("Unknown option \"" + a + "\".", headlessRequested);
     }
   }
   if (opt.headless()) quietCrashDialogs();

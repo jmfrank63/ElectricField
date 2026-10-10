@@ -18,7 +18,7 @@ Not in this phase: the interactive GUI (Phase 3), options dialog / config persis
 
 ### Compute engine & threading
 - **D-01:** RAII `ComputeSession` per configuration: owns its worker pool (thread count from `ComputeParams`), a condition-variable job queue, and joins all workers in its destructor. No detached threads, no `delete this`, no hand-off of calculators to an app object (replaces MFC `FieldLinesCalculator` lifetime hacks). `std::thread` + `std::mutex`/`std::condition_variable` + `std::atomic` (no `std::jthread`).
-- **D-02:** Cooperative cancellation: an atomic stop flag checked inside the integration loop every ~4096 steps (and between jobs); `cancel()` + destructor must return within ~200 ms for every preset/method.
+- **D-02:** Cooperative cancellation: an atomic stop flag checked inside the integration loop every ~1024 steps (`kCancelStride = 1024`; amended from "~4096" after research measured only a 4-5x Debug margin at 4096) and between jobs; `cancel()` + destructor must return within ~200 ms for every preset/method.
 - **D-03:** Result hand-off via `poll()` drain-and-swap of completed lines into a caller-owned snapshot (UI thread never touches worker-owned containers). Parity display = everything once the session reports done; `poll()` makes v2 progressive drawing nearly free.
 - **D-04:** Deterministic output: completed lines are ordered by job sequence number, so 1-thread and N-thread runs produce equivalent results (tolerance-based comparison).
 

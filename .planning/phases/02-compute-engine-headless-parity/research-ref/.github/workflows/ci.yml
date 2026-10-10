@@ -1,0 +1,101 @@
+name: CI
+
+# D-11 (phase 1): every push to the working branch and every pull request, on all three desktop OSes.
+# Phase 2 adds: headless parity job step (D-12) on every OS + a Linux ThreadSanitizer job (D-20).
+on:
+  push:
+    branches: [feature/cross-platform, master] # IN-04: master too, so a merge is built
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false # a red macOS job must not hide the Windows/Linux result
+      matrix:
+        include:
+          - { name: windows-x64, os: windows-latest }
+          - { name: linux-x64, os: ubuntu-latest } # Ubuntu 24.04: no apt packages needed (X11/Wayland are dlopen'ed)
+          - { name: macos-arm64, os: macos-latest } # macOS 26, Apple silicon. NEVER pass -Dtarget here (native build only).
+    defaults:
+      run:
+        shell: bash # same shell syntax on all three OSes (Git Bash on windows-latest)
+    steps:
+      - uses: actions/checkout@v7
+
+      # Third-party action: pinned to the commit of v2.2.1. Caches ~/.cache/zig (package tarballs + compiled artifacts).
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.17.0
+
+      - name: Zig version
+        run: zig version
+
+      # Core gate first. With sdl3/imgui `.lazy = true` (D-14) -Dgui=false never fetches the GUI stack, so a GUI-dependency
+      # problem cannot mask a physics problem.
+      - name: Core tests (Debug + UBSan)
+        run: zig build test -Dgui=false --summary all
+
+      - name: Core tests (ReleaseFast; catches optimisation/FMA-sensitive numerics)
+        run: zig build test -Dgui=false -Doptimize=ReleaseFast --summary all
+
+      # GUI gate (fetches SDL3 + ImGui lazily). ReleaseFast: also produces zig-out/bin/ef-cli for the parity step.
+      - name: Build everything (core lib + tests + GUI exe + ef-cli)
+        run: zig build -Doptimize=ReleaseFast --summary all
+
+      - name: Tests (default configuration)
+        run: zig build test --summary all
+
+      - name: Headless GUI start-up (SDL dummy video driver + software renderer)
+        run: zig build smoke -Doptimize=ReleaseFast --summary all
+
+      # D-12 / QA-04: render all 9 presets with the MFC default options to SVG + PNG without a display; ef-cli exits 1 when
+      # charges / field lines differ from, or equipotentials are outside the tolerance of, tools/parity/expected-counts.csv.
+      - name: Headless parity - render all 9 presets and check counts
+        run: |
+          mkdir -p parity-out
+          ./zig-out/bin/ef-cli --all --out-dir parity-out --expect tools/parity/expected-counts.csv | tee parity-out/summary.txt
+
+      - name: Upload SVG/PNG parity artifacts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: parity-${{ matrix.name }}
+          path: parity-out
+          retention-days: 14
+
+  # D-20 / QA-03: ThreadSanitizer on the core tests (incl. the session/cancel stress tests) + a threaded ef-cli run.
+  tsan-linux:
+    name: tsan-linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.17.0
+
+      # Precaution: old TSan runtimes abort with "unexpected memory mapping" when vm.mmap_rnd_bits=32 (kernel >= 6.x).
+      # Zig 0.17 bundles a current LLVM TSan runtime, so this is expected to be a no-op; keep it until a run proves it unneeded.
+      - name: Lower mmap ASLR entropy (TSan compatibility)
+        run: sudo sysctl -w vm.mmap_rnd_bits=28 || true
+
+      # ReleaseSafe: instrumented but optimised (Debug+TSan is ~3x slower on 4 vCPUs). Any race => exit code 66 => red job.
+      - name: Core tests under ThreadSanitizer
+        run: zig build test -Dgui=false -Dsanitize=thread -Doptimize=ReleaseSafe --summary all
+
+      - name: Threaded ef-cli under ThreadSanitizer
+        run: |
+          zig build -Dgui=false -Dsanitize=thread -Doptimize=ReleaseSafe
+          ./zig-out/bin/ef-cli --preset parallel-dipoles --threads 8 --svg /tmp/p.svg

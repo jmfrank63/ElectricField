@@ -22,7 +22,7 @@ Existing capabilities in the MFC app (must be preserved by the port):
 - ✓ Electric field line computation seeded around each charge (count proportional to charge, `numLinesOnUnitCharge`) — existing
 - ✓ Optional equipotential line computation at a configurable potential interval — existing
 - ✓ 11 integration methods: Euler, Midpoint, Ralston, Heun, RK4, RK 3/8, adaptive Heun-Euler, Bogacki-Shampine, Cash-Karp, Fehlberg, Dormand-Prince (`RungeKutta.h/.inl`) — existing
-- ✓ Multi-threaded background computation with a job queue, configurable thread count, progressive display while computing, safe cancellation when a document is closed mid-computation (`FieldLinesCalculator`, already std::thread/std::mutex/std::atomic) — existing
+- ✓ Multi-threaded background computation with a job queue, configurable thread count, wait cursor while computing and results drawn once all threads finish (no progressive display), documents closable mid-computation via detached threads handed to the app object (`FieldLinesCalculator`, already std::thread/std::mutex/std::atomic) — existing
 - ✓ Anti-aliased rendering of charges (colored by sign) and field/equipotential lines with Bezier smoothing, y-up coordinate system centered in the view — existing
 - ✓ Options dialog with Computation page (lines per unit charge, equipotentials on/off, potential interval, threads, method) and Draw page (positive/negative charge colors, field/equipotential line colors and thicknesses) — existing
 - ✓ Options persisted between runs (currently Windows registry) — existing

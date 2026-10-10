@@ -197,11 +197,13 @@ const zon = @import("build.zig.zon");
 /// The hash is produced when the step runs (make time, `has_side_effects`), not when build.zig is configured, because
 /// Zig caches the configure phase and a configure-time hash would go stale after the next commit. Without git, a
 /// repository or a commit the header defines the empty string (the About box then shows "(unknown)") and the build
-/// still succeeds.
+/// still succeeds. The configure-time probe and the make-time step run the IDENTICAL command in the SAME directory (the
+/// build root), so a probe success cannot be followed by a make-time failure (an unrelated repository in the process cwd,
+/// or git refusing the build root, e.g. safe.directory, makes the probe fail and select the empty hash).
 fn gitHashHeader(b: *std.Build) std.Build.LazyPath {
     const argv = [_][]const u8{ "git", "-c", "core.abbrev=7", "log", "-1", "--format=#define EF_GIT_HASH \"%h\"" };
     const wf = b.addWriteFiles();
-    switch (b.runFallible(&argv, .{ .stderr_behavior = .ignore })) {
+    switch (b.runFallible(&argv, .{ .stderr_behavior = .ignore, .cwd = .{ .dir = b.root.root_dir.handle } })) {
         .success => {
             const run = b.addSystemCommand(&argv);
             run.setCwd(b.path("."));

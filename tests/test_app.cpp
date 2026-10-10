@@ -2,8 +2,12 @@
 #include "doctest/doctest.h"
 
 #include <chrono>
+#include <cmath>
+#include <memory>
+#include <stdexcept>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "app/ui_logic.hpp"
 #include "app/workspace.hpp"
@@ -22,6 +26,62 @@ bool waitUntil(Workspace& ws, unsigned serial, std::chrono::milliseconds limit) 
     if (std::chrono::steady_clock::now() - t0 > limit) return false;
     std::this_thread::sleep_for(std::chrono::milliseconds(2));
   }
+}
+
+// What one scripted session answers, shared between the fake (owned by a Tab) and the test (which may change it later).
+struct Script {
+  ef::SessionStatus status;      // returned by every poll()
+  std::size_t electricPerPoll = 0;  // empty PollBatch::electric entries appended per poll (Workspace only counts them)
+  bool takeResultOk = true;      // takeResult() return value
+  int polls = 0;                 // number of poll() calls seen
+};
+
+enum class FactoryMode { Normal, ThrowStd, ThrowOther, ReturnNull };
+
+// Test-owned state of the fake factory. Declare it BEFORE the Workspace: the Workspace destructor destroys the fakes, which
+// write "destroy:<id>" into the log.
+struct Harness {
+  Script proto;                                // copied into each new session's script
+  FactoryMode mode = FactoryMode::Normal;
+  std::vector<std::shared_ptr<Script>> scripts;  // one per created session, in creation order (= the session id)
+  std::vector<std::string> log;                // "cancel:<id>" / "destroy:<id>" in call order
+};
+
+struct ScriptedSession final : ISession {
+  ScriptedSession(Harness& h, std::size_t i, std::shared_ptr<Script> s) : h_(h), id_(i), script_(std::move(s)) {}
+  ~ScriptedSession() override { h_.log.push_back("destroy:" + std::to_string(id_)); }
+  void cancel() override { h_.log.push_back("cancel:" + std::to_string(id_)); }
+  ef::SessionStatus poll(ef::PollBatch& out) override {
+    ++script_->polls;
+    for (std::size_t i = 0; i < script_->electricPerPoll; ++i) out.electric.emplace_back();
+    return script_->status;
+  }
+  bool takeResult(ef::FieldResult&) override { return script_->takeResultOk; }
+
+ private:
+  Harness& h_;
+  std::size_t id_;
+  std::shared_ptr<Script> script_;
+};
+
+SessionFactory scriptedFactory(Harness& h) {
+  return [&h](const ef::ChargeSystem&, const ef::ComputeParams&) -> std::unique_ptr<ISession> {
+    switch (h.mode) {
+      case FactoryMode::ThrowStd: throw std::runtime_error("no threads");
+      case FactoryMode::ThrowOther: throw 42;
+      case FactoryMode::ReturnNull: return nullptr;
+      case FactoryMode::Normal: break;
+    }
+    auto script = std::make_shared<Script>(h.proto);
+    h.scripts.push_back(script);
+    return std::make_unique<ScriptedSession>(h, h.scripts.size() - 1, script);
+  };
+}
+
+ef::SessionStatus doneStatus() {
+  ef::SessionStatus s;
+  s.done = true;
+  return s;
 }
 }  // namespace
 
@@ -141,4 +201,221 @@ TEST_CASE("canvas view: 100 px per unit times k, floor of the available area, at
   CHECK(s.chargeRadiusPx == doctest::Approx(50.f));
   CHECK(s.electricThickness == doctest::Approx(2.f));
   CHECK(s.positiveCharge.b == 255);  // colours are not scaled
+}
+
+// ---- Wave 0 gaps (03-RESEARCH): FramePacer decisions and the scripted-session Workspace state machine ----
+
+TEST_CASE("frame pacer: blocks only when idle with no settle frames left") {
+  FramePacer p;
+  CHECK(p.pendingFrames() == 0);
+  CHECK(p.shouldBlock(false));
+  CHECK_FALSE(p.shouldBlock(true));  // a computing session keeps the loop running
+  p.notifyActivity();
+  CHECK(p.pendingFrames() == FramePacer::kSettleFrames);
+  CHECK(p.pendingFrames() == 3);
+  for (int i = 0; i < 3; ++i) {
+    CHECK_FALSE(p.shouldBlock(false));  // frames 1..3 are still owed
+    p.frameRendered();
+  }
+  CHECK(p.shouldBlock(false));
+  CHECK_FALSE(p.shouldBlock(true));
+  p.frameRendered();  // extra frames never go below 0
+  p.frameRendered();
+  CHECK(p.pendingFrames() == 0);
+  CHECK(p.shouldBlock(false));
+}
+
+TEST_CASE("frame pacer: a modal arms 12 frames and a smaller request never lowers a pending larger one") {
+  FramePacer p;
+  p.notifyActivity(FramePacer::kModalFadeFrames);
+  CHECK(p.pendingFrames() == 12);
+  p.notifyActivity();  // 3 < 12
+  CHECK(p.pendingFrames() == 12);
+  p.frameRendered();
+  CHECK(p.pendingFrames() == 11);
+  p.notifyActivity();  // still 3 < 11
+  CHECK(p.pendingFrames() == 11);
+  CHECK(FramePacer::kModalFadeFrames == 12);
+  CHECK(FramePacer::kIdleWaitMs == 250);
+}
+
+TEST_CASE("workspace: a failed session keeps its error, an empty one reads Unknown error") {
+  Harness h;
+  h.proto.status = doneStatus();
+  h.proto.status.failed = true;
+  h.proto.status.error = "boom";
+  Workspace ws(lightParams(), scriptedFactory(h));
+  const unsigned a = ws.open(0);
+  CHECK(ws.anyComputing());
+  ws.pollAll();
+  Tab* t = ws.find(a);
+  REQUIRE(t != nullptr);
+  CHECK(t->state == TabState::Failed);
+  CHECK(t->error == "boom");
+  CHECK(t->session == nullptr);
+  CHECK_FALSE(ws.anyComputing());
+  CHECK(tabLabel(*t, 0.0).rfind("! ", 0) == 0);
+
+  h.proto.status.error.clear();
+  const unsigned b = ws.open(0);
+  ws.pollAll();
+  t = ws.find(b);
+  REQUIRE(t != nullptr);
+  CHECK(t->state == TabState::Failed);
+  CHECK(t->error.empty());
+  CHECK(failureDetail(t->error) == "Unknown error");
+}
+
+TEST_CASE("workspace: cancelled, no result and done end in the states the UI-SPEC fixes") {
+  Harness h;
+  Workspace ws(lightParams(), scriptedFactory(h));
+
+  h.proto.status = doneStatus();
+  h.proto.status.cancelled = true;
+  const unsigned c = ws.open(0);
+
+  h.proto.status = doneStatus();
+  h.proto.takeResultOk = false;
+  const unsigned n = ws.open(1);
+
+  h.proto.takeResultOk = true;
+  const unsigned d = ws.open(2);
+
+  ws.pollAll();
+  CHECK(ws.find(c)->state == TabState::Failed);
+  CHECK(ws.find(c)->error == "The computation was cancelled.");
+  CHECK(ws.find(c)->session == nullptr);
+  CHECK(ws.find(n)->state == TabState::Failed);
+  CHECK(ws.find(n)->error == "The computation produced no result.");
+  CHECK(ws.find(n)->session == nullptr);
+  CHECK(ws.find(d)->state == TabState::Done);
+  CHECK(ws.find(d)->error.empty());
+  CHECK(ws.find(d)->session == nullptr);
+  CHECK(ws.find(d)->scene.charges.size() == 2);  // the charges survive the scene rebuild
+  CHECK_FALSE(ws.anyComputing());
+}
+
+TEST_CASE("workspace: a factory that throws or returns null gives a Failed tab, never an exception") {
+  Harness h;
+  Workspace ws(lightParams(), scriptedFactory(h));
+
+  h.mode = FactoryMode::ThrowStd;
+  unsigned s = 0;
+  REQUIRE_NOTHROW(s = ws.open(0));
+  CHECK(ws.find(s)->state == TabState::Failed);
+  CHECK(ws.find(s)->error == "no threads");
+  CHECK(ws.find(s)->session == nullptr);
+
+  h.mode = FactoryMode::ReturnNull;
+  REQUIRE_NOTHROW(s = ws.open(0));
+  CHECK(ws.find(s)->state == TabState::Failed);
+  CHECK(ws.find(s)->error == "no session");
+
+  h.mode = FactoryMode::ThrowOther;
+  REQUIRE_NOTHROW(s = ws.open(0));
+  CHECK(ws.find(s)->state == TabState::Failed);
+  CHECK(ws.find(s)->error == "unknown error while starting the computation");
+
+  CHECK(ws.tabs().size() == 3);  // the failed tabs stay, with their charges drawn
+  CHECK(ws.find(s)->scene.charges.size() == 2);
+  CHECK_FALSE(ws.anyComputing());
+  CHECK(ws.find(s)->title == "Dipole 3");
+}
+
+TEST_CASE("workspace: poll accumulates the line count and finished tabs are not polled again") {
+  Harness h;
+  h.proto.electricPerPoll = 2;
+  Workspace ws(lightParams(), scriptedFactory(h));
+  const unsigned s = ws.open(0);
+  ws.pollAll();
+  CHECK(ws.find(s)->linesReceived == 2);
+  ws.pollAll();
+  CHECK(ws.find(s)->linesReceived == 4);  // cumulative
+  CHECK(ws.find(s)->state == TabState::Computing);
+  CHECK(h.scripts[0]->polls == 2);
+
+  h.scripts[0]->status = doneStatus();  // the session now reports done: one more poll, then it is finished
+  ws.pollAll();
+  CHECK(ws.find(s)->state == TabState::Done);
+  CHECK(ws.find(s)->linesReceived == 6);
+  CHECK(h.scripts[0]->polls == 3);
+  ws.pollAll();
+  ws.pollAll();
+  CHECK(h.scripts[0]->polls == 3);  // Done is never polled again
+  CHECK(ws.find(s)->linesReceived == 6);
+
+  Harness hf;
+  hf.proto.status = doneStatus();
+  hf.proto.status.failed = true;
+  Workspace wf(lightParams(), scriptedFactory(hf));
+  const unsigned f = wf.open(0);
+  wf.pollAll();
+  wf.pollAll();
+  CHECK(wf.find(f)->state == TabState::Failed);
+  CHECK(hf.scripts[0]->polls == 1);  // nor is Failed
+}
+
+TEST_CASE("workspace: close cancels before destroying and closeAll cancels every session first") {
+  Harness h;  // outlives the workspace: the destructors below log into it
+  Workspace ws(lightParams(), scriptedFactory(h));
+  const unsigned a = ws.open(0);
+  const unsigned b = ws.open(1);
+  const unsigned c = ws.open(2);
+  const unsigned d = ws.open(3);
+  CHECK(a < b);
+  CHECK(b < c);
+  CHECK(c < d);
+
+  REQUIRE(ws.close(b));
+  REQUIRE(h.log.size() == 2);
+  CHECK(h.log[0] == "cancel:1");
+  CHECK(h.log[1] == "destroy:1");
+  CHECK(ws.closed() == 1);
+  CHECK(ws.find(b) == nullptr);
+  REQUIRE(ws.tabs().size() == 3);
+  CHECK(ws.tabs()[0]->serial == a);  // open order is kept
+  CHECK(ws.tabs()[1]->serial == c);
+  CHECK(ws.tabs()[2]->serial == d);
+
+  h.log.clear();
+  ws.closeAll();
+  REQUIRE(h.log.size() == 6);
+  for (std::size_t i = 0; i < 3; ++i) CHECK(h.log[i].rfind("cancel:", 0) == 0);   // all cancels ...
+  for (std::size_t i = 3; i < 6; ++i) CHECK(h.log[i].rfind("destroy:", 0) == 0);  // ... before the first destroy
+  CHECK(ws.tabs().empty());
+  CHECK(ws.closed() == 4);
+  CHECK(ws.opened() == 4);
+  CHECK_FALSE(ws.anyComputing());
+}
+
+TEST_CASE("workspace: an empty workspace is inert") {
+  Harness h;
+  Workspace ws(lightParams(), scriptedFactory(h));
+  CHECK(ws.tabs().empty());
+  CHECK_FALSE(ws.anyComputing());
+  ws.pollAll();
+  ws.cancelAll();
+  ws.closeAll();
+  CHECK(ws.opened() == 0);
+  CHECK(ws.closed() == 0);
+  CHECK(ws.find(42) == nullptr);
+  CHECK_FALSE(ws.close(42));
+  CHECK(ws.closed() == 0);
+  CHECK(h.log.empty());
+}
+
+TEST_CASE("workspace: two tabs of one preset stay independent and numbers keep rising after closes") {
+  Harness h;
+  Workspace ws(lightParams(), scriptedFactory(h));
+  const unsigned a = ws.open(0);
+  const unsigned b = ws.open(0);
+  CHECK(a != b);
+  CHECK(ws.find(a)->title == "Dipole 1");
+  CHECK(ws.find(b)->title == "Dipole 2");
+  CHECK(ws.find(a)->session.get() != ws.find(b)->session.get());
+  CHECK(ws.close(b));
+  const unsigned c = ws.open(0);
+  CHECK(c > b);  // serials are never reused either
+  CHECK(ws.find(c)->title == "Dipole 3");
+  CHECK(ws.find(c)->number > ws.find(a)->number);
 }

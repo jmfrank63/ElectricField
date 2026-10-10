@@ -66,10 +66,12 @@ class AdaptiveRungeKutta : public RungeKutta<T, Stages> {
  public:
   AdaptiveRungeKutta(const Tableau<Stages>& tab, const std::array<double, Stages>& lowWeights) : Base(tab), m_low(lowWeights) {}
 
-  // Test hook: both embedded solutions of one step (no step control).
+  // The ONE stage computation shared by SolveStep and the test hook SolveStepPair (D-16, review WR-06): both embedded
+  // solutions (sums of the weighted stages) of one step of size h; no step control.
   template <typename Func>
-  void SolveStepPair(Func&& f, const T& curVal, double t, double h, T& high, T& low) {
-    T sumHigh(0.0), sumLow(0.0);
+  void computeStages(Func&& f, const T& curVal, double t, double h, T& sumHigh, T& sumLow) {
+    sumHigh = T(0.0);
+    sumLow = T(0.0);
     for (unsigned stage = 0; stage < Stages; ++stage) {
       T accum(0.0);
       for (unsigned j = 0; j < stage; ++j) accum += this->m_tab.coeff[stage - 1][j] * this->K[j];
@@ -77,6 +79,13 @@ class AdaptiveRungeKutta : public RungeKutta<T, Stages> {
       sumHigh += this->m_tab.weights[stage] * this->K[stage];
       sumLow += m_low[stage] * this->K[stage];
     }
+  }
+
+  // Test hook: both embedded solutions of one step (no step control).
+  template <typename Func>
+  void SolveStepPair(Func&& f, const T& curVal, double t, double h, T& high, T& low) {
+    T sumHigh, sumLow;
+    computeStages(f, curVal, t, h, sumHigh, sumLow);
     high = curVal + h * sumHigh;
     low = curVal + h * sumLow;
   }
@@ -85,14 +94,8 @@ class AdaptiveRungeKutta : public RungeKutta<T, Stages> {
   T SolveStep(Func&& f, const T& curVal, double t, double& h, double& next_h, double tolerance,
               double max_step = DBL_MAX, double min_step = DBL_MIN) {
     for (unsigned loop = 0;; ++loop) {
-      T sumHigh(0.0), sumLow(0.0);
-      for (unsigned stage = 0; stage < Stages; ++stage) {
-        T accum(0.0);
-        for (unsigned j = 0; j < stage; ++j) accum += this->m_tab.coeff[stage - 1][j] * this->K[j];
-        this->K[stage] = f(t + h * this->m_tab.nodes[stage], curVal + h * accum);
-        sumHigh += this->m_tab.weights[stage] * this->K[stage];
-        sumLow += m_low[stage] * this->K[stage];
-      }
+      T sumHigh, sumLow;
+      computeStages(f, curVal, t, h, sumHigh, sumLow);
 
       const double error = magnitude((sumHigh - sumLow) * h);
 

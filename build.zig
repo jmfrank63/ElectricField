@@ -33,6 +33,9 @@ const test_sources = [_][]const u8{
     "test_rk_order.cpp",
     "test_seeds.cpp",
     "test_presets.cpp",
+    "test_tracer.cpp",
+    "test_bezier.cpp",
+    "test_finalizer.cpp",
     "test_session.cpp",
 };
 

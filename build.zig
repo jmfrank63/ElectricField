@@ -24,6 +24,8 @@ const core_sources = [_][]const u8{
     "ef/presets.cpp",
     "ef/finalizer.cpp",
     "ef/session.cpp",
+    "ef/scene.cpp",
+    "ef/svg.cpp",
 };
 
 const test_sources = [_][]const u8{
@@ -37,6 +39,7 @@ const test_sources = [_][]const u8{
     "test_bezier.cpp",
     "test_finalizer.cpp",
     "test_session.cpp",
+    "test_scene.cpp",
 };
 
 const Sanitize = enum { none, thread };
@@ -51,15 +54,16 @@ pub fn build(b: *std.Build) void {
     const ctx = Ctx{
         .target = b.standardTargetOptions(.{}),
         .optimize = b.standardOptimizeOption(.{}),
-        .tsan = (b.option(Sanitize, "sanitize", "Sanitizer for the core and tests (none | thread). Thread = ThreadSanitizer, Linux/macOS only") orelse .none) == .thread,
+        .tsan = (b.option(Sanitize, "sanitize", "Sanitizer for the core, tests and ef-cli (none | thread). Thread = ThreadSanitizer, Linux/macOS only") orelse .none) == .thread,
     };
-    const with_gui = b.option(bool, "gui", "Build the SDL3 + Dear ImGui targets (default: true; -Dgui=false = core + tests only, fetches no GUI dependency)") orelse true;
+    const with_gui = b.option(bool, "gui", "Build the SDL3 + Dear ImGui targets and PNG export (default: true; -Dgui=false = core + tests + SVG-only ef-cli, fetches no GUI dependency)") orelse true;
 
     const core_lib = addCore(b, ctx);
     addTests(b, ctx, core_lib);
 
     var gui: ?GuiDeps = null;
     if (with_gui) gui = addGuiDeps(b, ctx); // null while the lazy dependencies are not fetched yet (Zig re-runs build() after the fetch)
+    addCli(b, ctx, core_lib, gui);
     if (gui) |g| addGui(b, ctx, core_lib, g);
 }
 
@@ -128,6 +132,33 @@ fn addGuiDeps(b: *std.Build, ctx: Ctx) ?GuiDeps {
     imgui_mod.linkLibrary(sdl_lib);
     const imgui_lib = b.addLibrary(.{ .name = "imgui", .root_module = imgui_mod, .linkage = .static });
     return .{ .sdl_lib = sdl_lib, .imgui_lib = imgui_lib, .imgui_path = imgui_dep.path(".") };
+}
+
+const cli_flags = core_flags;
+const cli_flags_png = core_flags ++ [_][]const u8{"-DEF_CLI_PNG=1"};
+
+/// ef-cli: headless preset renderer. SVG always; PNG (ImGui ImDrawList on SDL's software renderer) when the GUI deps are present.
+fn addCli(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, gui: ?GuiDeps) void {
+    const mod = coreModule(b, ctx);
+    mod.addIncludePath(b.path("src/core"));
+    mod.addIncludePath(b.path("src"));
+    mod.linkLibrary(core_lib);
+    if (gui) |g| {
+        mod.addCSourceFiles(.{ .root = b.path("src/cli"), .files = &.{"main.cpp"}, .flags = &cli_flags_png });
+        const render = b.createModule(.{ .target = ctx.target, .optimize = ctx.optimize, .link_libcpp = true });
+        render.addCSourceFiles(.{ .root = b.path("src/render"), .files = &.{"png_export.cpp"}, .flags = &gui_flags });
+        render.addIncludePath(b.path("src/core"));
+        render.addIncludePath(b.path("src"));
+        render.addIncludePath(g.imgui_path);
+        render.addIncludePath(g.imgui_path.path(b, "backends"));
+        render.linkLibrary(g.imgui_lib);
+        render.linkLibrary(g.sdl_lib);
+        mod.linkLibrary(b.addLibrary(.{ .name = "efrender", .root_module = render, .linkage = .static }));
+    } else {
+        mod.addCSourceFiles(.{ .root = b.path("src/cli"), .files = &.{"main.cpp"}, .flags = &cli_flags });
+    }
+    const exe = b.addExecutable(.{ .name = "ef-cli", .root_module = mod });
+    b.installArtifact(exe);
 }
 
 fn addGui(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, g: GuiDeps) void {

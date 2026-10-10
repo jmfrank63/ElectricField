@@ -20,13 +20,19 @@
 namespace {
 
 // Headless modes (smoke, screenshot) run unattended in CI and on developer desktops: no CRT assert / abort message box, no
-// Windows Error Reporting dialog. (IM_ASSERT is already non-interactive, see src/imgui_config/ef_imconfig.h.)
+// Windows Error Reporting dialog. (IM_ASSERT is already non-interactive here, see src/imgui_config/ef_imconfig.h.)
 void quietCrashDialogs() {
 #ifdef _WIN32
   SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
   _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
   _set_error_mode(_OUT_TO_STDERR);
 #endif
+}
+
+// Interactive mode only: IM_ASSERT terminates the process (ef_imconfig.h), and stderr is invisible in the Windows GUI subsystem, so
+// tell the user once instead of vanishing silently.
+void interactiveAssertReport(const char* report) {
+  SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Electric Field", report, nullptr);
 }
 
 const char* const kUsage =
@@ -84,7 +90,10 @@ int run(int argc, char** argv) {
       return usageError("Unknown option \"" + a + "\".", headlessRequested);
     }
   }
-  if (opt.headless()) quietCrashDialogs();
+  if (opt.headless())
+    quietCrashDialogs();
+  else
+    ef_imgui_assert_hook = interactiveAssertReport;
 
   efgui::App app;
   std::string step, message;

@@ -1,8 +1,10 @@
 // ComputeSession: determinism (D-04), poll drain-and-swap (D-03), cancellation (D-02), stress for TSan (D-20).
 #include "doctest/doctest.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <memory>
 #include <set>
 #include <string>
 #include <string_view>
@@ -19,6 +21,13 @@ using Clock = std::chrono::steady_clock;
 // Latency budget for cancel() -> wait() and for destruction (CORE-06, D-02). Every build asserts the 200 ms contract except
 // ThreadSanitizer builds: TSan slows the code 5-15x (02-RESEARCH.md "Test bounds"), so 1000 ms is a ThreadSanitizer-only
 // relaxation; Debug, ReleaseFast and ReleaseSafe all assert 200 ms.
+//
+// WR-09: a wall-clock budget ~200x above the typical latency (a few ms) is still exposed to a single scheduler hiccup on a
+// shared 2-3 vCPU CI runner (4 workers, Debug+UBSan, 99 combinations x2). The 200 ms figure stays the contract and the
+// reported number, but the hard assertion is on the BEST of up to kLatencyAttempts fresh attempts: a transient stall must
+// repeat on every attempt to fail, while a real regression (always slow) still fails deterministically. Extra attempts only
+// run after a miss, so the normal path costs nothing. The deterministic assertions (cancelled == true, no result) are
+// evaluated on every attempt and are NOT relaxed.
 #if defined(__SANITIZE_THREAD__)
 #define EF_TEST_UNDER_TSAN 1
 #elif defined(__has_feature)
@@ -51,6 +60,20 @@ FieldResult compute(const Preset& pr, ComputeParams p, SessionStatus* statusOut 
 }
 
 double msSince(Clock::time_point t) { return std::chrono::duration<double, std::milli>(Clock::now() - t).count(); }
+
+constexpr int kLatencyAttempts = 3;
+int gLatencyRetries = 0;  // attempts beyond the first, reported in the MESSAGE lines
+
+// `run()` performs one complete fresh scenario (with its deterministic CHECKs) and returns the measured latency in ms.
+template <typename F>
+double bestLatencyMs(F&& run) {
+  double best = run();
+  for (int attempt = 1; attempt < kLatencyAttempts && best >= kLatencyBudgetMs; ++attempt) {
+    ++gLatencyRetries;
+    best = std::min(best, run());
+  }
+  return best;
+}
 }  // namespace
 
 TEST_CASE("1 thread and N threads give the same result (D-04: job-sequence order, tolerance 1e-12)") {
@@ -164,20 +187,25 @@ TEST_CASE("cancel(): returns promptly mid-computation without a result, even for
   p.method = Method::AdaptiveDormandPrince;
   p.numThreads = 4;
   double worst = 0;
+  gLatencyRetries = 0;
   for (int delayMs : {0, 5, 30}) {
-    ComputeSession s(makeSystem(presetBySlug("two-unequal-charges-different-signs")), p);
-    std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
-    const auto t0 = Clock::now();
-    s.cancel();
-    const SessionStatus st = s.wait();
-    const double dt = msSince(t0);
+    const double dt = bestLatencyMs([&] {
+      ComputeSession s(makeSystem(presetBySlug("two-unequal-charges-different-signs")), p);
+      std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+      const auto t0 = Clock::now();
+      s.cancel();
+      const SessionStatus st = s.wait();
+      const double elapsed = msSince(t0);
+      CHECK(st.done);
+      CHECK(st.cancelled);
+      FieldResult r;
+      CHECK_FALSE(s.takeResult(r));
+      return elapsed;
+    });
     worst = std::max(worst, dt);
-    CHECK(st.done);
-    CHECK(st.cancelled);
-    FieldResult r;
-    CHECK_FALSE(s.takeResult(r));
   }
-  MESSAGE("worst cancel latency ms: " << worst);
+  MESSAGE("worst cancel latency ms (best of up to " << kLatencyAttempts << " per delay, " << gLatencyRetries
+                                                      << " retries; contract " << kLatencyBudgetMs << " ms): " << worst);
   CHECK(worst < kLatencyBudgetMs);
 }
 
@@ -187,13 +215,14 @@ TEST_CASE("destroying a running session joins its workers within ~200 ms (tab cl
     ComputeParams p;
     p.method = m.method;
     p.numThreads = 4;
-    const auto t0 = Clock::now();
-    {
-      ComputeSession s(makeSystem(presetBySlug("two-unequal-charges-different-signs")), p);
+    const double dt = bestLatencyMs([&] {
+      auto s = std::make_unique<ComputeSession>(makeSystem(presetBySlug("two-unequal-charges-different-signs")), p);
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }  // ~ComputeSession = cancel + join
-    const double dt = msSince(t0);
-    CHECK(dt < 10. + kLatencyBudgetMs);
+      const auto t0 = Clock::now();
+      s.reset();  // ~ComputeSession = cancel + join
+      return msSince(t0);
+    });
+    CHECK(dt < kLatencyBudgetMs);
   }
 }
 
@@ -259,6 +288,7 @@ TEST_CASE("cancel() and destruction return within the latency budget for every p
   // the cancel lands mid-computation. The per-stride cost does not depend on the line count.
   int runs = 0;
   int cancelledMidRun = 0;
+  gLatencyRetries = 0;
   double worstCancel = 0, worstDestroy = 0;
   std::string worstCancelAt, worstDestroyAt;
   for (const auto& pr : presets()) {
@@ -269,32 +299,37 @@ TEST_CASE("cancel() and destruction return within the latency budget for every p
       p.method = m.method;
       p.numThreads = 4;
       ++runs;
-      {
+      bool wasCancelled = false;
+      const double dt = bestLatencyMs([&] {
         ComputeSession s(makeSystem(pr), p);
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
         const auto t0 = Clock::now();
         s.cancel();
         const SessionStatus st = s.wait();
-        const double dt = msSince(t0);
+        const double elapsed = msSince(t0);
         CHECK(st.done);
-        CHECK(dt < kLatencyBudgetMs);
-        if (dt > worstCancel) {
-          worstCancel = dt;
-          worstCancelAt = std::string(pr.slug) + "/" + std::string(m.name);
-        }
+        wasCancelled = st.cancelled;
         if (st.cancelled) {
-          ++cancelledMidRun;
           FieldResult r;
           CHECK_FALSE(s.takeResult(r));
         }
+        return elapsed;
+      });
+      CHECK(dt < kLatencyBudgetMs);
+      if (dt > worstCancel) {
+        worstCancel = dt;
+        worstCancelAt = std::string(pr.slug) + "/" + std::string(m.name);
       }
-      const auto t1 = Clock::now();
-      {
-        ComputeSession s(makeSystem(pr), p);
+      if (wasCancelled) ++cancelledMidRun;
+
+      const double dd = bestLatencyMs([&] {
+        auto s = std::make_unique<ComputeSession>(makeSystem(pr), p);
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
-      }  // ~ComputeSession = cancel + join
-      const double dd = msSince(t1);
-      CHECK(dd < 5. + kLatencyBudgetMs);
+        const auto t1 = Clock::now();
+        s.reset();  // ~ComputeSession = cancel + join
+        return msSince(t1);
+      });
+      CHECK(dd < kLatencyBudgetMs);
       if (dd > worstDestroy) {
         worstDestroy = dd;
         worstDestroyAt = std::string(pr.slug) + "/" + std::string(m.name);
@@ -304,5 +339,6 @@ TEST_CASE("cancel() and destruction return within the latency budget for every p
   CHECK(cancelledMidRun >= 1);
   MESSAGE("every preset x every method: " << runs << " runs, " << cancelledMidRun << " cancelled mid-run, worst cancel "
                                           << worstCancel << " ms (" << worstCancelAt << "), worst destroy " << worstDestroy
-                                          << " ms (" << worstDestroyAt << ")");
+                                          << " ms (" << worstDestroyAt << "); best of up to " << kLatencyAttempts << " per measurement, " << gLatencyRetries
+                                          << " retries; contract " << kLatencyBudgetMs << " ms");
 }

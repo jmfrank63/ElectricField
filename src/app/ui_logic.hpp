@@ -1,5 +1,5 @@
 #pragma once
-// Pure, std-only UI decisions (Phase 3 research prototype): strings, counters and metrics that the UI-SPEC fixes.
+// Pure, std-only UI decisions (Phase 3 GUI shell): strings, counters and metrics that the UI-SPEC fixes.
 // Unit-tested with doctest; the ImGui layer only calls these.
 #include <cstddef>
 #include <string>

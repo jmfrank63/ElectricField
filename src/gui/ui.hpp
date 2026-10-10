@@ -1,5 +1,5 @@
 #pragma once
-// Dear ImGui layer of the GUI shell (Phase 3 research prototype): host window, menu bar, tab bar, canvas, modals.
+// Dear ImGui layer of the GUI shell (Phase 3): host window, menu bar, tab bar, canvas, modals.
 // Everything decision-like lives in src/app (std-only, unit-tested); this file only maps it onto ImGui widgets.
 #include <SDL3/SDL.h>
 

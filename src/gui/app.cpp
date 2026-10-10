@@ -59,8 +59,6 @@ bool App::init(const AppOptions& opt, std::string& step, std::string& message) {
 
   window_ = SDL_CreateWindow("Electric Field", size.w, size.h, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
   if (!window_) return fail("Window creation");
-  const efapp::IntSize minSize = efapp::minimumWindowSize(k0);
-  SDL_SetWindowMinimumSize(window_, std::min(minSize.w, size.w), std::min(minSize.h, size.h));
   SDL_SetWindowPosition(window_, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
   if (SDL_Surface* icon = loadPng(icon256Png(), icon256PngSize())) {
     SDL_SetWindowIcon(window_, icon);  // SDL copies the pixels (ignored by macOS, whose Dock icon comes from the bundle)
@@ -94,7 +92,7 @@ bool App::init(const AppOptions& opt, std::string& step, std::string& message) {
   env_.aboutIcon = aboutIcon_;
   env_.semver = EF_VERSION;
   env_.gitHash = EF_GIT_HASH;
-  refreshScale();
+  refreshScale(true);  // also sets the minimum window size
   return true;
 }
 
@@ -114,7 +112,7 @@ void App::shutdown() {
   sdlInit_ = false;
 }
 
-void App::refreshScale() {
+void App::refreshScale(bool initial) {
   // k = display CONTENT scale only. Never SDL_GetWindowDisplayScale (= content scale x pixel density): on macOS / Wayland the
   // pixel density is already applied by the ImGui backend as io.DisplayFramebufferScale, so using it here would double the UI.
   float k = efapp::clampScale(SDL_GetDisplayContentScale(SDL_GetDisplayForWindow(window_)));
@@ -123,6 +121,12 @@ void App::refreshScale() {
   env_.k = k;
   applyScale(baseStyle_, k);
   scaleDirty_ = false;
+  // The minimum window size follows the scale (a move to a 2.0 display must not allow shrinking to half the logical minimum).
+  // Only at creation is it clamped to the window size, so a small --size or a small display does not force the window to grow.
+  const efapp::IntSize minSize = efapp::minimumWindowSize(k);
+  int w = 0, h = 0;
+  if (initial) SDL_GetWindowSize(window_, &w, &h);
+  SDL_SetWindowMinimumSize(window_, initial ? std::min(minSize.w, w) : minSize.w, initial ? std::min(minSize.h, h) : minSize.h);
 }
 
 void App::handleEvent(const SDL_Event& e) {

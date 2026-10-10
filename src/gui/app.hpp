@@ -40,7 +40,7 @@ class App {
   bool iterate();                     // one pass of the main loop (events -> frame); false = quit requested
   void frame();                       // poll sessions, NewFrame, drawUi, Render, present
   void handleEvent(const SDL_Event& e);
-  void refreshScale();
+  void refreshScale(bool initial = false);  // initial: clamp the minimum window size to the creation size (small --size / small displays)
   bool pumpUntilDone(unsigned serial, unsigned timeoutMs);
   void frames(int n);
   void chord(ImGuiKeyChord mods, ImGuiKey key);  // inject a key chord through ImGui's input queue, with the frames it needs

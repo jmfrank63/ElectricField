@@ -34,12 +34,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. The GUI-free physics core (standard library only, no global/app state) passes its tests on all three OSes: charge field and potential match analytic values, all 11 integrators are available in the original order and show their expected convergence order, and every preset yields field-line seeds proportional to |q| x lines-per-unit-charge (net-zero configurations keep the `sign(0)==+1` behaviour)
   5. Reference images of all 9 presets rendered by the existing MFC build with default options are recorded in the repo before any MFC file is removed
 
-**Plans:** 4 plans
+**Plans:** 1/4 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Walking skeleton: hash-pinned zig build, std-only efcore, doctest, SDL3+ImGui hello window (--smoke), repo hygiene, ci.yml (wave 1)
+- [x] 01-01-PLAN.md — Walking skeleton: hash-pinned zig build, std-only efcore, doctest, SDL3+ImGui hello window (--smoke), repo hygiene, ci.yml (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -106,7 +106,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & Portable Physics Core | 0/4 | Planned | - |
+| 1. Foundation & Portable Physics Core | 1/4 | In Progress|  |
 | 2. Compute Engine & Headless Parity | 0/TBD | Not started | - |
 | 3. GUI Shell | 0/TBD | Not started | - |
 | 4. Options, Export & MFC Removal | 0/TBD | Not started | - |

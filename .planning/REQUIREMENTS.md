@@ -9,17 +9,17 @@ Requirements for the cross-platform release. Each maps to roadmap phases.
 
 ### Build & Repository
 
-- [ ] **BUILD-01**: Developer can build the app with `zig build` (Zig 0.17.0) on Windows, Linux and macOS from the command line, without Visual Studio or MFC installed
-- [ ] **BUILD-02**: Developer can run the core test suite with `zig build test` on all three OSes
-- [ ] **BUILD-03**: All third-party dependencies (Dear ImGui, SDL3, doctest) are fetched via hash-pinned `build.zig.zon`; no manual dependency installation beyond Zig (and platform system libs on Linux)
-- [ ] **BUILD-04**: CI (GitHub Actions) builds and runs tests on windows, ubuntu and macos-arm64 for every push to the branch
-- [ ] **BUILD-05**: Build artifacts (`ElectricField/x64/`, `.vs/`, `*.vcxproj.user`) are untracked, and `.gitignore` covers MSVC and Zig outputs (`.zig-cache/`, `zig-out/`)
+- [x] **BUILD-01**: Developer can build the app with `zig build` (Zig 0.17.0) on Windows, Linux and macOS from the command line, without Visual Studio or MFC installed
+- [x] **BUILD-02**: Developer can run the core test suite with `zig build test` on all three OSes
+- [x] **BUILD-03**: All third-party dependencies (Dear ImGui, SDL3, doctest) are fetched via hash-pinned `build.zig.zon`; no manual dependency installation beyond Zig (and platform system libs on Linux)
+- [x] **BUILD-04**: CI (GitHub Actions) builds and runs tests on windows, ubuntu and macos-arm64 for every push to the branch
+- [x] **BUILD-05**: Build artifacts (`ElectricField/x64/`, `.vs/`, `*.vcxproj.user`) are untracked, and `.gitignore` covers MSVC and Zig outputs (`.zig-cache/`, `zig-out/`)
 - [ ] **BUILD-06**: All MFC / Win32 / Direct2D / GDI code, the `.vcxproj`/`.sln`, and `.rc` resources are removed from the source tree
 - [ ] **BUILD-07**: README documents the new build, run and test instructions for all three OSes
 
 ### Physics Core
 
-- [ ] **CORE-01**: Physics core (vectors, charges, field/potential, Runge-Kutta, line tracing, presets) is a GUI-free C++ library depending only on the standard library and has no global/app state
+- [x] **CORE-01**: Physics core (vectors, charges, field/potential, Runge-Kutta, line tracing, presets) is a GUI-free C++ library depending only on the standard library and has no global/app state
 - [ ] **CORE-02**: All 11 integration methods (Euler, Midpoint, Ralston, Heun, RK4, RK 3/8, adaptive Heun-Euler, Bogacki-Shampine, Cash-Karp, Fehlberg, Dormand-Prince) are available in the original order and produce field lines
 - [ ] **CORE-03**: Field lines are seeded around each charge proportionally to |q| × lines-per-unit-charge, preserving the original `sign(0)==+1` source-selection behaviour for net-zero configurations
 - [ ] **CORE-04**: Equipotential lines are computed at the configured potential interval, including the de-duplication pass (moved from the MFC document into the core, in world units)
@@ -49,7 +49,7 @@ Requirements for the cross-platform release. Each maps to roadmap phases.
 
 ### Quality
 
-- [ ] **QA-01**: Unit tests cover vector math, charge field/potential against analytic values, and convergence order of the integrators
+- [x] **QA-01**: Unit tests cover vector math, charge field/potential against analytic values, and convergence order of the integrators
 - [ ] **QA-02**: Tests cover line generation invariants per preset (seed counts, termination, de-dup) using tolerances rather than bit-exact geometry, and `sign(0)==1`
 - [ ] **QA-03**: Tests cover compute-session behaviour: 1-vs-N thread result equivalence, cancellation latency, no data races (TSan run on Linux CI)
 - [ ] **QA-04**: A headless CLI renders any preset to SVG/PNG without a display, used in CI on all three OSes as a parity check
@@ -92,14 +92,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BUILD-01 | Phase 1 | Pending |
-| BUILD-02 | Phase 1 | Pending |
-| BUILD-03 | Phase 1 | Pending |
-| BUILD-04 | Phase 1 | Pending |
-| BUILD-05 | Phase 1 | Pending |
+| BUILD-01 | Phase 1 | Complete |
+| BUILD-02 | Phase 1 | Complete |
+| BUILD-03 | Phase 1 | Complete |
+| BUILD-04 | Phase 1 | Complete |
+| BUILD-05 | Phase 1 | Complete |
 | BUILD-06 | Phase 4 | Pending |
 | BUILD-07 | Phase 4 | Pending |
-| CORE-01 | Phase 1 | Pending |
+| CORE-01 | Phase 1 | Complete |
 | CORE-02 | Phase 1 | Pending |
 | CORE-03 | Phase 1 | Pending |
 | CORE-04 | Phase 2 | Pending |
@@ -117,13 +117,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OPT-04 | Phase 4 | Pending |
 | EXP-01 | Phase 4 | Pending |
 | EXP-02 | Phase 4 | Pending |
-| QA-01 | Phase 1 | Pending |
+| QA-01 | Phase 1 | Complete |
 | QA-02 | Phase 2 | Pending |
 | QA-03 | Phase 2 | Pending |
 | QA-04 | Phase 2 | Pending |
 | QA-05 | Phase 1 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 30 total
 - Mapped to phases: 30 (Phase 1: 10, Phase 2: 7, Phase 3: 5, Phase 4: 8)
 - Unmapped: 0 ✓

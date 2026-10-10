@@ -30,6 +30,7 @@ const test_sources = [_][]const u8{
     "test_field.cpp",
     "test_rk_order.cpp",
     "test_seeds.cpp",
+    "test_presets.cpp",
 };
 
 pub fn build(b: *std.Build) void {

@@ -193,18 +193,29 @@ fn addCli(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, render_lib
 
 const zon = @import("build.zig.zon");
 
-/// Short git hash for the About box; "" (shown as "unknown") when git or the repository is not available.
-fn gitShortHash(b: *std.Build) []const u8 {
-    switch (b.runFallible(&.{ "git", "rev-parse", "--short=7", "HEAD" }, .{ .stderr_behavior = .ignore })) {
-        .success => |out| return std.mem.trim(u8, out, " \r\n\t"),
-        else => return "",
+/// Directory holding a generated `ef_git_hash.h` with one line, `#define EF_GIT_HASH "<7 hex>"`, for the About box.
+/// The hash is produced when the step runs (make time, `has_side_effects`), not when build.zig is configured, because
+/// Zig caches the configure phase and a configure-time hash would go stale after the next commit. Without git, a
+/// repository or a commit the header defines the empty string (the About box then shows "(unknown)") and the build
+/// still succeeds.
+fn gitHashHeader(b: *std.Build) std.Build.LazyPath {
+    const argv = [_][]const u8{ "git", "-c", "core.abbrev=7", "log", "-1", "--format=#define EF_GIT_HASH \"%h\"" };
+    const wf = b.addWriteFiles();
+    switch (b.runFallible(&argv, .{ .stderr_behavior = .ignore })) {
+        .success => {
+            const run = b.addSystemCommand(&argv);
+            run.setCwd(b.path("."));
+            run.has_side_effects = true; // re-run on every build so the hash follows HEAD
+            _ = wf.addCopyFile(run.captureStdOut(.{ .basename = "ef_git_hash.h" }), "ef_git_hash.h");
+        },
+        else => _ = wf.add("ef_git_hash.h", "#define EF_GIT_HASH \"\"\n"),
     }
+    return wf.getDirectory();
 }
 
 fn addGui(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, app_lib: *std.Build.Step.Compile, render_lib: *std.Build.Step.Compile, g: GuiDeps) void {
     const info = b.addConfigHeader(.{ .style = .blank, .include_path = "ef_build_info.h" }, .{
         .EF_VERSION = zon.version,
-        .EF_GIT_HASH = gitShortHash(b),
     });
     const mod = b.createModule(.{ .target = ctx.target, .optimize = ctx.optimize, .link_libcpp = true });
     mod.addCSourceFiles(.{ .root = b.path("src/gui"), .files = &.{ "main.cpp", "app.cpp", "ui.cpp" }, .flags = &gui_flags });
@@ -212,6 +223,7 @@ fn addGui(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, app_lib: *
     mod.addIncludePath(b.path("src"));
     mod.addIncludePath(b.path("src/core"));
     mod.addConfigHeader(info);
+    mod.addIncludePath(gitHashHeader(b)); // ef_git_hash.h, regenerated at make time
     mod.addIncludePath(b.path("src/imgui_config"));
     mod.addIncludePath(g.imgui_path);
     mod.addIncludePath(g.imgui_path.path(b, "backends"));

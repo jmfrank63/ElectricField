@@ -10,6 +10,7 @@
 #include "app/ui_logic.hpp"
 #include "ef/presets.hpp"
 #include "ef_build_info.h"
+#include "ef_git_hash.h"
 #include "gui/icon.hpp"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlrenderer3.h"
@@ -405,6 +406,7 @@ bool App::smokeExtras(std::string& report) {
 
 int App::runSmoke() {
   std::printf("video=%s renderer=%s presets=%zu\n", SDL_GetCurrentVideoDriver(), SDL_GetRendererName(renderer_), ef::presets().size());
+  std::printf("about: %s\n", efapp::versionLine(EF_VERSION, EF_GIT_HASH).c_str());
   // Software frames of a finished scene take ~100 ms, so a key held for 3 injected frames outlasts ImGui key-repeat delay (0.275 s) and
   // Down moves the chooser row several times. Injected chords must be a single press: switch repeat off for the whole smoke run.
   ImGui::GetIO().KeyRepeatDelay = 1e9f;

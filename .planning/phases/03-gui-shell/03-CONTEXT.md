@@ -18,7 +18,7 @@ Not in this phase: Options dialog, config persistence, PNG/SVG export from the G
 
 ### Window & tab layout
 - **D-01:** Single main window with an ImGui tab bar: one tab per open configuration (maps MFC's tabbed MDI). No ImGui docking/multi-viewport for tabs in this phase.
-- **D-02:** Opening presets: **File ▸ New ▸** submenu listing the 9 presets by their MFC display names (from the core `PresetRegistry`), plus **Ctrl+N** opening a preset chooser modal (list of 9, OK/Cancel, double-click opens) mirroring MFC's "New" dialog. The same preset may be opened multiple times; tab titles are "<Name> 1", "<Name> 2", … (MFC "Dipole1" style, with a space).
+- **D-02:** Opening presets: **File ▸ New ▸** submenu listing the 9 presets by their MFC display names (from the core `PresetRegistry`), plus **Ctrl+N** opening a preset chooser modal (list of 9, "Open Configuration" / "Close Chooser" buttons per UI-SPEC, double-click or Enter opens, Esc closes) mirroring MFC's "New" dialog. The same preset may be opened multiple times; tab titles are "<Name> 1", "<Name> 2", … (MFC "Dipole1" style, with a space).
 - **D-03:** On startup the preset chooser is shown (parity with MFC's startup "New" chooser); Cancel leaves an empty window with a hint ("File ▸ New or Ctrl+N to open a configuration").
 - **D-04:** Menus: **File** (New ▸ 9 presets, New… Ctrl+N, Close Tab Ctrl+W, Exit Alt+F4/Ctrl+Q) and **Help** (About Electric Field…). MFC's Application Look themes, toolbar/docking customisation, status-bar toggle and print menus are dropped. (View ▸ Options arrives in Phase 4.)
 

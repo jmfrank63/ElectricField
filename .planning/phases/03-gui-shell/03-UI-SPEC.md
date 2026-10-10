@@ -1,7 +1,8 @@
 ---
 phase: 3
 slug: gui-shell
-status: draft
+status: approved
+reviewed_at: 2026-10-11
 shadcn_initialized: false
 preset: none
 created: 2026-10-10
@@ -89,6 +90,7 @@ Layout rules:
 |---------|------|
 | Host window | one borderless ImGui window covering the whole SDL window (`GetMainViewport()->WorkPos/WorkSize`), flags `NoTitleBar | NoResize | NoMove | NoCollapse | NoSavedSettings | NoBringToFrontOnFocus | NoScrollbar | NoScrollWithMouse | MenuBar`; `WindowPadding = (0,0)`, `WindowBorderSize = 0`, `WindowRounding = 0` |
 | Order | menu bar, then tab bar flush to the left/right edges, then the active tab's canvas |
+| Focal anchor | The canvas scene (charges plus field lines and equipotentials, on the white 60% surface) is the primary focal anchor of the main screen; it takes all remaining area and the only saturated colours (blue/red charges). The menu bar and tab bar are secondary chrome in neutral greys and must never compete with it (accent is limited to the reserved list in Color) |
 | Canvas | edge to edge: fills `ImGui::GetContentRegionAvail()` of the tab content with zero padding (MFC view was edge to edge, white). It is an `InvisibleButton` over the rect (so hover is known) with the scene drawn on the window draw list. No border, no rounding, no margin |
 | Modals | centred in the viewport (`SetNextWindowPos(centre, Appearing, (0.5,0.5))`), not resizable, not collapsible, `AlwaysAutoResize` except where a width is fixed below |
 | Style metrics | `WindowBorderSize = 0` host, `PopupBorderSize = 1`, `FrameBorderSize = 0`, `TabBarBorderSize = 1`, `TabBarOverlineSize = 0`, `WindowRounding = 0`, `FrameRounding = 4`, `PopupRounding = 4`, `TabRounding = 4` |
@@ -137,7 +139,7 @@ Accent reserved for (never "all interactive elements"):
 
 1. The selected tab (`ImGuiCol_TabSelected` family) and its focus underline.
 2. The selected row in the preset chooser (`ImGuiCol_Header` / `HeaderActive`).
-3. The default button of a modal (OK) while hovered/active/focused, and keyboard-nav focus rectangles.
+3. The default button of a modal ("Open Configuration" in the chooser, "Close About" in About) while hovered/active/focused, and keyboard-nav focus rectangles.
 4. The busy spinner arc (tab-bar marker uses text colour, overlay spinner uses accent).
 5. The hover highlight of menu items (`ImGuiCol_HeaderHovered`).
 
@@ -193,11 +195,11 @@ The 9 File > New entries (exact display names, from `src/core/ef/presets.cpp`):
 |----------|-------|
 | Title bar | "New" (parity with the MFC New dialog caption; ImGui modal title `New##chooser`) |
 | Size | width 360 x k; height auto (9 rows x 24 + heading + button row, no scroll) |
-| Content | line 1 Body: "Choose a charge configuration:", then a list box of the 9 display names as `Selectable` rows (full width, `AllowDoubleClick`), row 1 "Dipole" preselected each time the modal opens, then a right-aligned button row: **OK** (default) and **Cancel** (8 px apart) |
-| Keys | Up/Down move the selection (wrap off); Enter = OK; Esc = Cancel; double-click on a row = OK on that row; Tab cycles list, OK, Cancel |
-| OK | opens a tab for the selected preset and closes the modal; the new tab becomes active |
-| Cancel/Esc | closes without opening anything |
-| At startup (D-03) | opened automatically on the first frame; Cancel leaves the empty state |
+| Content | line 1 Body: "Choose a charge configuration:", then a list box of the 9 display names as `Selectable` rows (full width, `AllowDoubleClick`), row 1 "Dipole" preselected each time the modal opens, then a right-aligned button row: **Open Configuration** (default) and **Close Chooser** (8 px apart) |
+| Keys | Up/Down move the selection (wrap off); Enter = Open Configuration; Esc = Close Chooser; double-click on a row = Open Configuration on that row; Tab cycles list, Open Configuration, Close Chooser |
+| Open Configuration | opens a tab for the selected preset and closes the modal; the new tab becomes active |
+| Close Chooser / Esc | closes without opening anything |
+| At startup (D-03) | opened automatically on the first frame; Close Chooser (same label in every context) leaves the empty state |
 | Re-entrancy | Ctrl+N while the chooser or About is open is ignored; opening one modal from the other is not possible |
 
 ### About modal (D-13)
@@ -209,7 +211,7 @@ The 9 File > New entries (exact display names, from `src/core/ef/presets.cpp`):
 | Layout | app icon 48 x 48 logical at left of the title block (same artwork as the window icon), right of it: Heading "Electric Field" (20 px), under it the version line (Label 14 px, muted) |
 | Body (Body 16 px, wrapped to the modal width) | see Copywriting |
 | Links | three `ImGui::TextLink` rows; click calls `SDL_OpenURL(url)`; hover tooltip shows the full URL |
-| Close | **OK** button, right aligned, default (Enter and Esc both close) |
+| Close | **Close About** button, right aligned, default (Enter and Esc both close) |
 
 ---
 
@@ -219,7 +221,8 @@ All strings are ASCII in ImGui widgets. `<N>`, `<n>`, `<m>` are runtime values.
 
 | Element | Copy |
 |---------|------|
-| Primary CTA (chooser) | "OK" (opens the selected configuration). Secondary: "Cancel" |
+| Primary CTA (chooser) | "Open Configuration" (opens the selected configuration). Secondary: "Close Chooser" (same label at startup and from File > New...) |
+| About close button | "Close About" |
 | SDL window title, no tab | "Electric Field" |
 | SDL window title, tab active | "Electric Field — <Display Name> <N>" (em dash, U+2014; OS-rendered), e.g. "Electric Field — Dipole 1". Busy markers are NOT added to the OS title |
 | Menu labels | "File", "New", "New...", "Close Tab", "Exit", "Help", "About Electric Field..." (exact, case as written) |
@@ -251,7 +254,7 @@ Tooltips: none except link URLs. No status bar (v2).
 | Ctrl+W (Cmd+W) | close active tab | a tab exists and no modal open |
 | Ctrl+Q (Cmd+Q) | quit | no modal open (Alt+F4 / window close always quits) |
 | Ctrl+Tab / Ctrl+Shift+Tab | next / previous tab | ImGui built-in tab-bar behaviour; no custom code |
-| Enter / Esc | chooser: OK / Cancel; About: close | modal focused |
+| Enter / Esc | chooser: Open Configuration / Close Chooser; About: Close About (both keys) | modal focused |
 | Up / Down / Enter | chooser list navigation / activate | keyboard nav enabled |
 
 Shortcuts use `ImGui::Shortcut(...)` evaluated once per frame in the host window, never while a text field is active (there are none in this phase).
@@ -305,23 +308,58 @@ Shortcuts use `ImGui::Shortcut(...)` evaluated once per frame in the host window
 
 ## UI Considerations
 
-Applicable state considerations resolved: 11 covered, 2 backstop, 0 unresolved
+Probe: `ui-consideration-probe.cjs` over 8 surfaces (E1 menu bar, E2 tab bar, E3 canvas, E4 busy overlay, E5 preset chooser, E6 About modal, E7 empty state, E8 failed-session state) → 45 applicable element×category considerations, plus 2 researcher-added (E3 populated/overflow). `--auto` resolution: 44 covered, 3 backstop, 0 unresolved. Copy for empty/error states lives in `## Copywriting Contract` (referenced, not restated).
 
 | Category | Element(s) | Status | Resolution / Reason |
 |----------|------------|--------|---------------------|
-| empty | tab bar / host window (zero tabs) | ✅ covered | With zero tabs the host area shows the documented "No configuration open" heading and "File > New or Ctrl+N to open a configuration" body; File > Close Tab is disabled |
-| loading | canvas of a computing tab | ✅ covered | A computing tab shows its charges, the "Computing... <n> / <m> lines" overlay with spinner, a busy marker in the tab title and the wait cursor over the canvas; no field or equipotential lines are drawn until the session is done |
-| error | canvas of a failed session | ✅ covered | A failed session shows "Could not compute this configuration", the session error text and the reopen hint in the canvas; the tab prefix is "! " and the tab closes normally |
-| error | startup and link-open failures | ✅ covered | A failed init step shows an SDL message box with the step name and `SDL_GetError()` and exits 1; a failed `SDL_OpenURL` copies the URL to the clipboard and shows the fallback sentence in About |
-| populated | canvas with a finished scene | ✅ covered | The finished tab renders the shared `renderScene` output on a white canvas, y-up, centred, 100 x k px per unit, with MFC colours; geometry and counts are those of `ef-cli` (tools/parity/expected-counts.csv); look is checked against `docs/baseline/mfc/*.png` |
-| partial | canvas during finalisation (n == m, not yet done) | ✅ covered | The overlay stays at "<m> / <m> lines" and lines remain hidden until `done`; no partial scene is ever drawn |
-| zero-one-many | tab bar with 0, 1, many tabs | ✅ covered | Zero: empty state. One: one tab with its "x". Many: tabs scroll with scroll buttons and the list popup; same preset repeated gets "<Name> 1", "<Name> 2", ... with a never-reused counter |
-| overflow | tab titles and tab bar | ✅ covered | Titles are never truncated; the bar scrolls (`FittingPolicyScroll`) and offers `TabListPopupButton` |
-| overflow | chooser list | ✅ covered | The 9 rows fit without scrolling at the 360 wide auto-sized modal; the modal is clamped to the viewport with a scrollbar fallback only when the window is smaller than the minimum |
-| long-text | About body and tab titles | ✅ covered | About body text wraps (`TextWrapped`) at the 400 wide modal; links are single lines under 400 wide; the longest tab title fits the scrolling bar without truncation |
-| long-text | window title | ✅ covered | The OS window title carries the full "Electric Field — <Display Name> <N>"; the OS truncates it if needed |
-| overflow | canvas smaller than the 1024 x 768 scene | 🧪 backstop | A smaller canvas clips the scene at its edges via the ImGuiPainter clip rect and the origin stays centred; checked by a headless render at e.g. 640 x 480 and 1280 x 1024 (pixel-sample checks), not a unit test of layout |
-| populated | HiDPI sharpness and size equivalence | 🧪 backstop | Needs a real 1.5x/2x display (Windows 150%, macOS Retina) plus a screenshot comparison against the baseline; CI (software, 1x) cannot assert it. Routes to human verification |
+| empty | E1 menu bar | ✅ covered | With zero tabs, File > Close Tab is disabled; New, New..., Exit and Help > About stay enabled |
+| loading | E1 menu bar | ✅ covered | Menus stay responsive while any session computes (compute runs on worker threads; the UI loop never waits on a session) |
+| error | E1 menu bar | ✅ covered | Menu actions cannot fail silently: a session that fails to start or compute is shown in its tab as the E8 failed state |
+| populated | E1 menu bar | ✅ covered | File > New lists exactly the 9 MFC display names in registry order (Copywriting Contract) |
+| partial | E1 menu bar | ✅ covered | The menu content is static (presets compiled in); the New submenu always shows all 9 entries |
+| overflow | E1 menu bar | ✅ covered | Menus auto-size to the longest label; no label is truncated |
+| zero-one-many | E1 menu bar | ✅ covered | Close Tab is enabled iff at least one tab exists and always acts on the active tab |
+| long-text | E1 menu bar | ✅ covered | Labels are the fixed ASCII strings of the Copywriting Contract |
+| empty | E2 tab bar / host window (zero tabs) | ✅ covered | With zero tabs the host area shows the E7 empty state; File > Close Tab is disabled |
+| loading | E2 tab bar | ✅ covered | A computing tab title carries the busy marker until its session is done |
+| error | E2 tab bar | ✅ covered | A failed tab title carries the "! " prefix and the tab closes normally |
+| populated | E2 tab bar | ✅ covered | A finished tab shows the plain title "<Display Name> <N>" |
+| partial | E2 tab bar | ✅ covered | The busy marker stays during finalisation (n == m) until the session reports done |
+| overflow | E2 tab bar | ✅ covered | Titles are never truncated; the bar scrolls (`FittingPolicyScroll`) and offers `TabListPopupButton` |
+| zero-one-many | E2 tab bar | ✅ covered | Zero: empty state. One: one tab with its "x". Many: scroll buttons and list popup; repeated presets get "<Name> 1", "<Name> 2", ... with a never-reused counter |
+| long-text | E2 tab bar / window title | ✅ covered | The longest tab title fits the scrolling bar untruncated; the OS window title carries the full "Electric Field — <Display Name> <N>" (the OS truncates if needed) |
+| empty | E3 canvas | ✅ covered | A tab is never empty: its charges are drawn from the first frame, before any line arrives |
+| loading | E3 canvas of a computing tab | ✅ covered | A computing tab shows its charges, the E4 overlay, a busy marker in the tab title and the wait cursor over the canvas; no field or equipotential lines are drawn until the session is done |
+| error | E3 canvas of a failed session | ✅ covered | The canvas shows the E8 failed state instead of a scene |
+| populated | E3 canvas with a finished scene | ✅ covered | The finished tab renders the shared `renderScene` output on a white canvas, y-up, centred, 100 x k px per unit, with MFC colours; geometry and counts equal `ef-cli` (tools/parity/expected-counts.csv); look is checked against `docs/baseline/mfc/*.png` |
+| partial | E3 canvas during finalisation (n == m, not yet done) | ✅ covered | The overlay stays at "<m> / <m> lines" and lines remain hidden until done; no partial scene is ever drawn |
+| overflow | E3 canvas smaller than the 1024 x 768 scene | 🧪 backstop | `{ statement: "A smaller canvas clips the scene at its edges via the ImGuiPainter clip rect and the origin stays centred (headless render at 640x480 and 1280x1024, pixel-sample checks)", verification: backstop }` |
+| populated | E3 HiDPI sharpness and size equivalence | 🧪 backstop | `{ statement: "On a 1.5x/2x display (Windows 150%, macOS Retina) the canvas is sharp and the scene has the same logical size as the baseline", verification: backstop }` — needs real HiDPI hardware; routes to human verification |
+| long-text | E3 canvas | ✅ covered | The canvas carries no text except the E4 overlay and the E8 failed state |
+| loading | E4 busy overlay | ✅ covered | Spinner + "Computing... <n> / <m> lines" (n = field lines received via `poll()`, m = `expectedLineCount`), redrawn each frame while computing |
+| error | E4 busy overlay | ✅ covered | On session failure the overlay is replaced by the E8 failed state |
+| overflow | E4 busy overlay on a tiny canvas | 🧪 backstop | `{ statement: "When the canvas is smaller than the overlay, the overlay is clipped to the canvas and never drawn outside the tab content region", verification: backstop }` |
+| long-text | E4 busy overlay | ✅ covered | The overlay string is bounded (two integers of at most a few hundred) and centred |
+| empty | E5 preset chooser | ✅ covered | The list always has 9 rows (compiled-in registry); the first row is preselected so "Open Configuration" is always enabled |
+| loading | E5 preset chooser | ✅ covered | The chooser opens instantly; it has no asynchronous content |
+| error | E5 preset chooser | ✅ covered | Opening cannot fail inside the chooser; a session failure appears in the new tab as E8 |
+| populated | E5 preset chooser | ✅ covered | 9 rows with the MFC display names in registry order; Enter/double-click opens, Esc closes |
+| partial | E5 preset chooser | ✅ covered | The list is static; all 9 rows are always present |
+| overflow | E5 chooser list | ✅ covered | The 9 rows fit without scrolling in the 360-wide auto-sized modal; the modal is clamped to the viewport with a scrollbar fallback only below the minimum window size |
+| zero-one-many | E5 preset chooser | ✅ covered | Exactly 9 rows, single selection |
+| long-text | E5 preset chooser | ✅ covered | The longest display name fits the 360-wide modal untruncated |
+| loading | E6 About modal | ✅ covered | Static content; version and short git hash are compiled in |
+| error | E6 About link-open failure | ✅ covered | A failed `SDL_OpenURL` copies the URL to the clipboard and shows the fallback sentence (Copywriting Contract) |
+| overflow | E6 About modal | ✅ covered | Body text wraps (`TextWrapped`) at the 400-wide modal; links are single lines under 400 wide |
+| long-text | E6 About modal | ✅ covered | Same as overflow: wrapped body, single-line links |
+| loading | E7 empty state | ✅ covered | The empty state is visible immediately at startup behind the chooser modal |
+| error | E7 empty state / startup failure | ✅ covered | A failed init step shows an SDL message box with the step name and `SDL_GetError()` and exits 1 |
+| overflow | E7 empty state | ✅ covered | Heading and hint are centred in the host area and wrap at its width |
+| long-text | E7 empty state | ✅ covered | Fixed short strings from the Copywriting Contract |
+| loading | E8 failed-session state | ✅ covered | Shown as soon as the session reports failed; the busy marker is removed |
+| error | E8 failed-session state | ✅ covered | "Could not compute this configuration", the session error text and the reopen hint (Copywriting Contract) |
+| overflow | E8 failed-session state | ✅ covered | The session error text uses `TextWrapped` at the canvas width minus padding and is clipped to the canvas |
+| long-text | E8 failed-session state | ✅ covered | Same as overflow: long error text wraps within the canvas |
 
 ---
 
@@ -337,11 +375,11 @@ Applicable state considerations resolved: 11 covered, 2 backstop, 0 unresolved
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** approved 2026-10-11 (gsd-ui-checker, revision 1)

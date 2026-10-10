@@ -20,12 +20,14 @@ const core_flags = [_][]const u8{
 const gui_flags = [_][]const u8{ "-std=c++17", "-DImDrawIdx=unsigned int" };
 
 const core_sources = [_][]const u8{
+    "ef/seeds.cpp",
     "ef/presets.cpp",
 };
 
 const test_sources = [_][]const u8{
     "test_main.cpp",
     "test_field.cpp",
+    "test_seeds.cpp",
 };
 
 pub fn build(b: *std.Build) void {

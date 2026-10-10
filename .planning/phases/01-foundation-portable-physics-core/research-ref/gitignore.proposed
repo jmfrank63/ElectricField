@@ -1,0 +1,28 @@
+# ---- Zig ----
+.zig-cache/
+zig-out/
+zig-pkg/
+
+# ---- Visual Studio / MSVC (unanchored: the MFC build writes to BOTH <repo>/x64/ and <repo>/ElectricField/x64/) ----
+.vs/
+x64/
+Debug/
+Release/
+*.user
+*.suo
+*.obj
+*.pdb
+*.ilk
+*.pch
+*.idb
+*.tlog
+*.ipch
+*.VC.db
+*.VC.db-shm
+*.VC.db-wal
+*.aps
+
+# ---- scratch / local ----
+/build/
+/out/
+*.log

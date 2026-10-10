@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -140,9 +141,7 @@ bool checkExpected(const std::string& path, const std::map<std::string, Counts>&
   return ok;
 }
 
-}  // namespace
-
-int main(int argc, char** argv) {
+int run(int argc, char** argv) {
   Args a;
   std::string err;
   if (!parseArgs(argc, argv, a, err)) {
@@ -180,4 +179,19 @@ int main(int argc, char** argv) {
   Counts c;
   if (!renderOne(*p, a, a.svg, a.png, c, err)) { std::fprintf(stderr, "ef-cli: %s\n", err.c_str()); return 1; }
   return 0;
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+  // Anything thrown below (makeSystem, std::thread creation in ComputeSession, buildScene, renderSvg, allocations) must end
+  // in a documented exit code, not std::terminate / a crash dialog.
+  try {
+    return run(argc, argv);
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "ef-cli: fatal: %s\n", e.what());
+  } catch (...) {
+    std::fprintf(stderr, "ef-cli: fatal: unknown exception\n");
+  }
+  return 1;
 }

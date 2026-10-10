@@ -10,6 +10,7 @@ struct ComputeParams {
   unsigned linesPerUnitCharge = 16;   // Options::numLinesOnUnitCharge
   bool calculateEquipotentials = true;
   double potentialInterval = 0.1;
+  unsigned numThreads = 4;            // Options::numThreads (Options.cpp:22)
   Method method = Method::Euler;
 
   // Charge radius in world units: chargeRadiusPx / pixelsPerUnit == 0.25 with the defaults (D-03).

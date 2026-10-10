@@ -22,6 +22,8 @@ const gui_flags = [_][]const u8{ "-std=c++17", "-DImDrawIdx=unsigned int" };
 const core_sources = [_][]const u8{
     "ef/seeds.cpp",
     "ef/presets.cpp",
+    "ef/finalizer.cpp",
+    "ef/session.cpp",
 };
 
 const test_sources = [_][]const u8{
@@ -31,6 +33,7 @@ const test_sources = [_][]const u8{
     "test_rk_order.cpp",
     "test_seeds.cpp",
     "test_presets.cpp",
+    "test_session.cpp",
 };
 
 pub fn build(b: *std.Build) void {

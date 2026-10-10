@@ -55,8 +55,10 @@ class ComputeSession {
   ComputeSession(const ComputeSession&) = delete;
   ComputeSession& operator=(const ComputeSession&) = delete;
 
-  // Non-blocking, idempotent. Honoured by the tracers (cancel stride) AND between/inside the finalization stages. A cancel()
-  // that lands before the result is published always wins: the session ends cancelled with no result. A cancel() after
+  // Non-blocking, idempotent. Honoured by the tracers (cancel stride) AND between/inside the finalization stages. The stop
+  // flag is re-checked in the publication block (under the session lock), so a cancel() that has returned before the result
+  // is published wins: the session ends cancelled with no result. cancel() does not take that lock to set the flag, so a
+  // cancel() racing the publication itself may land on either side; status and takeResult() always agree. A cancel() after
   // done is a no-op (the result stays available).
   void cancel();
 

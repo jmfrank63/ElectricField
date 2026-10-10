@@ -192,7 +192,7 @@ void ComputeSession::finish() {
     std::lock_guard<std::mutex> lk(m_);
     if (failed_) {
       cancelled_ = false;
-    } else if (haveR) {
+    } else if (haveR && !stop_.load()) {  // WR-11: final stop check in the publication block; a cancel() that has returned wins
       result_ = std::move(r);
       haveResult_ = true;
     } else {

@@ -36,19 +36,42 @@ const test_sources = [_][]const u8{
     "test_session.cpp",
 };
 
-pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
-    const with_gui = b.option(bool, "gui", "Build the SDL3 + Dear ImGui targets (default: true; -Dgui=false = core + tests only)") orelse true;
+const Sanitize = enum { none, thread };
 
-    const core_lib = addCore(b, target, optimize);
-    addTests(b, target, optimize, core_lib);
-    if (with_gui) addGui(b, target, optimize, core_lib);
+const Ctx = struct {
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    tsan: bool,
+};
+
+pub fn build(b: *std.Build) void {
+    const ctx = Ctx{
+        .target = b.standardTargetOptions(.{}),
+        .optimize = b.standardOptimizeOption(.{}),
+        .tsan = (b.option(Sanitize, "sanitize", "Sanitizer for the core and tests (none | thread). Thread = ThreadSanitizer, Linux/macOS only") orelse .none) == .thread,
+    };
+    const with_gui = b.option(bool, "gui", "Build the SDL3 + Dear ImGui targets (default: true; -Dgui=false = core + tests only, fetches no GUI dependency)") orelse true;
+
+    const core_lib = addCore(b, ctx);
+    addTests(b, ctx, core_lib);
+
+    var gui: ?GuiDeps = null;
+    if (with_gui) gui = addGuiDeps(b, ctx); // null while the lazy dependencies are not fetched yet (Zig re-runs build() after the fetch)
+    if (gui) |g| addGui(b, ctx, core_lib, g);
+}
+
+fn coreModule(b: *std.Build, ctx: Ctx) *std.Build.Module {
+    return b.createModule(.{
+        .target = ctx.target,
+        .optimize = ctx.optimize,
+        .link_libcpp = true,
+        .sanitize_thread = if (ctx.tsan) true else null,
+    });
 }
 
 /// efcore: GUI-free, std-only C++17 static library.
-fn addCore(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
-    const mod = b.createModule(.{ .target = target, .optimize = optimize, .link_libcpp = true });
+fn addCore(b: *std.Build, ctx: Ctx) *std.Build.Step.Compile {
+    const mod = coreModule(b, ctx);
     mod.addCSourceFiles(.{ .root = b.path("src/core"), .files = &core_sources, .flags = &core_flags });
     mod.addIncludePath(b.path("src/core"));
     const lib = b.addLibrary(.{ .name = "efcore", .root_module = mod, .linkage = .static });
@@ -57,9 +80,9 @@ fn addCore(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builti
 }
 
 /// `zig build test`: doctest suite (no SDL/ImGui involved).
-fn addTests(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, core_lib: *std.Build.Step.Compile) void {
+fn addTests(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile) void {
     const doctest_dep = b.dependency("doctest", .{});
-    const mod = b.createModule(.{ .target = target, .optimize = optimize, .link_libcpp = true });
+    const mod = coreModule(b, ctx);
     mod.addCSourceFiles(.{ .root = b.path("tests"), .files = &test_sources, .flags = &core_flags });
     mod.addIncludePath(b.path("src/core"));
     mod.addSystemIncludePath(doctest_dep.path(".")); // -isystem: doctest's own warnings are not ours
@@ -67,16 +90,24 @@ fn addTests(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
     const exe = b.addExecutable(.{ .name = "efcore-tests", .root_module = mod });
     const run = b.addRunArtifact(exe);
     run.setCwd(b.path(".")); // test_presets.cpp reads ElectricField/ConfigDocs.cpp relative to the repo root
+    if (ctx.tsan) run.setEnvironmentVariable("TSAN_OPTIONS", "halt_on_error=1:second_deadlock_stack=1");
     b.step("test", "Run the physics-core tests (doctest)").dependOn(&run.step);
 }
 
-/// GUI: SDL3 (castholm/SDL) + Dear ImGui + sdlrenderer3 backend; `run` and `smoke` steps.
-fn addGui(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, core_lib: *std.Build.Step.Compile) void {
-    const sdl_dep = b.dependency("sdl3", .{ .target = target, .optimize = optimize });
-    const sdl_lib = sdl_dep.artifact("SDL3");
-    const imgui_dep = b.dependency("imgui", .{});
+const GuiDeps = struct {
+    sdl_lib: *std.Build.Step.Compile,
+    imgui_lib: *std.Build.Step.Compile,
+    imgui_path: std.Build.LazyPath,
+};
 
-    const imgui_mod = b.createModule(.{ .target = target, .optimize = optimize, .link_libcpp = true });
+/// SDL3 (castholm/SDL) + Dear ImGui + sdlrenderer3 backend. Both are `.lazy = true` in build.zig.zon (D-14): they are
+/// only fetched when this function actually asks for them, i.e. never with -Dgui=false.
+fn addGuiDeps(b: *std.Build, ctx: Ctx) ?GuiDeps {
+    const sdl_dep = b.lazyDependency("sdl3", .{ .target = ctx.target, .optimize = ctx.optimize }) orelse return null;
+    const imgui_dep = b.lazyDependency("imgui", .{}) orelse return null;
+    const sdl_lib = sdl_dep.artifact("SDL3");
+
+    const imgui_mod = b.createModule(.{ .target = ctx.target, .optimize = ctx.optimize, .link_libcpp = true });
     imgui_mod.addCSourceFiles(.{
         .root = imgui_dep.path("."),
         .files = &.{
@@ -93,15 +124,18 @@ fn addGui(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin
     imgui_mod.addIncludePath(imgui_dep.path("backends"));
     imgui_mod.linkLibrary(sdl_lib);
     const imgui_lib = b.addLibrary(.{ .name = "imgui", .root_module = imgui_mod, .linkage = .static });
+    return .{ .sdl_lib = sdl_lib, .imgui_lib = imgui_lib, .imgui_path = imgui_dep.path(".") };
+}
 
-    const mod = b.createModule(.{ .target = target, .optimize = optimize, .link_libcpp = true });
+fn addGui(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, g: GuiDeps) void {
+    const mod = b.createModule(.{ .target = ctx.target, .optimize = ctx.optimize, .link_libcpp = true });
     mod.addCSourceFiles(.{ .root = b.path("src/gui"), .files = &.{"main.cpp"}, .flags = &gui_flags });
     mod.addIncludePath(b.path("src/core"));
-    mod.addIncludePath(imgui_dep.path("."));
-    mod.addIncludePath(imgui_dep.path("backends"));
+    mod.addIncludePath(g.imgui_path);
+    mod.addIncludePath(g.imgui_path.path(b, "backends"));
     mod.linkLibrary(core_lib);
-    mod.linkLibrary(imgui_lib);
-    mod.linkLibrary(sdl_lib);
+    mod.linkLibrary(g.imgui_lib);
+    mod.linkLibrary(g.sdl_lib);
     const exe = b.addExecutable(.{ .name = "ElectricField", .root_module = mod });
     exe.subsystem = .windows; // GUI subsystem on Windows (needs <SDL3/SDL_main.h> + int main(int, char**)); ignored elsewhere
     b.installArtifact(exe);

@@ -28,54 +28,62 @@ files_reviewed_list:
   - tests_gui/test_render_ctx.cpp
 findings:
   critical: 0
-  warning: 5
-  info: 5
-  total: 10
-status: issues_found
+  warning: 0
+  info: 3
+  total: 3
+status: clean
 ---
 
-# Phase 3: Code Review Report
+# Phase 3: Code Review Report (iteration 2, re-review after fixes)
 
-**Reviewed:** 2026-10-11 · **Depth:** standard · **Files Reviewed:** 22 · **Status:** issues_found
+**Reviewed:** 2026-10-11 · **Depth:** standard · **Files Reviewed:** 22 · **Status:** clean (no critical or warning findings remain; 3 minor info items)
 
 ## Summary
 
-No blockers in the focus areas. Session lifecycle is sound (`Workspace::close`/`closeAll` cancel before destroy; `Tab::session` is the last member so it is destroyed first; `drawUi` defers closes via `toClose`). Tab ImGui IDs use never-reused `###ef<serial>`. `App::shutdown` is idempotent and correctly ordered (sessions → backends → context → texture → renderer → window → `SDL_Quit`); `fail()` copies `SDL_GetError()` before shutdown. The offscreen render context rule in `renderSurface` is correct (create → guard → explicit `SetCurrentContext`; `BackendGuard` before `CtxGuard`; caller context restored on every path). Only three constant URLs reach `SDL_OpenURL`. Findings are interaction edge cases, build/CI robustness and the cost of making `IM_ASSERT` fatal.
+All iteration-1 findings (WR-01..05, IN-01..05) are resolved. The fixes in `git diff b9e4775..HEAD` (10 files) were traced against the focus areas (assert-hook thread-safety and re-entrancy, message box from inside an assert during rendering, argument-parsing edge cases, minimum-size update ordering) and no regression of warning or critical severity was found. Three small info items are noted; none block.
 
-## Warnings
+## Resolution table (iteration 1)
 
-### WR-01: Enter on a focused About link opens the URL and also closes the About modal
-**File:** `src/gui/ui.cpp:147-170`
-**Issue:** `ImGui::TextLink` activates on Enter/Space; the same frame's close condition tests `IsKeyPressed(Enter/KeypadEnter)` unconditionally, so keyboard activation of a link also closes the dialog, and on `SDL_OpenURL` failure the clipboard-fallback note is set and cleared in the same frame (never shown).
-**Fix:** Track `linkActivated` in the link loop and only treat Enter as "close" when no link was activated this frame.
+| ID | Status | Verification |
+|----|--------|--------------|
+| WR-01 | Resolved | `src/gui/ui.cpp:147-172`: `linkActivated` is set inside the `TextLink` branch, `enterClose = !linkActivated && (Enter \|\| KeypadEnter)`. The URL-open failure note is now set in a frame that does not clear it. Button and Escape still close. |
+| WR-02 | Resolved | `src/gui/app.cpp:115-130`: `refreshScale` re-applies `SDL_SetWindowMinimumSize(minimumWindowSize(k))` on every scale refresh. The creation-time clamp (`min(minSize, windowSize)`) applies only to the `initial` call, which now runs at the end of `init` once the window exists (the earlier call is removed; nothing between window creation and that point depends on the minimum). |
+| WR-03 | Resolved (acceptable, see below) | `build.zig:205-212`: probe and make-time step run the identical argv with cwd = build root. |
+| WR-04 | Resolved | `src/gui/main.cpp:53-93`: unknown, incomplete or invalid options exit 2 with usage on stderr. The `--size` check is `sscanf == 2 && w > 0 && h > 0`. `--scale` uses `strtod` with end-pointer and `!(k > 0)` (also rejects NaN). `--modal` is validated. `-psn_*` is tolerated. The message box is suppressed whenever `--smoke` or `--screenshot` appears anywhere on the command line, so headless/CI invocations cannot block. All three CI screenshot invocations (`ci.yml:80-82`) and `build.zig:249` still parse. |
+| WR-05 | Resolved | `src/imgui_config/ef_imconfig.h`: stderr line, then a one-shot hook (cleared before the call, so a recursive assert from the hook cannot loop), then `_Exit(3)`. The hook is installed only in interactive mode (`main.cpp:95-96`); headless, ef-cli and unit tests keep the silent exit 3. |
+| IN-01 | Resolved | Stale wording removed in `ui.hpp` and `ui_logic.hpp`. |
+| IN-02 | Resolved | `checkCanvas` fails with an explicit report if pixel density != 1. |
+| IN-03 | Resolved | `App::lastSerial()` returns 0 for no tab. `pumpUntilDone(0, ...)` returns false because `find(0)` is null (serials start above 0). `closeSerial = 0` means "none" (`ui.cpp:356`), so the guard is consistent. `runScreenshot` now reports a timeout or failure. The remaining `tabs().back()` uses in `smokeExtras` are short-circuited behind `size() == 1`. |
+| IN-04 | Resolved | `defaultWindowSize` comment now matches the code. |
+| IN-05 | Resolved | `GuiLikeContext` is null-safe with `ok`/`backend` flags and `REQUIRE(gui.ok)` at the call sites. Unused `Workspace ws` removed. |
 
-### WR-02: Minimum window size is set once and never follows later scale changes
-**File:** `src/gui/app.cpp:62-63, 117-126`
-**Issue:** `SDL_SetWindowMinimumSize(minimumWindowSize(k0))` is never refreshed in `refreshScale()`; after moving to a 2.0 display the window can shrink to half the intended logical minimum, crushing the layout/overlay.
-**Fix:** In `refreshScale()` set `SDL_SetWindowMinimumSize(window_, minimumWindowSize(k))` (keep the initial `std::min` clamp only at creation).
+## Judgement on WR-03 (no make-time empty-hash fallback)
 
-### WR-03: The git-hash probe and the git-hash Run step use different working directories
-**File:** `build.zig:201-212`
-**Issue:** `b.runFallible` runs `git` in the process cwd while the make-time step uses the build root; the probe can succeed in an unrelated repo (wrong hash) or fail outside one ("(unknown)" despite a checkout); a probe success followed by a make-time git failure (e.g. `safe.directory`) fails the whole GUI build instead of falling back.
-**Fix:** Pin both to the build root (`git -C <build_root> ...`, probe with `rev-parse --git-dir` at the build root) and make the make-time step fall back to an empty hash rather than failing the build.
+Acceptable. Probe and make-time step now use byte-identical argv and the same cwd (`b.root.root_dir.handle` vs `b.path(".")`) and inherit the same environment, so a probe success implies the make-time `git log` succeeds. The cases that motivated the finding (an unrelated repo in the process cwd, `safe.directory` refusing the build root, no `.git`) now make the probe fail and select the static empty-hash header. Not adding `-c safe.directory=*` is the correct call. The only residual is a cached configure result going stale after `.git` is removed between builds, which is a negligible edge case.
 
-### WR-04: Malformed headless flags fall through to the interactive GUI
-**File:** `src/gui/main.cpp:34-48`
-**Issue:** Incomplete `--screenshot`, typos like `--smok`, or unparsable `--size` silently start the interactive app (hangs scripts/CI on the chooser; no console on Windows to show diagnostics).
-**Fix:** Unknown/incomplete options → usage on stderr, exit 2 (message box only in interactive mode); check `sscanf == 2` for `--size`.
+## Focus-area analysis (no findings above Info)
 
-### WR-05: `IM_ASSERT` is fatal and silent in every build, including the interactive release app
-**File:** `src/imgui_config/ef_imconfig.h:9-15`
-**Issue:** `IM_ASSERT` → `fprintf` + `_Exit(3)` in all modes; asserts normally compiled out in release now kill the user's app with no message (GUI subsystem: stderr invisible) and without joining session threads.
-**Fix:** Mode-dependent handler: headless modes keep `_Exit(3)`; interactive mode shows `SDL_ShowSimpleMessageBox` (or logs under the pref path) before exiting — or at minimum document the behaviour.
+- **Assert hook thread-safety.** `ef_imgui_assert_hook` is a plain, non-atomic inline pointer. `IM_ASSERT` can only fire on the thread that drives ImGui (UI thread; session workers never touch ImGui and `renderSurface` runs on the caller's thread), and the process terminates immediately afterwards, so no data race is realistically reachable. It is set once in `run()` before `App::init`, never concurrently.
+- **Re-entrancy and a message box during rendering.** `SDL_ShowSimpleMessageBox` runs a nested loop on the UI thread. The app registers no `SDL_AddEventWatch` or render callback, and `SDL_PumpEvents` is not called by the box. The nested loop can therefore not re-enter `frame()`, `NewFrame` or `Render` while ImGui state is mid-frame. The hook is cleared before the box opens, `_Exit(3)` follows unconditionally, and the `[[noreturn]]` contract holds even if the hook returns. The box works before `SDL_Init` and after `SDL_Quit` too (SDL returns false instead of hanging), so asserts during init or shutdown still exit with code 3.
+- **Argument parsing.** The headless pre-scan means even a malformed headless invocation exits 2 without a dialog. `i + 2 >= argc` for `--screenshot` is the exact complement of the old `i + 2 < argc` guard. A value that is itself an option name (e.g. `--modal --smoke`) is consumed as the value and rejected, which is the right outcome.
+- **Minimum-size ordering.** `refreshScale(true)` now runs after the renderer and ImGui exist; the final minimum is applied before the first frame. For non-initial refreshes the new minimum is applied after `k_` and the style are updated, so the layout and the window constraint agree in the same frame. The smoke "minimum window size" step uses `minimumWindowSize(k_)`, which equals the clamped initial minimum under the dummy driver, so the test is not affected.
 
 ## Info
 
-### IN-01: Stale "Phase 3 research prototype" wording in `src/gui/ui.hpp:2`, `src/app/ui_logic.hpp:2`.
-### IN-02: `checkCanvas` (`src/gui/app.cpp:245-297`) mixes logical canvas coordinates with a pixel-sized surface; exact only at pixel density 1 (true in CI). Scale by `SDL_GetWindowPixelDensity` or assert density == 1.
-### IN-03: Unguarded `tabs().back()` in developer modes (`src/gui/app.cpp:371,380,389,416,421,478`); `runScreenshot` returns 1 on timeout without a message.
-### IN-04: `defaultWindowSize` comment promises a lower bound the code does not implement (`src/app/ui_logic.hpp:34`, `ui_logic.cpp:62-67`).
-### IN-05: `GuiLikeContext` constructor uses `REQUIRE` (leaks + cascades on failure) in `tests_gui/test_render_ctx.cpp:38-53`; unused `Workspace ws` in `tests/test_app.cpp:123`.
+### IN-06: After the first display event the creation-size clamp of the minimum is lost
+**File:** `src/gui/app.cpp:124-129`
+**Issue:** Only the `initial` call clamps the minimum to the creation size. Any later `SDL_EVENT_WINDOW_DISPLAY_CHANGED` / `..._SCALE_CHANGED` (also possible spuriously right after start-up on some platforms) applies the full `minimumWindowSize(k)`. With an interactive `--size` smaller than the minimum, or a display whose usable area is smaller than the minimum (e.g. a very high content scale on a small panel), SDL then grows the window to the minimum. Unreachable in the headless modes and in normal configurations (default size is always >= minimum unless the display is tiny), so this is cosmetic.
+**Fix:** Optionally keep the clamp as a member (`minClampW_/minClampH_` captured at creation) and apply `std::min(minSize, clamp * k / k0)`, or accept it as documented behaviour.
+
+### IN-07: `--size` accepts trailing garbage and is not range-checked
+**File:** `src/gui/main.cpp:67-71`
+**Issue:** `sscanf("%dx%d")` returns 2 for `1024x820abc`, and an out-of-range number (`99999999999x1`) is undefined behaviour in `sscanf`. Harmless in practice (developer/CI option; `SDL_CreateWindow` failure is reported), but the stricter validation added for `--scale` was not applied here.
+**Fix:** Parse with `strtol` and an end-pointer check, or use `"%dx%d%n"` and require the consumed length to equal `strlen`; cap each dimension (e.g. <= 16384).
+
+### IN-08: `--help` / `-h` is reported as an error
+**File:** `src/gui/main.cpp:88-90`
+**Issue:** Because every unknown option is rejected, `--help` prints usage but exits 2 and, in interactive form, opens an error-styled message box.
+**Fix:** Add a `--help`/`-h` branch that prints `kUsage` to stdout and returns 0 (no message box).
 
 ---
 

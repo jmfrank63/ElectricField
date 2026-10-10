@@ -3,6 +3,7 @@
 //   ef-cli --preset <slug> [--svg out.svg] [--png out.png] [--threads N] [--method <name>] [--width W --height H]
 //   ef-cli --all --out-dir DIR [--expect tools/parity/expected-counts.csv]
 // Prints one summary line per rendered preset: preset=<slug> charges=N field_lines=N equipotentials=N ms=N
+#include <algorithm>
 #include <cctype>
 #include <cerrno>
 #include <chrono>
@@ -12,8 +13,10 @@
 #include <exception>
 #include <fstream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "ef/method.hpp"
 #include "ef/presets.hpp"
@@ -144,21 +147,47 @@ bool renderOne(const ef::Preset& preset, const Args& a, const std::string& svgPa
 }
 
 // expected-counts.csv: slug,charges,field_lines,equipotentials ; charges and field_lines exact, equipotentials +-max(2, 3%)
+// Strict: every data row must have exactly four fully-parsed fields, no slug may repeat or be unknown, and the set of
+// slugs in the file must equal the set of rendered presets (a duplicate row can no longer mask a missing preset).
 bool checkExpected(const std::string& path, const std::map<std::string, Counts>& got, std::string& err) {
   std::ifstream in(path);
   if (!in) { err = "cannot open " + path; return false; }
   std::string line;
   bool ok = true;
-  std::size_t seen = 0;
+  std::set<std::string> seen;
+  std::size_t lineNo = 0;
   while (std::getline(in, line)) {
+    ++lineNo;
+    while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t')) line.pop_back();  // CRLF checkouts
     if (line.empty() || line[0] == '#' || line.rfind("slug", 0) == 0) continue;
-    std::istringstream ss(line);
-    std::string slug, c, f, e;
-    std::getline(ss, slug, ','); std::getline(ss, c, ','); std::getline(ss, f, ','); std::getline(ss, e, ',');
+    std::vector<std::string> f;
+    {
+      std::istringstream ss(line);
+      std::string field;
+      while (std::getline(ss, field, ',')) f.push_back(field);
+      if (!line.empty() && line.back() == ',') f.emplace_back();  // trailing empty field
+    }
+    long long v[3] = {0, 0, 0};
+    if (f.size() != 4 || f[0].empty() || !parseInt(f[1], 0, 1000000, v[0]) || !parseInt(f[2], 0, 1000000, v[1]) ||
+        !parseInt(f[3], 0, 1000000, v[2])) {
+      std::fprintf(stderr, "PARITY FAIL: %s:%zu: malformed row '%s' (expected slug,charges,field_lines,equipotentials)\n", path.c_str(), lineNo,
+                   line.c_str());
+      ok = false;
+      continue;
+    }
+    const std::string& slug = f[0];
     const auto it = got.find(slug);
-    if (it == got.end()) continue;
-    ++seen;
-    const int ec = std::atoi(c.c_str()), ef_ = std::atoi(f.c_str()), ee = std::atoi(e.c_str());
+    if (it == got.end()) {
+      std::fprintf(stderr, "PARITY FAIL: %s:%zu: unknown preset slug '%s'\n", path.c_str(), lineNo, slug.c_str());
+      ok = false;
+      continue;
+    }
+    if (!seen.insert(slug).second) {
+      std::fprintf(stderr, "PARITY FAIL: %s:%zu: duplicate row for preset '%s'\n", path.c_str(), lineNo, slug.c_str());
+      ok = false;
+      continue;
+    }
+    const int ec = static_cast<int>(v[0]), ef_ = static_cast<int>(v[1]), ee = static_cast<int>(v[2]);
     const int tol = std::max(2, ee * 3 / 100);
     const Counts& g = it->second;
     if (g.charges != ec || g.fieldLines != ef_ || std::abs(g.equipotentials - ee) > tol) {
@@ -167,8 +196,11 @@ bool checkExpected(const std::string& path, const std::map<std::string, Counts>&
       ok = false;
     }
   }
-  if (seen != got.size()) { std::fprintf(stderr, "PARITY FAIL: expected file covers %zu of %zu presets\n", seen, got.size()); ok = false; }
-  (void)err;
+  for (const auto& kv : got)
+    if (seen.find(kv.first) == seen.end()) {
+      std::fprintf(stderr, "PARITY FAIL: no expected row for preset '%s'\n", kv.first.c_str());
+      ok = false;
+    }
   return ok;
 }
 
@@ -202,7 +234,10 @@ int run(int argc, char** argv) {
       }
       got[slug] = c;
     }
-    if (!a.expect.empty() && !checkExpected(a.expect, got, err)) return 1;
+    if (!a.expect.empty() && !checkExpected(a.expect, got, err)) {
+      if (!err.empty()) std::fprintf(stderr, "ef-cli: %s\n", err.c_str());
+      return 1;
+    }
     return 0;
   }
   const ef::Preset* p = findPreset(a.preset);

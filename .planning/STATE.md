@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 01
 current_phase_name: foundation-portable-physics-core
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-10-10T09:00:34.237Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-10-10T09:08:52.902Z"
 last_activity: 2026-10-10
 last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-10-10)
 ## Current Position
 
 Phase: 01 (foundation-portable-physics-core) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-10-10 — Phase 01 execution started
 
-Progress: [███░░░░░░░] 25%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [███░░░░░░░] 25%
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 01 P01 | 25min | 3 tasks | 16 files |
+| Phase 01 P02 | 25min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -73,6 +74,7 @@ Recent decisions affecting current work:
 - [Roadmap]: MFC sources stay in the tree until Phase 4 so the QA-05 baseline (Phase 1) comes from the real app
 - [Roadmap]: Printing is replaced by PNG/SVG export; progressive display is a v2 item (not existing behaviour)
 - [Phase ?]: 01-01: Added imgui.ini to .gitignore (ImGui writes it to cwd on smoke/run); main.cpp left verbatim
+- [Phase ?]: [Phase 01 P02]: MFC baseline recorded with MSVC 14.51.36231 / v145, 96 DPI; compare against docs/baseline/mfc with fuzz 10%, never byte equality
 
 ### Pending Todos
 
@@ -96,6 +98,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-10-10T09:00:34.217Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-10-10T09:08:52.881Z
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None

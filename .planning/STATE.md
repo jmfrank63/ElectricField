@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 02
-current_phase_name: compute-engine-headless-parity
-status: verifying
+current_phase: 3
+current_phase_name: GUI Shell
+status: planning
 stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-10-10T13:25:20.584Z"
+last_updated: "2026-10-10T14:33:01.222Z"
 last_activity: 2026-10-10
-last_activity_desc: Phase 02 execution started
+last_activity_desc: Phase 2 complete, transitioned to Phase 3
 progress:
   total_phases: 2
   completed_phases: 2
@@ -20,17 +20,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-10)
+See: .planning/PROJECT.md (updated 2026-10-10 after Phase 2)
 
 **Core value:** The physics and visual output must stay correct and recognisable: the same charge configurations produce the same field lines and equipotentials, now buildable and runnable on Windows, Linux and macOS without Visual Studio.
-**Current focus:** Phase 02 — compute-engine-headless-parity
+**Current focus:** Phase 03 — GUI Shell (Dear ImGui + SDL3)
 
 ## Current Position
 
-Phase: 02 (compute-engine-headless-parity) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-10-10 — Phase 02 execution started
+Phase: 3 — GUI Shell
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-10 — Phase 2 complete, transitioned to Phase 3
 
 Progress: [██████████] 100%
 
@@ -38,7 +38,7 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 0
+- Total plans completed: 4
 - Average duration: - min
 - Total execution time: 0.0 hours
 
@@ -46,7 +46,7 @@ Progress: [██████████] 100%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 2 | 4 | - | - |
 
 **Recent Trend:**
 
@@ -88,6 +88,8 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 02 P03] ef-cli PNG = ImGui ImDrawList on SDL software renderer (offscreen surface, AA texture off, tessellation 0.3); ink recall 0.988-0.993 vs MFC; Windows and Linux counts identical; renderPng must run on the UI thread between frames
 - [Phase ?]: [Phase 02 P04] CI gate green on windows/linux/macos-arm64/tsan-linux (runs 38054538292, 38055102426); macOS arm64 parity counts identical to Windows/Linux, so A1 holds and the tolerance is unchanged
 
+- [Phase 2]: Verified (human-approved MFC side-by-side); code review 3 iterations, 11/11 warnings fixed; final CI run 38058493194 green incl. tsan-linux
+
 ### Pending Todos
 
 None yet.
@@ -95,10 +97,12 @@ None yet.
 ### Blockers/Concerns
 
 - [Phase 1] RESOLVED 2026-10-10: Linux and macOS execution of the Zig + SDL3 + ImGui stack verified by CI run 38040977802 (head d17dd2f, windows/linux/macos-arm64 all green, smoke presets=9); D-12 gate = GO
-- [Phase 1]: QA-05 baseline needs the MSVC v145 toolset with MFC on the dev machine; capture it before any MFC deletion
+- [Phase 1] RESOLVED: QA-05 MFC baseline captured (docs/baseline/mfc, 9 PNGs)
 - [Phase 1]: Zig 0.17 build API churn (C/C++ calls live on Module); start from `zig init` of the installed version
-- [Phase 2]: `FieldLineJob job(job)` self-copy behaviour under MSVC needs reproduction; use tolerance-based tests, never bit-exact geometry
-- [Phase 3]: ImGui thin-line AA/Bezier tessellation quality for export; swap in plutovg behind the Painter if inadequate
+- [Phase 2] RESOLVED: `FieldLineJob job(job)` reproduced under MSVC (binds outer parameter); fixed as `equipJob` with a fail-first regression test
+- [Phase 3]: ImGui thin-line AA slightly softer/fainter than Direct2D (ink recall 0.988-0.993, user-approved); plutovg behind the Painter remains an option if export quality needs it
+- [Phase 3]: Phase 1 review WR-02 (GUI busy loop) and Phase 2 IN-03 must be fixed in the real GUI loop (vsync / SDL_WaitEventTimeout); renderPng must run on the UI thread between frames
+- [Phase 4]: Phase 2 review IN-02/IN-04/IN-05/IN-06 open (compare-mfc.sh robustness, CI double runs/cancel-in-progress on master, Painter contract asserts, UTF-8 paths on Windows)
 
 ## Deferred Items
 
@@ -111,7 +115,7 @@ Items acknowledged and carried forward from previous milestone close:
 ## Session Continuity
 
 Last session: 2026-10-10T13:25:20.560Z
-Stopped at: Completed 02-04-PLAN.md
+Stopped at: Phase 2 complete, ready to plan Phase 3
 Resume file: None
 
 ## Deferred Verification

@@ -14,7 +14,7 @@ The MFC/Direct2D Windows app becomes a portable Zig-built application with Dear 
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Foundation & Portable Physics Core** - Clean repo, hash-pinned Zig build, 3-OS CI gate, tested GUI-free physics core, MFC visual baseline captured
-- [ ] **Phase 2: Compute Engine & Headless Parity** - Cancellable threaded compute, equipotential de-dup, toolkit-free scene with SVG/PNG, headless CLI parity check in CI
+- [x] **Phase 2: Compute Engine & Headless Parity** - Cancellable threaded compute, equipotential de-dup, toolkit-free scene with SVG/PNG, headless CLI parity check in CI (completed 2026-10-10)
 - [ ] **Phase 3: GUI Shell** - ImGui + SDL3 app with preset tabs, anti-aliased rendering, busy indicator, About box, GUI subsystem
 - [ ] **Phase 4: Options, Export & MFC Removal** - Options dialog, portable persistence, PNG/SVG export, MFC deleted, README updated
 
@@ -63,7 +63,7 @@ Plans:
   3. The known portability defects (unqualified `abs(double)`, `M_PI` redefinition, `FieldLineJob job(job)` self-copy, unguarded `AdjustForBezier` divide-by-zero) no longer reproduce, each with a regression test, and the core compiles warning-clean with Clang using `-ffp-contract=off` and no fast-math
   4. A headless CLI renders any of the 9 presets to SVG and PNG without a display, and CI runs it on windows, ubuntu and macos-arm64 as a parity check whose outputs agree across OSes in charge and line counts within tolerance
 
-**Plans:** 4/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 **Wave 1**
@@ -124,6 +124,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & Portable Physics Core | 4/4 | In Progress|  |
-| 2. Compute Engine & Headless Parity | 4/4 | In Progress|  |
+| 2. Compute Engine & Headless Parity | 4/4 | Complete    | 2026-10-10 |
 | 3. GUI Shell | 0/TBD | Not started | - |
 | 4. Options, Export & MFC Removal | 0/TBD | Not started | - |

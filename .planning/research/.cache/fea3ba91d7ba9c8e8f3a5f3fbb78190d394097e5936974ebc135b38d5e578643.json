@@ -1,0 +1,1 @@
+{"content":"macOS framework linking from non-mac hosts needs an SDK via SDKROOT or --sysroot; native zig build autodetects SDK; gate Objective-C/framework code on Darwin target.","source":"web","provider":"websearch","confidence":"LOW","fetched_at":"2026-10-10T06:53:54.232Z","ttl":86400000,"kind":"web"}

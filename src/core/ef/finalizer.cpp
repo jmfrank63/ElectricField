@@ -61,13 +61,21 @@ std::vector<PotentialLine> dedupEquipotentials(std::vector<PotentialLine> raw, c
 }
 
 FieldResult finalize(std::vector<FieldLine> rawElectric, std::vector<PotentialLine> rawPotential, const ChargeSystem& field,
-                     const ComputeParams& p) {
+                     const ComputeParams& p, const std::atomic<bool>* stop) {
+  const auto stopped = [stop] { return stop != nullptr && stop->load(std::memory_order_relaxed); };
   FieldResult r;
   for (auto& l : rawElectric)
     if (!l.points.empty()) r.electric.push_back(std::move(l));  // sink jobs record nothing; they only spawn equipotentials
+  if (stopped()) return r;
   r.potential = dedupEquipotentials(std::move(rawPotential), field, p);
-  for (auto& l : r.electric) adjustForBezier(l.points);
-  for (auto& l : r.potential) adjustForBezier(l.points);
+  for (auto& l : r.electric) {
+    if (stopped()) return r;
+    adjustForBezier(l.points);
+  }
+  for (auto& l : r.potential) {
+    if (stopped()) return r;
+    adjustForBezier(l.points);
+  }
   return r;
 }
 

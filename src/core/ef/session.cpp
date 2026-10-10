@@ -156,6 +156,8 @@ void ComputeSession::finish() {
         proceed = true;
       }
     }
+    // WR-02: cancel() is honoured between every finalization stage and per line inside finalize(), so the destructor's
+    // join is not held up for the whole finalize time. A stop at any point leaves haveR false -> published as cancelled.
     if (proceed) {
       // D-04: deterministic order regardless of which worker finished first
       std::sort(e.begin(), e.end(), [](const auto& a, const auto& b) { return a->key < b->key; });
@@ -164,13 +166,21 @@ void ComputeSession::finish() {
       std::vector<PotentialLine> rawP;
       rawE.reserve(e.size());
       rawP.reserve(p.size());
-      for (const auto& x : e) rawE.push_back(x->line);  // lines are shared immutable objects (UI may still hold them): copy
-      for (const auto& x : p) rawP.push_back(x->line);
+      for (const auto& x : e) {
+        if (stop_.load(std::memory_order_relaxed)) break;
+        rawE.push_back(x->line);  // lines are shared immutable objects (UI may still hold them): copy
+      }
+      for (const auto& x : p) {
+        if (stop_.load(std::memory_order_relaxed)) break;
+        rawP.push_back(x->line);
+      }
       e.clear();
       p.clear();
 
-      r = ef::finalize(std::move(rawE), std::move(rawP), field_, params_);
-      haveR = true;
+      if (!stop_.load()) {
+        r = ef::finalize(std::move(rawE), std::move(rawP), field_, params_, &stop_);
+        haveR = !stop_.load();  // a stop during finalize() leaves a partial result: discard it
+      }
     }
   } catch (const std::exception& ex) {
     fail(ex.what());
@@ -186,7 +196,7 @@ void ComputeSession::finish() {
       result_ = std::move(r);
       haveResult_ = true;
     } else {
-      cancelled_ = true;  // stop was requested before finalization started
+      cancelled_ = true;  // stop was requested before or during finalization: no result
     }
     done_ = true;
   }

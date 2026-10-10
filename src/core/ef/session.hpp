@@ -51,11 +51,14 @@ struct PollBatch {
 class ComputeSession {
  public:
   ComputeSession(ChargeSystem field, ComputeParams params);  // plans seeds, starts max(1, numThreads) workers, returns at once
-  ~ComputeSession();                                         // cancel() + join(); bounded by the cancel stride (ms)
+  ~ComputeSession();                                         // cancel() + join(); bounded by the cancel stride, also while finalizing
   ComputeSession(const ComputeSession&) = delete;
   ComputeSession& operator=(const ComputeSession&) = delete;
 
-  void cancel();  // non-blocking, idempotent
+  // Non-blocking, idempotent. Honoured by the tracers (cancel stride) AND between/inside the finalization stages. A cancel()
+  // that lands before the result is published always wins: the session ends cancelled with no result. A cancel() after
+  // done is a no-op (the result stays available).
+  void cancel();
 
   // Drain-and-swap (D-03): appends lines completed since the last call to `out`, returns the current status. Any thread.
   SessionStatus poll(PollBatch& out);

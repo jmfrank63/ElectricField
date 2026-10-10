@@ -213,6 +213,8 @@ int App::runInteractive() {
   return 0;
 }
 
+unsigned App::lastSerial() const { return ws_.tabs().empty() ? 0u : ws_.tabs().back()->serial; }  // 0 = no tab (no valid serial)
+
 bool App::pumpUntilDone(unsigned serial, unsigned timeoutMs) {
   const Uint64 t0 = SDL_GetTicks();
   for (;;) {
@@ -359,7 +361,7 @@ bool App::smokeExtras(std::string& report) {
   ui_.openPresetNow = 3;
   frames(4);
   if (ws_.tabs().size() != 1 || ws_.tabs().back()->state != efapp::TabState::Failed || !ui_.failedShown) return fail("failed tab not shown");
-  ui_.closeSerial = ws_.tabs().back()->serial;
+  ui_.closeSerial = lastSerial();
   frames(2);
 
   // Busy overlay at the minimum window size: stays inside the canvas.
@@ -372,7 +374,7 @@ bool App::smokeExtras(std::string& report) {
   if (ui_.overlayMax.x <= ui_.overlayMin.x || ui_.overlayMin.x < ui_.canvasMin.x || ui_.overlayMin.y < ui_.canvasMin.y ||
       ui_.overlayMax.x > ui_.canvasMax.x || ui_.overlayMax.y > ui_.canvasMax.y)
     return fail("busy overlay outside the canvas at the minimum window size");
-  ui_.closeSerial = ws_.tabs().back()->serial;
+  ui_.closeSerial = lastSerial();
   frames(2);
   ws_.setFactory(efapp::defaultSessionFactory());
 
@@ -381,7 +383,7 @@ bool App::smokeExtras(std::string& report) {
   SDL_SyncWindow(window_);
   ui_.openPresetNow = 0;
   frames(2);
-  if (!pumpUntilDone(ws_.tabs().back()->serial, 60000)) return fail("idle test: session did not finish");
+  if (!pumpUntilDone(lastSerial(), 60000)) return fail("idle test: session did not finish");
   frames(4);
   while (iterate() && pacer_.pendingFrames() > 0) {
   }
@@ -390,7 +392,7 @@ bool App::smokeExtras(std::string& report) {
   while (SDL_GetTicks() - t0 < 1300) iterate();
   const unsigned idleFrames = frames_ - f0;
   if (idleFrames > 10) return fail("idle loop is spinning: " + std::to_string(idleFrames) + " frames in 1.3 s");
-  ui_.closeSerial = ws_.tabs().back()->serial;
+  ui_.closeSerial = lastSerial();
   frames(2);
 
   // Quit with busy sessions: cancel-all then destroy must be quick.
@@ -417,12 +419,12 @@ int App::runSmoke() {
   // 1) a busy tab is opened and closed again within the first two frames (cancel path).
   ui_.openPresetNow = 5;  // Four Charges Same Sign
   frames(2);
-  ui_.closeSerial = ws_.tabs().back()->serial;
+  ui_.closeSerial = lastSerial();
   frames(1);
   // 2) Dipole: run until its session is done, draw the finished scene.
   ui_.openPresetNow = 0;
   frames(1);
-  const unsigned serial = ws_.tabs().back()->serial;
+  const unsigned serial = lastSerial();
   if (!pumpUntilDone(serial, 60000)) {
     std::fprintf(stderr, "smoke: the dipole session did not finish\n");
     return 1;
@@ -479,8 +481,11 @@ int App::runScreenshot() {
   }
   ui_.openPresetNow = static_cast<int>(idx);
   frames(1);
-  const unsigned serial = ws_.tabs().back()->serial;
-  if (!pumpUntilDone(serial, 60000)) return 1;
+  const unsigned serial = lastSerial();
+  if (!pumpUntilDone(serial, 60000)) {
+    std::fprintf(stderr, "screenshot: the '%s' session did not finish (timeout, failure or no tab)\n", opt_.slug.c_str());
+    return 1;
+  }
   if (opt_.modal == "about") ui_.openAbout = true;
   if (opt_.modal == "chooser") ui_.openChooser = true;
   frames(14);  // modal dim fade takes ~10 frames

@@ -3,6 +3,8 @@
 //   ef-cli --preset <slug> [--svg out.svg] [--png out.png] [--threads N] [--method <name>] [--width W --height H]
 //   ef-cli --all --out-dir DIR [--expect tools/parity/expected-counts.csv]
 // Prints one summary line per rendered preset: preset=<slug> charges=N field_lines=N equipotentials=N ms=N
+#include <cctype>
+#include <cerrno>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -41,6 +43,17 @@ const ef::Preset* findPreset(const std::string& slug) {
   return nullptr;
 }
 
+// Strict integer parse: whole string, no sign-less wraparound, no overflow, within [lo, hi].
+bool parseInt(const std::string& text, long long lo, long long hi, long long& out) {
+  if (text.empty() || std::isspace(static_cast<unsigned char>(text[0]))) return false;  // strtoll would skip leading blanks
+  errno = 0;
+  char* end = nullptr;
+  const long long v = std::strtoll(text.c_str(), &end, 10);
+  if (errno == ERANGE || end == text.c_str() || *end != '\0' || v < lo || v > hi) return false;
+  out = v;
+  return true;
+}
+
 bool parseArgs(int argc, char** argv, Args& a, std::string& err) {
   for (int i = 1; i < argc; ++i) {
     const std::string k = argv[i];
@@ -49,7 +62,16 @@ bool parseArgs(int argc, char** argv, Args& a, std::string& err) {
       v = argv[++i];
       return true;
     };
-    std::string v;
+    auto nextInt = [&](long long lo, long long hi, long long& out) {
+      std::string v;
+      if (!next(v)) return false;
+      if (!parseInt(v, lo, hi, out)) {
+        err = "invalid value '" + v + "' for " + k + " (expected an integer in " + std::to_string(lo) + ".." + std::to_string(hi) + ")";
+        return false;
+      }
+      return true;
+    };
+    long long n = 0;
     if (k == "--list") a.list = true;
     else if (k == "--all") a.all = true;
     else if (k == "--preset") { if (!next(a.preset)) return false; }
@@ -58,13 +80,22 @@ bool parseArgs(int argc, char** argv, Args& a, std::string& err) {
     else if (k == "--out-dir") { if (!next(a.outDir)) return false; }
     else if (k == "--expect") { if (!next(a.expect)) return false; }
     else if (k == "--method") { if (!next(a.methodName)) return false; }
-    else if (k == "--threads") { if (!next(v)) return false; a.threads = static_cast<unsigned>(std::strtoul(v.c_str(), nullptr, 10)); }
-    else if (k == "--width") { if (!next(v)) return false; a.width = std::atoi(v.c_str()); }
-    else if (k == "--height") { if (!next(v)) return false; a.height = std::atoi(v.c_str()); }
+    else if (k == "--threads") { if (!nextInt(1, 128, n)) return false; a.threads = static_cast<unsigned>(n); }
+    else if (k == "--width") { if (!nextInt(16, 8192, n)) return false; a.width = static_cast<int>(n); }
+    else if (k == "--height") { if (!nextInt(16, 8192, n)) return false; a.height = static_cast<int>(n); }
     else { err = "unknown argument " + k; return false; }
   }
-  if (a.threads < 1 || a.threads > 128 || a.width < 16 || a.height < 16 || a.width > 8192 || a.height > 8192) {
-    err = "threads must be 1..128 and width/height 16..8192";
+  // Reject contradictory combinations instead of silently ignoring half of the command line.
+  if (a.list && (a.all || !a.preset.empty() || !a.svg.empty() || !a.png.empty() || !a.outDir.empty() || !a.expect.empty())) {
+    err = "--list cannot be combined with other output/selection options";
+    return false;
+  }
+  if (a.all && (!a.preset.empty() || !a.svg.empty() || !a.png.empty())) {
+    err = "--all renders every preset into --out-dir; it cannot be combined with --preset/--svg/--png";
+    return false;
+  }
+  if (!a.all && (!a.expect.empty() || !a.outDir.empty()) && !a.list) {
+    err = "--expect and --out-dir are only valid together with --all";
     return false;
   }
   return true;

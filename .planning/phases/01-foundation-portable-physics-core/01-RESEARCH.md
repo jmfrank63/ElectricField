@@ -626,17 +626,25 @@ for (double angle = angle_start; angle < 2. * kPi + angle_start - angle_step / 4
 | A7 | Keeping the DP quirk is the right call for "behaviour parity" | Open Questions | User may prefer the fix; changes DP output slightly |
 | A8 | The first-push consent can be given in the same session (public fork, 8 planning commits become public) | CI gate | Delay of the gate |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+All six questions were resolved by the plan-phase orchestrator (auto mode, recommended options) on 2026-10-10. The plans cite these resolutions by item number.
 
 1. **Dormand-Prince error weights (defect 15).**
    - Known: `DPweightsLow` are `b - b*`; step control degenerates to roughly fixed step `~0.9 tol`; stepping solution is 5th order.
    - Unclear: whether the user wants parity (keep) or correctness (use `b*`: 5179/57600, 0, 7571/16695, 393/640, -92097/339200, 187/2100, 1/40).
    - Recommendation: keep + characterisation test in Phase 1, raise as a Phase 2 decision (re-baseline needed if changed).
+   - **RESOLVED:** Keep the MFC behaviour for parity; `rk.hpp` keeps the weights verbatim and a characterisation test (`tests/test_rk_order.cpp`, "KNOWN DEFECT (kept for parity)") pins it. Whether to fix it is deferred as a Phase 2 decision; changing it requires re-baselining against the MFC images. Implemented by plans 01-01 (Task 1, `rk.hpp` NOTE comment) and 01-03 (Task 2, characterisation test).
 2. **Is `traceFieldLine` in Phase 1 scope?** CORE-01/CORE-02 ("produce field lines") say yes, the phase boundary text lists only seed planning. Recommendation: include the pure single-line tracer (no threads, no equipotentials); it makes CORE-02 demonstrable and is the unit Phase 2 wraps.
+   - **RESOLVED:** In scope. Phase 1 ships the pure single-line tracer `traceFieldLine` only (no threads, no equipotential posting, no `AdjustForBezier`). Implemented by plan 01-03 Task 1.
 3. **`-Dgui=false` option.** Not required by the criteria; recommended because it keeps the core gate independent of SDL/ImGui configuration on macOS. Costs one `if`.
+   - **RESOLVED:** Adopted. `build.zig` exposes `-Dgui` (bool, default true); the core gate runs `zig build test -Dgui=false` locally and in CI without building SDL3 or Dear ImGui. Implemented by plan 01-01 (Tasks 1 and 3).
 4. **CI action pinning.** `setup-zig` pinned to a commit SHA in the candidate; `actions/checkout@v7` by tag. Acceptable at ASVS L1; tighten if desired.
+   - **RESOLVED:** `mlugg/setup-zig` pinned to commit SHA `d1434d08867e3ee9daa34448df10607b98908d29` (v2.2.1); `actions/checkout@v7` stays pinned by tag (first-party action, accepted at ASVS L1); the workflow declares top-level `permissions: contents: read`. Implemented by plan 01-01 Task 3 (threats T-01-03, T-01-04, T-01-05).
 5. **`macos-latest` vs pinned `macos-15`.** Start with `macos-latest` per D-11; pin only if the 26 image misbehaves.
+   - **RESOLVED:** Start with `macos-latest`. Switching that matrix entry to `macos-15` is a pre-approved fix only if the macOS 26 image misbehaves during the CI gate. Implemented by plans 01-01 Task 3 (matrix) and 01-04 Task 3 (failure playbook).
 6. **`AdjustForBezier` `t3` formula** (Phase 2, `FieldLine.cpp:215`, `t3 = t1 + t2 + (pt3 - pt2).Length()`): looks like total length plus the first segment; preserve for parity, flag when porting.
+   - **RESOLVED:** Preserve the formula for parity when it is ported. It is a Phase 2 concern and out of scope for Phase 1 (plan 01-03's tracer deliberately omits `AdjustForBezier`).
 
 ## Environment Availability
 

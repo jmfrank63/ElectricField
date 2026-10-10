@@ -87,6 +87,12 @@
 
 ---
 
+## Amendments
+
+- **2026-10-10, D-10 (smoke frames):** "render one ImGui frame" → "render at least one complete ImGui frame (two allowed)". Raised by plan-checker iteration 2 (plan 01-01 renders two frames so the first frame's font-atlas upload is exercised). D-10 was an auto-selected default, so the auto-mode orchestrator amended it; intent unchanged.
+
+---
+
 ## Claude's Discretion
 
 - Core file split and class names, test organisation, CI caching details, `Vector2D` templating.

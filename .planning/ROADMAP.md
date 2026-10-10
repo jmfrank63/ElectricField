@@ -96,7 +96,7 @@ Plans:
   4. User sees charges as filled circles colored by sign and field and equipotential lines anti-aliased with Bezier smoothing, y-up and centered at 100 px per unit, sharp and correctly scaled on a HiDPI display, visually matching the Phase 1 MFC reference images
   5. User can open an About box showing the project and blog links
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans executed
 
 Plans:
 **Wave 1**
@@ -109,7 +109,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 03-03-PLAN.md — CI gate: test-render, Windows subsystem check, GUI screenshots on 3 OSes, pushed and green incl. tsan-linux; research-ref removed, final green verdict (wave 3)
+- [x] 03-03-PLAN.md — CI gate: test-render, Windows subsystem check, GUI screenshots on 3 OSes, pushed and green incl. tsan-linux; research-ref removed, final green verdict (wave 3)
 
 **UI hint**: yes
 
@@ -139,5 +139,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Foundation & Portable Physics Core | 4/4 | In Progress|  |
 | 2. Compute Engine & Headless Parity | 4/4 | Complete    | 2026-10-10 |
-| 3. GUI Shell | 2/3 | In Progress|  |
+| 3. GUI Shell | 3/3 | In Progress|  |
 | 4. Options, Export & MFC Removal | 0/TBD | Not started | - |

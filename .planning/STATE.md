@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 03
 current_phase_name: gui-shell
-status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-10-10T17:55:12.806Z"
+status: verifying
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-10-10T18:26:32.646Z"
 last_activity: 2026-10-11
 last_activity_desc: Phase 03 execution started
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 11
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 # Project State
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-10-10 after Phase 2)
 
 Phase: 03 (gui-shell) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-11 — Phase 03 execution started
 
-Progress: [█████████░] 91%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -68,6 +68,7 @@ Progress: [█████████░] 91%
 | Phase 02 P04 | 40min | 2 tasks | 3 files |
 | Phase 03 P01 | 40min | 2 tasks | 11 files |
 | Phase 03 P02 | 60min | 2 tasks | 15 files |
+| Phase 03 P03 | 45min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,7 @@ Recent decisions affecting current work:
 - [Phase 2]: Verified (human-approved MFC side-by-side); code review 3 iterations, 11/11 warnings fixed; final CI run 38058493194 green incl. tsan-linux
 - [Phase ?]: [Phase 03 P01] efapp (std-only tab model, ISession seam) and efrender with ImGui context rule copied byte-for-byte from the prototype; Wave 0 pacer/scripted-session tests mutation-proven; TSan clean on Linux (78 cases)
 - [Phase ?]: [Phase 03 P02] GUI shell copied byte-for-byte from the prototype; About git hash generated at make time (ef_git_hash.h via has_side_effects Run step, empty fallback without git); Linux pre-flight script must run zig build (install) before running the exe
+- [Phase ?]: [Phase 03 P03] CI gate green on first push on windows/linux/macos-arm64/tsan-linux (runs 38073970097, 38074759060); smoke, canvas, keyboard and screenshot results identical on all three OSes; research-ref removed (history a4e42b8)
 
 ### Pending Todos
 
@@ -118,8 +120,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-10-10T17:55:12.780Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-10-10T18:25:43.733Z
+Stopped at: Completed 03-03-PLAN.md
 Resume file: None
 
 ## Deferred Verification

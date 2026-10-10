@@ -26,6 +26,8 @@
         "build.zig.zon",
         "src",
         "tests",
+        "tests_gui",
+        "assets",
         "LICENSE",
         "README.md",
     },

@@ -35,6 +35,7 @@ const app_sources = [_][]const u8{
 
 const test_sources = [_][]const u8{
     "test_main.cpp",
+    "test_app.cpp",
     "test_vec2.cpp",
     "test_field.cpp",
     "test_rk_order.cpp",
@@ -45,7 +46,6 @@ const test_sources = [_][]const u8{
     "test_finalizer.cpp",
     "test_session.cpp",
     "test_scene.cpp",
-    "test_app.cpp",
 };
 
 const Sanitize = enum { none, thread };
@@ -73,7 +73,7 @@ pub fn build(b: *std.Build) void {
     const render_lib: ?*std.Build.Step.Compile = if (gui) |g| addRender(b, ctx, g) else null;
     addCli(b, ctx, core_lib, render_lib);
     if (gui) |g| addRenderTests(b, ctx, test_step, core_lib, render_lib.?, g);
-    if (gui) |g| addGui(b, ctx, core_lib, g);
+    if (gui) |g| addGui(b, ctx, core_lib, app_lib, render_lib.?, g);
 }
 
 fn coreModule(b: *std.Build, ctx: Ctx) *std.Build.Module {
@@ -150,16 +150,13 @@ fn addGuiDeps(b: *std.Build, ctx: Ctx) ?GuiDeps {
         },
         .flags = &gui_flags,
     });
+    imgui_mod.addIncludePath(b.path("src/imgui_config"));
     imgui_mod.addIncludePath(imgui_dep.path("."));
     imgui_mod.addIncludePath(imgui_dep.path("backends"));
-    imgui_mod.addIncludePath(b.path("src/imgui_config"));
     imgui_mod.linkLibrary(sdl_lib);
     const imgui_lib = b.addLibrary(.{ .name = "imgui", .root_module = imgui_mod, .linkage = .static });
     return .{ .sdl_lib = sdl_lib, .imgui_lib = imgui_lib, .imgui_path = imgui_dep.path(".") };
 }
-
-const cli_flags = core_flags;
-const cli_flags_png = core_flags ++ [_][]const u8{"-DEF_CLI_PNG=1"};
 
 /// efrender: ImGuiPainter + offscreen software-renderer export (shared by ef-cli and the GUI self-checks).
 fn addRender(b: *std.Build, ctx: Ctx, g: GuiDeps) *std.Build.Step.Compile {
@@ -174,6 +171,9 @@ fn addRender(b: *std.Build, ctx: Ctx, g: GuiDeps) *std.Build.Step.Compile {
     render.linkLibrary(g.sdl_lib);
     return b.addLibrary(.{ .name = "efrender", .root_module = render, .linkage = .static });
 }
+
+const cli_flags = core_flags;
+const cli_flags_png = core_flags ++ [_][]const u8{"-DEF_CLI_PNG=1"};
 
 /// ef-cli: headless preset renderer. SVG always; PNG (ImGui ImDrawList on SDL's software renderer) when the GUI deps are present.
 fn addCli(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, render_lib: ?*std.Build.Step.Compile) void {
@@ -191,16 +191,36 @@ fn addCli(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, render_lib
     b.installArtifact(exe);
 }
 
-fn addGui(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, g: GuiDeps) void {
+const zon = @import("build.zig.zon");
+
+/// Short git hash for the About box; "" (shown as "unknown") when git or the repository is not available.
+fn gitShortHash(b: *std.Build) []const u8 {
+    switch (b.runFallible(&.{ "git", "rev-parse", "--short=7", "HEAD" }, .{ .stderr_behavior = .ignore })) {
+        .success => |out| return std.mem.trim(u8, out, " \r\n\t"),
+        else => return "",
+    }
+}
+
+fn addGui(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, app_lib: *std.Build.Step.Compile, render_lib: *std.Build.Step.Compile, g: GuiDeps) void {
+    const info = b.addConfigHeader(.{ .style = .blank, .include_path = "ef_build_info.h" }, .{
+        .EF_VERSION = zon.version,
+        .EF_GIT_HASH = gitShortHash(b),
+    });
     const mod = b.createModule(.{ .target = ctx.target, .optimize = ctx.optimize, .link_libcpp = true });
-    mod.addCSourceFiles(.{ .root = b.path("src/gui"), .files = &.{"main.cpp"}, .flags = &gui_flags });
+    mod.addCSourceFiles(.{ .root = b.path("src/gui"), .files = &.{ "main.cpp", "app.cpp", "ui.cpp" }, .flags = &gui_flags });
+    mod.addCSourceFiles(.{ .root = b.path("src/gui"), .files = &.{"icon.cpp"}, .flags = &(gui_flags ++ [_][]const u8{"-Wno-c23-extensions"}) });
+    mod.addIncludePath(b.path("src"));
     mod.addIncludePath(b.path("src/core"));
+    mod.addConfigHeader(info);
     mod.addIncludePath(b.path("src/imgui_config"));
     mod.addIncludePath(g.imgui_path);
     mod.addIncludePath(g.imgui_path.path(b, "backends"));
+    mod.linkLibrary(render_lib);
+    mod.linkLibrary(app_lib);
     mod.linkLibrary(core_lib);
     mod.linkLibrary(g.imgui_lib);
     mod.linkLibrary(g.sdl_lib);
+    mod.addWin32ResourceFile(.{ .file = b.path("assets/ElectricField.rc") }); // exe icon; ignored off Windows
     const exe = b.addExecutable(.{ .name = "ElectricField", .root_module = mod });
     exe.subsystem = .windows; // GUI subsystem on Windows (needs <SDL3/SDL_main.h> + int main(int, char**)); ignored elsewhere
     b.installArtifact(exe);
@@ -208,14 +228,14 @@ fn addGui(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, g: GuiDeps
     const run = b.addRunArtifact(exe);
     run.step.dependOn(b.getInstallStep());
     run.addPassthruArgs(); // 0.17: replaces `b.args`
-    b.step("run", "Run the hello-window GUI").dependOn(&run.step);
+    b.step("run", "Run the GUI").dependOn(&run.step);
 
-    // `zig build smoke`: headless start-up check (dummy video driver + software renderer), exits 0 after 2 frames.
+    // `zig build smoke`: headless start-up + tab lifecycle check (dummy video driver + software renderer).
     const smoke = b.addRunArtifact(exe);
     smoke.addArg("--smoke");
     smoke.setEnvironmentVariable("SDL_VIDEODRIVER", "dummy");
     smoke.setEnvironmentVariable("SDL_RENDER_DRIVER", "software");
-    b.step("smoke", "Headless start-up check of the GUI (CI)").dependOn(&smoke.step);
+    b.step("smoke", "Headless start-up and tab lifecycle check of the GUI (CI)").dependOn(&smoke.step);
 }
 
 /// Headless render/context regression tests (need SDL3 + ImGui, so they exist only with -Dgui=true). Also run by `zig build test`.

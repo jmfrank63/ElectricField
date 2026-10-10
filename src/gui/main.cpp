@@ -1,76 +1,77 @@
-// Hello-window: SDL3 + Dear ImGui (sdlrenderer3). `--smoke` = headless one-frame start-up check for CI.
+// Electric Field GUI entry point.
+//   ElectricField                      interactive application
+//   ElectricField --smoke              headless start-up + tab lifecycle + UI-surface check (CI)
+//   ElectricField --screenshot <slug> <out.png> [--size WxH] [--scale k] [--modal about|chooser]   headless render of one finished tab
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>  // Windows GUI subsystem: must be in the TU that defines main
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <exception>
+#include <string>
 
-#include "ef/presets.hpp"
-#include "imgui.h"
-#include "imgui_impl_sdl3.h"
-#include "imgui_impl_sdlrenderer3.h"
+#include "gui/app.hpp"
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
+namespace {
+
+// Headless modes (smoke, screenshot) run unattended in CI and on developer desktops: no CRT assert / abort message box, no
+// Windows Error Reporting dialog. (IM_ASSERT is already non-interactive, see src/imgui_config/ef_imconfig.h.)
+void quietCrashDialogs() {
+#ifdef _WIN32
+  SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+  _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+  _set_error_mode(_OUT_TO_STDERR);
+#endif
+}
+
+int run(int argc, char** argv) {
+  efgui::AppOptions opt;
+  for (int i = 1; i < argc; ++i) {
+    if (std::strcmp(argv[i], "--smoke") == 0) {
+      opt.smoke = true;
+    } else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 2 < argc) {
+      opt.screenshot = true;
+      opt.slug = argv[++i];
+      opt.out = argv[++i];
+    } else if (std::strcmp(argv[i], "--size") == 0 && i + 1 < argc) {
+      std::sscanf(argv[++i], "%dx%d", &opt.width, &opt.height);
+    } else if (std::strcmp(argv[i], "--modal") == 0 && i + 1 < argc) {
+      opt.modal = argv[++i];
+    } else if (std::strcmp(argv[i], "--scale") == 0 && i + 1 < argc) {
+      opt.scaleOverride = static_cast<float>(std::atof(argv[++i]));
+    }
+  }
+  if (opt.headless()) quietCrashDialogs();
+
+  efgui::App app;
+  std::string step, message;
+  if (!app.init(opt, step, message)) {
+    const std::string text = "Electric Field could not start.\n" + step + ": " + message;
+    std::fprintf(stderr, "%s\n", text.c_str());
+    // No console on Windows (GUI subsystem): the message box is the only way the user learns why nothing appeared. Never in the
+    // headless modes (CI, tests): a modal box would hang them.
+    if (!opt.headless()) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Electric Field", text.c_str(), nullptr);
+    return 1;
+  }
+  if (opt.smoke) return app.runSmoke();
+  if (opt.screenshot) return app.runScreenshot();
+  return app.runInteractive();
+}
+}  // namespace
 
 int main(int argc, char** argv) {
-  bool smoke = false;
-  for (int i = 1; i < argc; ++i)
-    if (std::strcmp(argv[i], "--smoke") == 0) smoke = true;
-
-  if (smoke) {  // do not depend on environment variables for the headless path
-    SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "dummy");
-    SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
+  std::setvbuf(stdout, nullptr, _IONBF, 0);
+  try {
+    return run(argc, argv);
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "fatal: %s\n", e.what());
+  } catch (...) {
+    std::fprintf(stderr, "fatal: unknown exception\n");
   }
-
-  if (!SDL_Init(SDL_INIT_VIDEO)) {
-    std::fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
-    return 1;
-  }
-  SDL_Window* window = SDL_CreateWindow("Electric Field", 960, 640, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
-  if (!window) {
-    std::fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
-    return 1;
-  }
-  SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
-  if (!renderer) {
-    std::fprintf(stderr, "SDL_CreateRenderer failed: %s\n", SDL_GetError());
-    return 1;
-  }
-  std::printf("video=%s renderer=%s presets=%zu\n", SDL_GetCurrentVideoDriver(), SDL_GetRendererName(renderer), ef::presets().size());
-
-  IMGUI_CHECKVERSION();
-  ImGui::CreateContext();
-  if (smoke) ImGui::GetIO().IniFilename = nullptr;  // IN-03: the headless check must not write imgui.ini into the cwd
-  ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
-  ImGui_ImplSDLRenderer3_Init(renderer);
-
-  bool running = true;
-  int frames = 0;
-  while (running) {
-    SDL_Event e;
-    while (SDL_PollEvent(&e)) {
-      ImGui_ImplSDL3_ProcessEvent(&e);
-      if (e.type == SDL_EVENT_QUIT) running = false;
-    }
-    ImGui_ImplSDLRenderer3_NewFrame();
-    ImGui_ImplSDL3_NewFrame();
-    ImGui::NewFrame();
-    ImGui::Begin("Electric Field");
-    ImGui::Text("Hello from SDL3 + Dear ImGui");
-    ImGui::End();
-    ImGui::Render();
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    SDL_RenderClear(renderer);
-    ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
-    SDL_RenderPresent(renderer);
-    ++frames;
-    if (smoke && frames >= 2) running = false;  // 2nd frame: first frame builds the font atlas
-  }
-
-  ImGui_ImplSDLRenderer3_Shutdown();
-  ImGui_ImplSDL3_Shutdown();
-  ImGui::DestroyContext();
-  SDL_DestroyRenderer(renderer);
-  SDL_DestroyWindow(window);
-  SDL_Quit();
-  std::printf("smoke ok frames=%d\n", frames);
-  return 0;
+  return 1;
 }

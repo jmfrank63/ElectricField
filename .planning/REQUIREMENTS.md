@@ -22,9 +22,9 @@ Requirements for the cross-platform release. Each maps to roadmap phases.
 - [x] **CORE-01**: Physics core (vectors, charges, field/potential, Runge-Kutta, line tracing, presets) is a GUI-free C++ library depending only on the standard library and has no global/app state
 - [x] **CORE-02**: All 11 integration methods (Euler, Midpoint, Ralston, Heun, RK4, RK 3/8, adaptive Heun-Euler, Bogacki-Shampine, Cash-Karp, Fehlberg, Dormand-Prince) are available in the original order and produce field lines
 - [x] **CORE-03**: Field lines are seeded around each charge proportionally to |q| × lines-per-unit-charge, preserving the original `sign(0)==+1` source-selection behaviour for net-zero configurations
-- [ ] **CORE-04**: Equipotential lines are computed at the configured potential interval, including the de-duplication pass (moved from the MFC document into the core, in world units)
-- [ ] **CORE-05**: Computation runs on a configurable number of worker threads without blocking the UI
-- [ ] **CORE-06**: A running computation can be cancelled (tab close, app quit) within ~200 ms without crashes, leaks or detached threads
+- [x] **CORE-04**: Equipotential lines are computed at the configured potential interval, including the de-duplication pass (moved from the MFC document into the core, in world units)
+- [x] **CORE-05**: Computation runs on a configurable number of worker threads without blocking the UI
+- [x] **CORE-06**: A running computation can be cancelled (tab close, app quit) within ~200 ms without crashes, leaks or detached threads
 - [ ] **CORE-07**: Known portability defects are fixed: unqualified `abs(double)`, `M_PI` redefinition, `FieldLineJob job(job)` self-copy, unguarded `AdjustForBezier` divide-by-zero; core compiles warning-clean with Clang (via Zig) using `-ffp-contract=off`, no fast-math
 
 ### Configurations & Display
@@ -50,8 +50,8 @@ Requirements for the cross-platform release. Each maps to roadmap phases.
 ### Quality
 
 - [x] **QA-01**: Unit tests cover vector math, charge field/potential against analytic values, and convergence order of the integrators
-- [ ] **QA-02**: Tests cover line generation invariants per preset (seed counts, termination, de-dup) using tolerances rather than bit-exact geometry, and `sign(0)==1`
-- [ ] **QA-03**: Tests cover compute-session behaviour: 1-vs-N thread result equivalence, cancellation latency, no data races (TSan run on Linux CI)
+- [x] **QA-02**: Tests cover line generation invariants per preset (seed counts, termination, de-dup) using tolerances rather than bit-exact geometry, and `sign(0)==1`
+- [x] **QA-03**: Tests cover compute-session behaviour: 1-vs-N thread result equivalence, cancellation latency, no data races (TSan run on Linux CI)
 - [ ] **QA-04**: A headless CLI renders any preset to SVG/PNG without a display, used in CI on all three OSes as a parity check
 - [x] **QA-05**: A one-time visual comparison of all 9 presets against the MFC build (default options) is recorded before MFC code is deleted
 
@@ -102,9 +102,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CORE-01 | Phase 1 | Complete |
 | CORE-02 | Phase 1 | Complete |
 | CORE-03 | Phase 1 | Complete |
-| CORE-04 | Phase 2 | Pending |
-| CORE-05 | Phase 2 | Pending |
-| CORE-06 | Phase 2 | Pending |
+| CORE-04 | Phase 2 | Complete |
+| CORE-05 | Phase 2 | Complete |
+| CORE-06 | Phase 2 | Complete |
 | CORE-07 | Phase 2 | Pending |
 | VIEW-01 | Phase 3 | Pending |
 | VIEW-02 | Phase 3 | Pending |
@@ -118,8 +118,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EXP-01 | Phase 4 | Pending |
 | EXP-02 | Phase 4 | Pending |
 | QA-01 | Phase 1 | Complete |
-| QA-02 | Phase 2 | Pending |
-| QA-03 | Phase 2 | Pending |
+| QA-02 | Phase 2 | Complete |
+| QA-03 | Phase 2 | Complete |
 | QA-04 | Phase 2 | Pending |
 | QA-05 | Phase 1 | Complete |
 

@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 01
-current_phase_name: foundation-portable-physics-core
+current_phase: 02
+current_phase_name: compute-engine-headless-parity
 status: executing
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-10-10T12:35:38.767Z"
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-10-10T12:40:54.448Z"
 last_activity: 2026-10-10
-last_activity_desc: Phase 01 execution started
+last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 8
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-10)
 
 **Core value:** The physics and visual output must stay correct and recognisable: the same charge configurations produce the same field lines and equipotentials, now buildable and runnable on Windows, Linux and macOS without Visual Studio.
-**Current focus:** Phase 01 — foundation-portable-physics-core
+**Current focus:** Phase 02 — compute-engine-headless-parity
 
 ## Current Position
 
-Phase: 01 (foundation-portable-physics-core) — EXECUTING
-Plan: 4 of 4
+Phase: 02 (compute-engine-headless-parity) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-10-10 — Phase 01 execution started
+Last activity: 2026-10-10 — Phase 02 execution started
 
-Progress: [██████████] 100%
+Progress: [██████░░░░] 63%
 
 ## Performance Metrics
 
@@ -62,6 +62,7 @@ Progress: [██████████] 100%
 | Phase 01 P02 | 25min | 2 tasks | 11 files |
 | Phase 01 P03 | 12min | 3 tasks | 8 files |
 | Phase 01 P04 | 60min | 3 tasks | 24 files |
+| Phase 02 P01 | 8min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 01 P02]: MFC baseline recorded with MSVC 14.51.36231 / v145, 96 DPI; compare against docs/baseline/mfc with fuzz 10%, never byte equality
 - [Phase ?]: [01-03] DP error weights: keep vs fix is an open Phase 2 decision; MFC behaviour kept and pinned by characterisation test
 - [Phase ?]: [Phase 01 P04] D-12 gate GO: Zig 0.17 + SDL3 + ImGui green on windows/linux/macos-arm64 on first CI run (run 38040977802, head d17dd2f); Qt 6 + CMake fallback not triggered
+- [Phase ?]: [Phase 02 P01] Engine from research-ref overlay; kCancelStride=1024; latency budget 200 ms (1000 ms only under TSan); research-ref rk.hpp (D-16) left for a later plan
 
 ### Pending Todos
 
@@ -102,8 +104,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-10-10T10:14:25.484Z
-Stopped at: Completed 01-04-PLAN.md
+Last session: 2026-10-10T12:40:54.426Z
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None
 
 ## Deferred Verification

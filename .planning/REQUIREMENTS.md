@@ -52,7 +52,7 @@ Requirements for the cross-platform release. Each maps to roadmap phases.
 - [x] **QA-01**: Unit tests cover vector math, charge field/potential against analytic values, and convergence order of the integrators
 - [x] **QA-02**: Tests cover line generation invariants per preset (seed counts, termination, de-dup) using tolerances rather than bit-exact geometry, and `sign(0)==1`
 - [x] **QA-03**: Tests cover compute-session behaviour: 1-vs-N thread result equivalence, cancellation latency, no data races (TSan run on Linux CI)
-- [ ] **QA-04**: A headless CLI renders any preset to SVG/PNG without a display, used in CI on all three OSes as a parity check
+- [x] **QA-04**: A headless CLI renders any preset to SVG/PNG without a display, used in CI on all three OSes as a parity check
 - [x] **QA-05**: A one-time visual comparison of all 9 presets against the MFC build (default options) is recorded before MFC code is deleted
 
 ## v2 Requirements
@@ -120,7 +120,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | QA-01 | Phase 1 | Complete |
 | QA-02 | Phase 2 | Complete |
 | QA-03 | Phase 2 | Complete |
-| QA-04 | Phase 2 | Pending |
+| QA-04 | Phase 2 | Complete |
 | QA-05 | Phase 1 | Complete |
 
 **Coverage:**

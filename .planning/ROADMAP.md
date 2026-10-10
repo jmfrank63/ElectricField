@@ -63,7 +63,7 @@ Plans:
   3. The known portability defects (unqualified `abs(double)`, `M_PI` redefinition, `FieldLineJob job(job)` self-copy, unguarded `AdjustForBezier` divide-by-zero) no longer reproduce, each with a regression test, and the core compiles warning-clean with Clang using `-ffp-contract=off` and no fast-math
   4. A headless CLI renders any of the 9 presets to SVG and PNG without a display, and CI runs it on windows, ubuntu and macos-arm64 as a parity check whose outputs agree across OSes in charge and line counts within tolerance
 
-**Plans:** 2/4 plans executed
+**Plans:** 3/4 plans executed
 
 Plans:
 **Wave 1**
@@ -76,7 +76,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 02-03-PLAN.md — Headless output: FieldScene + Painter, SVG and ImGui/SDL-software PNG, ef-cli, committed expected counts with a proven tolerance gate, Windows/Linux agreement, MFC comparison report (wave 3)
+- [x] 02-03-PLAN.md — Headless output: FieldScene + Painter, SVG and ImGui/SDL-software PNG, ef-cli, committed expected counts with a proven tolerance gate, Windows/Linux agreement, MFC comparison report (wave 3)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -124,6 +124,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & Portable Physics Core | 4/4 | In Progress|  |
-| 2. Compute Engine & Headless Parity | 2/4 | In Progress|  |
+| 2. Compute Engine & Headless Parity | 3/4 | In Progress|  |
 | 3. GUI Shell | 0/TBD | Not started | - |
 | 4. Options, Export & MFC Removal | 0/TBD | Not started | - |

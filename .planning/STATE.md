@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 02
 current_phase_name: compute-engine-headless-parity
 status: executing
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-10-10T12:55:04.269Z"
+stopped_at: Completed 02-03-PLAN.md
+last_updated: "2026-10-10T13:03:18.475Z"
 last_activity: 2026-10-10
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-10-10)
 ## Current Position
 
 Phase: 02 (compute-engine-headless-parity) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-10-10 — Phase 02 execution started
 
-Progress: [████████░░] 75%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Progress: [████████░░] 75%
 | Phase 01 P04 | 60min | 3 tasks | 24 files |
 | Phase 02 P01 | 8min | 2 tasks | 11 files |
 | Phase 02 P02 | 25min | 2 tasks | 8 files |
+| Phase 02 P03 | 20min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -83,6 +84,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 01 P04] D-12 gate GO: Zig 0.17 + SDL3 + ImGui green on windows/linux/macos-arm64 on first CI run (run 38040977802, head d17dd2f); Qt 6 + CMake fallback not triggered
 - [Phase ?]: [Phase 02 P01] Engine from research-ref overlay; kCancelStride=1024; latency budget 200 ms (1000 ms only under TSan); research-ref rk.hpp (D-16) left for a later plan
 - [Phase ?]: [Phase 02 P02] Core test gates run -Dgui=false with lazy SDL3/ImGui; TSan verified on WSL Ubuntu for the whole 52-case suite; Dormand-Prince low weights and other MFC quirks stay pinned
+- [Phase ?]: [Phase 02 P03] ef-cli PNG = ImGui ImDrawList on SDL software renderer (offscreen surface, AA texture off, tessellation 0.3); ink recall 0.988-0.993 vs MFC; Windows and Linux counts identical; renderPng must run on the UI thread between frames
 
 ### Pending Todos
 
@@ -106,8 +108,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-10-10T12:55:04.246Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-10-10T13:03:18.452Z
+Stopped at: Completed 02-03-PLAN.md
 Resume file: None
 
 ## Deferred Verification

@@ -25,7 +25,7 @@ Requirements for the cross-platform release. Each maps to roadmap phases.
 - [x] **CORE-04**: Equipotential lines are computed at the configured potential interval, including the de-duplication pass (moved from the MFC document into the core, in world units)
 - [x] **CORE-05**: Computation runs on a configurable number of worker threads without blocking the UI
 - [x] **CORE-06**: A running computation can be cancelled (tab close, app quit) within ~200 ms without crashes, leaks or detached threads
-- [ ] **CORE-07**: Known portability defects are fixed: unqualified `abs(double)`, `M_PI` redefinition, `FieldLineJob job(job)` self-copy, unguarded `AdjustForBezier` divide-by-zero; core compiles warning-clean with Clang (via Zig) using `-ffp-contract=off`, no fast-math
+- [x] **CORE-07**: Known portability defects are fixed: unqualified `abs(double)`, `M_PI` redefinition, `FieldLineJob job(job)` self-copy, unguarded `AdjustForBezier` divide-by-zero; core compiles warning-clean with Clang (via Zig) using `-ffp-contract=off`, no fast-math
 
 ### Configurations & Display
 
@@ -105,7 +105,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CORE-04 | Phase 2 | Complete |
 | CORE-05 | Phase 2 | Complete |
 | CORE-06 | Phase 2 | Complete |
-| CORE-07 | Phase 2 | Pending |
+| CORE-07 | Phase 2 | Complete |
 | VIEW-01 | Phase 3 | Pending |
 | VIEW-02 | Phase 3 | Pending |
 | VIEW-03 | Phase 3 | Pending |

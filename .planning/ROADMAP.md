@@ -63,7 +63,7 @@ Plans:
   3. The known portability defects (unqualified `abs(double)`, `M_PI` redefinition, `FieldLineJob job(job)` self-copy, unguarded `AdjustForBezier` divide-by-zero) no longer reproduce, each with a regression test, and the core compiles warning-clean with Clang using `-ffp-contract=off` and no fast-math
   4. A headless CLI renders any of the 9 presets to SVG and PNG without a display, and CI runs it on windows, ubuntu and macos-arm64 as a parity check whose outputs agree across OSes in charge and line counts within tolerance
 
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 Plans:
 **Wave 1**
@@ -72,7 +72,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-02-PLAN.md — Oracles and build hardening: -Dsanitize=thread + lazy GUI deps with a local Linux TSan run, D-17 fail-not-skip preset oracle, CORE-07 regression oracles (self-copy fail-first), de-dup boundary, shared RK stages (wave 2)
+- [x] 02-02-PLAN.md — Oracles and build hardening: -Dsanitize=thread + lazy GUI deps with a local Linux TSan run, D-17 fail-not-skip preset oracle, CORE-07 regression oracles (self-copy fail-first), de-dup boundary, shared RK stages (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -124,6 +124,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & Portable Physics Core | 4/4 | In Progress|  |
-| 2. Compute Engine & Headless Parity | 1/4 | In Progress|  |
+| 2. Compute Engine & Headless Parity | 2/4 | In Progress|  |
 | 3. GUI Shell | 0/TBD | Not started | - |
 | 4. Options, Export & MFC Removal | 0/TBD | Not started | - |

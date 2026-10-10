@@ -92,7 +92,9 @@ bool renderOne(const ef::Preset& preset, const Args& a, const std::string& svgPa
 
   if (!svgPath.empty()) {
     std::ofstream f(svgPath, std::ios::binary);
+    if (!f) { err = "cannot open " + svgPath + " for writing"; return false; }
     f << ef::renderSvg(scene, style, view);
+    f.close();  // flush before checking: disk-full / I/O errors only surface here
     if (!f) { err = "cannot write " + svgPath; return false; }
   }
   if (!pngPath.empty()) {

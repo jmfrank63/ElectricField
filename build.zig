@@ -26,7 +26,9 @@ const core_sources = [_][]const u8{
 
 const test_sources = [_][]const u8{
     "test_main.cpp",
+    "test_vec2.cpp",
     "test_field.cpp",
+    "test_rk_order.cpp",
     "test_seeds.cpp",
 };
 

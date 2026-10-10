@@ -5,9 +5,15 @@
 
 #include "ef/scene.hpp"
 
+struct SDL_Surface;
+
 namespace efrender {
 
 // Returns an empty string on success, otherwise an error message. Not thread-safe (uses the global ImGui context).
 std::string renderPng(const ef::FieldScene& scene, const ef::DrawStyle& style, const ef::View& view, const char* path);
+
+// Same offscreen render as renderPng, but returns the pixels (SDL_PIXELFORMAT_RGBA32, caller frees with SDL_DestroySurface), or null
+// and `err` set. Used by the GUI smoke / screenshot checks to compare the GUI canvas with the headless path.
+SDL_Surface* renderSurface(const ef::FieldScene& scene, const ef::DrawStyle& style, const ef::View& view, std::string& err);
 
 }  // namespace efrender

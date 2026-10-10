@@ -17,7 +17,7 @@ const core_flags = [_][]const u8{
 
 // GUI / third-party code: no -Werror. -DImDrawIdx keeps 32-bit indices (field-line meshes exceed 64k vertices);
 // the define must be identical in every TU that includes imgui.h.
-const gui_flags = [_][]const u8{ "-std=c++17", "-DImDrawIdx=unsigned int" };
+const gui_flags = [_][]const u8{ "-std=c++17", "-DImDrawIdx=unsigned int", "-DIMGUI_USER_CONFIG=\"ef_imconfig.h\"" };
 
 const core_sources = [_][]const u8{
     "ef/seeds.cpp",
@@ -26,6 +26,11 @@ const core_sources = [_][]const u8{
     "ef/session.cpp",
     "ef/scene.cpp",
     "ef/svg.cpp",
+};
+
+const app_sources = [_][]const u8{
+    "app/workspace.cpp",
+    "app/ui_logic.cpp",
 };
 
 const test_sources = [_][]const u8{
@@ -40,6 +45,7 @@ const test_sources = [_][]const u8{
     "test_finalizer.cpp",
     "test_session.cpp",
     "test_scene.cpp",
+    "test_app.cpp",
 };
 
 const Sanitize = enum { none, thread };
@@ -59,11 +65,14 @@ pub fn build(b: *std.Build) void {
     const with_gui = b.option(bool, "gui", "Build the SDL3 + Dear ImGui targets and PNG export (default: true; -Dgui=false = core + tests + SVG-only ef-cli, fetches no GUI dependency)") orelse true;
 
     const core_lib = addCore(b, ctx);
-    addTests(b, ctx, core_lib);
+    const app_lib = addApp(b, ctx, core_lib);
+    const test_step = addTests(b, ctx, core_lib, app_lib);
 
     var gui: ?GuiDeps = null;
     if (with_gui) gui = addGuiDeps(b, ctx); // null while the lazy dependencies are not fetched yet (Zig re-runs build() after the fetch)
-    addCli(b, ctx, core_lib, gui);
+    const render_lib: ?*std.Build.Step.Compile = if (gui) |g| addRender(b, ctx, g) else null;
+    addCli(b, ctx, core_lib, render_lib);
+    if (gui) |g| addRenderTests(b, ctx, test_step, core_lib, render_lib.?, g);
     if (gui) |g| addGui(b, ctx, core_lib, g);
 }
 
@@ -86,19 +95,33 @@ fn addCore(b: *std.Build, ctx: Ctx) *std.Build.Step.Compile {
     return lib;
 }
 
+/// efapp: std-only app logic (tab model over ComputeSession + pure UI decisions). Same strict flags as the core, no SDL/ImGui.
+fn addApp(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile) *std.Build.Step.Compile {
+    const mod = coreModule(b, ctx);
+    mod.addCSourceFiles(.{ .root = b.path("src"), .files = &app_sources, .flags = &core_flags });
+    mod.addIncludePath(b.path("src/core"));
+    mod.addIncludePath(b.path("src"));
+    mod.linkLibrary(core_lib);
+    return b.addLibrary(.{ .name = "efapp", .root_module = mod, .linkage = .static });
+}
+
 /// `zig build test`: doctest suite (no SDL/ImGui involved).
-fn addTests(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile) void {
+fn addTests(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, app_lib: *std.Build.Step.Compile) *std.Build.Step {
     const doctest_dep = b.dependency("doctest", .{});
     const mod = coreModule(b, ctx);
     mod.addCSourceFiles(.{ .root = b.path("tests"), .files = &test_sources, .flags = &core_flags });
     mod.addIncludePath(b.path("src/core"));
+    mod.addIncludePath(b.path("src"));
     mod.addSystemIncludePath(doctest_dep.path(".")); // -isystem: doctest's own warnings are not ours
+    mod.linkLibrary(app_lib);
     mod.linkLibrary(core_lib);
     const exe = b.addExecutable(.{ .name = "efcore-tests", .root_module = mod });
     const run = b.addRunArtifact(exe);
     run.setCwd(b.path(".")); // test_presets.cpp reads ElectricField/ConfigDocs.cpp relative to the repo root
     if (ctx.tsan) run.setEnvironmentVariable("TSAN_OPTIONS", "halt_on_error=1:second_deadlock_stack=1");
-    b.step("test", "Run the physics-core tests (doctest)").dependOn(&run.step);
+    const step = b.step("test", "Run the unit tests (doctest): core + app logic; + render/context tests when the GUI deps are enabled");
+    step.dependOn(&run.step);
+    return step;
 }
 
 const GuiDeps = struct {
@@ -129,6 +152,7 @@ fn addGuiDeps(b: *std.Build, ctx: Ctx) ?GuiDeps {
     });
     imgui_mod.addIncludePath(imgui_dep.path("."));
     imgui_mod.addIncludePath(imgui_dep.path("backends"));
+    imgui_mod.addIncludePath(b.path("src/imgui_config"));
     imgui_mod.linkLibrary(sdl_lib);
     const imgui_lib = b.addLibrary(.{ .name = "imgui", .root_module = imgui_mod, .linkage = .static });
     return .{ .sdl_lib = sdl_lib, .imgui_lib = imgui_lib, .imgui_path = imgui_dep.path(".") };
@@ -137,23 +161,29 @@ fn addGuiDeps(b: *std.Build, ctx: Ctx) ?GuiDeps {
 const cli_flags = core_flags;
 const cli_flags_png = core_flags ++ [_][]const u8{"-DEF_CLI_PNG=1"};
 
+/// efrender: ImGuiPainter + offscreen software-renderer export (shared by ef-cli and the GUI self-checks).
+fn addRender(b: *std.Build, ctx: Ctx, g: GuiDeps) *std.Build.Step.Compile {
+    const render = b.createModule(.{ .target = ctx.target, .optimize = ctx.optimize, .link_libcpp = true });
+    render.addCSourceFiles(.{ .root = b.path("src/render"), .files = &.{"png_export.cpp"}, .flags = &gui_flags });
+    render.addIncludePath(b.path("src/core"));
+    render.addIncludePath(b.path("src"));
+    render.addIncludePath(b.path("src/imgui_config"));
+    render.addIncludePath(g.imgui_path);
+    render.addIncludePath(g.imgui_path.path(b, "backends"));
+    render.linkLibrary(g.imgui_lib);
+    render.linkLibrary(g.sdl_lib);
+    return b.addLibrary(.{ .name = "efrender", .root_module = render, .linkage = .static });
+}
+
 /// ef-cli: headless preset renderer. SVG always; PNG (ImGui ImDrawList on SDL's software renderer) when the GUI deps are present.
-fn addCli(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, gui: ?GuiDeps) void {
+fn addCli(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, render_lib: ?*std.Build.Step.Compile) void {
     const mod = coreModule(b, ctx);
     mod.addIncludePath(b.path("src/core"));
     mod.addIncludePath(b.path("src"));
     mod.linkLibrary(core_lib);
-    if (gui) |g| {
+    if (render_lib) |r| {
         mod.addCSourceFiles(.{ .root = b.path("src/cli"), .files = &.{"main.cpp"}, .flags = &cli_flags_png });
-        const render = b.createModule(.{ .target = ctx.target, .optimize = ctx.optimize, .link_libcpp = true });
-        render.addCSourceFiles(.{ .root = b.path("src/render"), .files = &.{"png_export.cpp"}, .flags = &gui_flags });
-        render.addIncludePath(b.path("src/core"));
-        render.addIncludePath(b.path("src"));
-        render.addIncludePath(g.imgui_path);
-        render.addIncludePath(g.imgui_path.path(b, "backends"));
-        render.linkLibrary(g.imgui_lib);
-        render.linkLibrary(g.sdl_lib);
-        mod.linkLibrary(b.addLibrary(.{ .name = "efrender", .root_module = render, .linkage = .static }));
+        mod.linkLibrary(r);
     } else {
         mod.addCSourceFiles(.{ .root = b.path("src/cli"), .files = &.{"main.cpp"}, .flags = &cli_flags });
     }
@@ -165,6 +195,7 @@ fn addGui(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, g: GuiDeps
     const mod = b.createModule(.{ .target = ctx.target, .optimize = ctx.optimize, .link_libcpp = true });
     mod.addCSourceFiles(.{ .root = b.path("src/gui"), .files = &.{"main.cpp"}, .flags = &gui_flags });
     mod.addIncludePath(b.path("src/core"));
+    mod.addIncludePath(b.path("src/imgui_config"));
     mod.addIncludePath(g.imgui_path);
     mod.addIncludePath(g.imgui_path.path(b, "backends"));
     mod.linkLibrary(core_lib);
@@ -185,4 +216,29 @@ fn addGui(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, g: GuiDeps
     smoke.setEnvironmentVariable("SDL_VIDEODRIVER", "dummy");
     smoke.setEnvironmentVariable("SDL_RENDER_DRIVER", "software");
     b.step("smoke", "Headless start-up check of the GUI (CI)").dependOn(&smoke.step);
+}
+
+/// Headless render/context regression tests (need SDL3 + ImGui, so they exist only with -Dgui=true). Also run by `zig build test`.
+fn addRenderTests(b: *std.Build, ctx: Ctx, test_step: *std.Build.Step, core_lib: *std.Build.Step.Compile, render_lib: *std.Build.Step.Compile, g: GuiDeps) void {
+    const doctest_dep = b.dependency("doctest", .{});
+    const mod = b.createModule(.{ .target = ctx.target, .optimize = ctx.optimize, .link_libcpp = true });
+    mod.addCSourceFiles(.{ .root = b.path("tests_gui"), .files = &.{ "test_main.cpp", "test_render_ctx.cpp" }, .flags = &gui_flags });
+    mod.addIncludePath(b.path("src/core"));
+    mod.addIncludePath(b.path("src"));
+    mod.addIncludePath(b.path("tests"));
+    mod.addIncludePath(b.path("src/imgui_config"));
+    mod.addSystemIncludePath(doctest_dep.path("."));
+    mod.addIncludePath(g.imgui_path);
+    mod.addIncludePath(g.imgui_path.path(b, "backends"));
+    mod.linkLibrary(render_lib);
+    mod.linkLibrary(core_lib);
+    mod.linkLibrary(g.imgui_lib);
+    mod.linkLibrary(g.sdl_lib);
+    const exe = b.addExecutable(.{ .name = "efrender-tests", .root_module = mod });
+    const run = b.addRunArtifact(exe);
+    run.setEnvironmentVariable("SDL_VIDEODRIVER", "dummy");
+    run.setEnvironmentVariable("SDL_RENDER_DRIVER", "software");
+    const step = b.step("test-render", "Run the headless render/ImGui-context regression tests");
+    step.dependOn(&run.step);
+    test_step.dependOn(&run.step);
 }

@@ -116,7 +116,11 @@ $bak = $null
 if ($ResetOptions) {
   New-Item -ItemType Directory -Force -Path $BackupDir | Out-Null
   $bak = Join-Path $BackupDir 'ElectricField-options-backup.reg'
-  if (Test-Path -LiteralPath $bak) { Remove-Item -LiteralPath $bak -Force }
+  # A leftover backup means a previous -ResetOptions run was aborted before it could restore: the registry key may be gone and
+  # this file is then the ONLY copy of the user's options. Never overwrite or delete it - make the user decide.
+  if (Test-Path -LiteralPath $bak) {
+    throw "found an existing options backup from an interrupted run: $bak`nIt may be the only copy of your Electric Field options. Restore it with:`n  reg import `"$bak`"`nthen delete or move the file and run this script again."
+  }
   $keyExisted = ((Invoke-Reg query $regKey) -eq 0)
   if ($keyExisted) {
     $rc = Invoke-Reg export $regKey $bak /y
@@ -186,7 +190,11 @@ finally {
     [void](Invoke-Reg delete $regKey /f)                # drop whatever the app recreated during the run
     if ($keyExisted) {
       $rc = Invoke-Reg import $bak
-      if ($rc -ne 0) { Write-Warning "reg import failed (exit $rc): restore manually with: reg import `"$bak`"" } else { "options restored" }
+      if ($rc -ne 0) { Write-Warning "reg import failed (exit $rc): restore manually with: reg import `"$bak`"" }
+      else {
+        "options restored"
+        Remove-Item -LiteralPath $bak -Force -ErrorAction SilentlyContinue   # restored: the next run must not mistake it for an interrupted one
+      }
     } else {
       "options key removed (did not exist before)"
     }

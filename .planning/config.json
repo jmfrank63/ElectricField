@@ -47,7 +47,10 @@
     "security_enforcement": true,
     "security_asvs_level": 1,
     "security_block_on": "high",
-    "_auto_chain_active": true
+    "_auto_chain_active": true,
+    "use_worktrees": false,
+    "build_command": "zig build",
+    "test_command": "zig build test"
   },
   "ship": {
     "pr_body_sections": [

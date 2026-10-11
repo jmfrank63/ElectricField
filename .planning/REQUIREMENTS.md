@@ -14,8 +14,8 @@ Requirements for the cross-platform release. Each maps to roadmap phases.
 - [x] **BUILD-03**: All third-party dependencies (Dear ImGui, SDL3, doctest) are fetched via hash-pinned `build.zig.zon`; no manual dependency installation beyond Zig (and platform system libs on Linux)
 - [x] **BUILD-04**: CI (GitHub Actions) builds and runs tests on windows, ubuntu and macos-arm64 for every push to the branch
 - [x] **BUILD-05**: Build artifacts (`ElectricField/x64/`, `.vs/`, `*.vcxproj.user`) are untracked, and `.gitignore` covers MSVC and Zig outputs (`.zig-cache/`, `zig-out/`)
-- [ ] **BUILD-06**: All MFC / Win32 / Direct2D / GDI code, the `.vcxproj`/`.sln`, and `.rc` resources are removed from the source tree
-- [ ] **BUILD-07**: README documents the new build, run and test instructions for all three OSes
+- [x] **BUILD-06**: All MFC / Win32 / Direct2D / GDI code, the `.vcxproj`/`.sln`, and `.rc` resources are removed from the source tree
+- [x] **BUILD-07**: README documents the new build, run and test instructions for all three OSes
 
 ### Physics Core
 
@@ -37,15 +37,15 @@ Requirements for the cross-platform release. Each maps to roadmap phases.
 
 ### Options
 
-- [ ] **OPT-01**: User can open an Options dialog with a Computation section: lines per unit charge (4–128, default 16), calculate equipotentials (default on), potential interval (0.01–0.50, default 0.10), threads (1–128, default 4), integration method (default Euler)
-- [ ] **OPT-02**: User can set Draw options: positive/negative charge colors, field/equipotential line colors and thicknesses (1–64), with the original defaults (blue, red, black, grey 192); all thickness fields are validated
-- [ ] **OPT-03**: Changing Draw options repaints all open tabs immediately; Computation options apply to newly opened configurations
-- [ ] **OPT-04**: Options persist between runs in a portable config file in the platform user config directory (colors as `#RRGGBB`, method by name); missing or invalid file falls back to defaults
+- [x] **OPT-01**: User can open an Options dialog with a Computation section: lines per unit charge (4–128, default 16), calculate equipotentials (default on), potential interval (0.01–0.50, default 0.10), threads (1–128, default 4), integration method (default Euler)
+- [x] **OPT-02**: User can set Draw options: positive/negative charge colors, field/equipotential line colors and thicknesses (1–64), with the original defaults (blue, red, black, grey 192); all thickness fields are validated
+- [x] **OPT-03**: Changing Draw options repaints all open tabs immediately; Computation options apply to newly opened configurations
+- [x] **OPT-04**: Options persist between runs in a portable config file in the platform user config directory (colors as `#RRGGBB`, method by name); missing or invalid file falls back to defaults
 
 ### Export
 
-- [ ] **EXP-01**: User can export the current configuration view to PNG (replaces printing)
-- [ ] **EXP-02**: User can export the current configuration view to SVG
+- [x] **EXP-01**: User can export the current configuration view to PNG (replaces printing)
+- [x] **EXP-02**: User can export the current configuration view to SVG
 
 ### Quality
 
@@ -97,8 +97,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BUILD-03 | Phase 1 | Complete |
 | BUILD-04 | Phase 1 | Complete |
 | BUILD-05 | Phase 1 | Complete |
-| BUILD-06 | Phase 4 | Pending |
-| BUILD-07 | Phase 4 | Pending |
+| BUILD-06 | Phase 4 | Complete |
+| BUILD-07 | Phase 4 | Complete |
 | CORE-01 | Phase 1 | Complete |
 | CORE-02 | Phase 1 | Complete |
 | CORE-03 | Phase 1 | Complete |
@@ -111,12 +111,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VIEW-03 | Phase 3 | Complete |
 | VIEW-04 | Phase 3 | Complete |
 | VIEW-05 | Phase 3 | Complete |
-| OPT-01 | Phase 4 | Pending |
-| OPT-02 | Phase 4 | Pending |
-| OPT-03 | Phase 4 | Pending |
-| OPT-04 | Phase 4 | Pending |
-| EXP-01 | Phase 4 | Pending |
-| EXP-02 | Phase 4 | Pending |
+| OPT-01 | Phase 4 | Complete |
+| OPT-02 | Phase 4 | Complete |
+| OPT-03 | Phase 4 | Complete |
+| OPT-04 | Phase 4 | Complete |
+| EXP-01 | Phase 4 | Complete |
+| EXP-02 | Phase 4 | Complete |
 | QA-01 | Phase 1 | Complete |
 | QA-02 | Phase 2 | Complete |
 | QA-03 | Phase 2 | Complete |

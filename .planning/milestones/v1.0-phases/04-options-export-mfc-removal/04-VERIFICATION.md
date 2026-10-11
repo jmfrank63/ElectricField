@@ -1,7 +1,7 @@
 ---
 phase: 04-options-export-mfc-removal
 verified: 2026-10-11T01:30:00Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 behavior_unverified: 0
 overrides_applied: 1
@@ -24,9 +24,19 @@ human_verification:
 
 **Phase Goal:** As a user, I want to set options, keep them between runs and export images, so that the app fully replaces the MFC version.
 **Verified:** 2026-10-11
-**Status:** human_needed (all automated checks pass; no gaps)
+**Status:** passed (human verification approved 2026-10-11)
 **Re-verification:** No, initial verification
 **Overrides applied:** 1 — `assets/ElectricField.rc` (37 bytes, icon-only) and the `windows.h` crash-dialog suppression in `src/gui/main.cpp` remain; the phase-3 approved icon mechanism (D-14) and the headless-CI safeguard. The roadmap's "no .rc / no Win32" targets the MFC UI stack; neither file carries UI code.
+
+## Human Verification Results (2026-10-11)
+
+User verdict: "All good — continue".
+
+| Human test | Result |
+|---|---|
+| Options walkthrough in the real window | pass - user approved |
+| Export walkthrough in the real window | pass - user approved |
+| Linux / macOS real desktop | skipped - no local desktop; CI covers the pipeline on all three OSes |
 
 ## Goal Achievement
 

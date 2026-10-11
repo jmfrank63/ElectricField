@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 1: Foundation & Portable Physics Core** - Clean repo, hash-pinned Zig build, 3-OS CI gate, tested GUI-free physics core, MFC visual baseline captured
 - [x] **Phase 2: Compute Engine & Headless Parity** - Cancellable threaded compute, equipotential de-dup, toolkit-free scene with SVG/PNG, headless CLI parity check in CI (completed 2026-10-10)
 - [x] **Phase 3: GUI Shell** - ImGui + SDL3 app with preset tabs, anti-aliased rendering, busy indicator, About box, GUI subsystem (completed 2026-10-11)
-- [ ] **Phase 4: Options, Export & MFC Removal** - Options dialog, portable persistence, PNG/SVG export, MFC deleted, README updated
+- [x] **Phase 4: Options, Export & MFC Removal** - Options dialog, portable persistence, PNG/SVG export, MFC deleted, README updated (completed 2026-10-11)
 
 ## Phase Details
 
@@ -140,4 +140,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Foundation & Portable Physics Core | 4/4 | Complete | 2026-10-11 (verification superseded by Phase 3 approval) |
 | 2. Compute Engine & Headless Parity | 4/4 | Complete    | 2026-10-10 |
 | 3. GUI Shell | 3/3 | Complete    | 2026-10-11 |
-| 4. Options, Export & MFC Removal | 3/3 | Verifying | - |
+| 4. Options, Export & MFC Removal | 3/3 | Complete    | 2026-10-11 |

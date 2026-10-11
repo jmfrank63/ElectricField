@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 4
-current_phase_name: Options, Export & MFC Removal
-status: verifying
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-10-11T01:30:00.000Z"
+status: Awaiting next milestone
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-10-11T01:40:45.821Z"
 last_activity: 2026-10-11
-last_activity_desc: Phase 04 executed (3 plans), awaiting CI + human verification
+last_activity_desc: Milestone v1.0 completed and archived
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 14
   completed_plans: 14
+current_phase: 1
+current_phase_name: Foundation & Portable Physics Core
 ---
 
 # Project State
@@ -27,18 +27,16 @@ See: .planning/PROJECT.md (updated 2026-10-10 after Phase 2)
 
 ## Current Position
 
-Phase: 4 — Options, Export & MFC Removal
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-10-11 — Phase 03 complete, transitioned to Phase 4
-
-Progress: [██████████] 100%
+Phase: Milestone v1.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-10-11 — Milestone v1.0 completed and archived
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 7
+- Total plans completed: 10
 - Average duration: - min
 - Total execution time: 0.0 hours
 
@@ -48,6 +46,7 @@ Progress: [██████████] 100%
 |-------|-------|-------|----------|
 | 2 | 4 | - | - |
 | 03 | 3 | - | - |
+| 04 | 3 | - | - |
 
 **Recent Trend:**
 
@@ -130,3 +129,7 @@ Resume file: None
 | Phase | State | Resume |
 |-------|-------|--------|
 | 01 | resolved 2026-10-11 - both items superseded and covered by the Phase 3 human approval: the hello window was replaced by the real GUI (walkthrough approved), and the 9 MFC baseline PNGs were approved in the Phase 2 side-by-side | - |
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone

@@ -22,6 +22,12 @@ struct UserConfig {
 //   charge = -1, 2, 0
 // Coordinates are written with %.10g (round-trips through stod far below any meaningful world-unit
 // precision). Double quotes inside names are stripped on save.
+//
+// Forward compatibility (v3+ plans 3D / magnetic fields / quantum behaviour): this format is intentionally
+// minimal - no dead z, magnetic or quantum fields. Those features are structural changes to the math core
+// (Vec3, Lorentz-force ODE, probabilistic engine), not extra columns. When one lands, this file gains a
+// format marker and the charge line gains optional trailing tokens here - in this one parser - and
+// `ef::PresetCharge` remains the single interchange type for the editor.
 std::string serializeConfigs(const std::vector<UserConfig>& configs);
 
 struct ParsedConfigs {

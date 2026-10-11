@@ -50,3 +50,20 @@ Phases execute in numeric order: 1 → 2
 - Progressive drawing (lines appearing while computing) — still a wish, separate milestone
 - Copy-to-clipboard / PDF export
 - Undo/redo of charge edits (v2 keeps: edits are visually immediate and cheap to redo by hand; revert-to-computed exists via stale marker + Calculate)
+
+## Long-term direction (v3+, recorded 2026-10-11)
+
+The owner's long-term goals are **3D charges, magnetic fields and quantum behaviour**. Deliberately NOT
+stubbed in v2 (no dead z coordinate, no 0-% fields in the UI or the config file): these are structural
+migrations of the math core, not parameter additions —
+
+- **3D:** Vec2 → Vec3 across field/potential formulas, seeds, tracer and scene; the renderer needs a
+  projection decision. The editor's 2D placement UX remains the basis, extended with a z input.
+- **Magnetic fields:** the traced ODE gains the Lorentz term (v x B); integrators and the de-dup/finalizer
+  follow. B parameters belong to the physics config of that milestone, not to v2 files.
+- **Quantum behaviour:** a different computation engine (probability densities) alongside the
+  deterministic lines; own requirements milestone.
+
+Compatibility kept cheap on purpose: `configurations.ini` is parsed in one place and `ef::PresetCharge`
+is the single charge interchange type, so the later format extension (optional z token + format marker)
+is a small, local change.

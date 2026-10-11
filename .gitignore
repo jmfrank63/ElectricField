@@ -8,6 +8,7 @@ zig-pkg/
 x64/
 *.suo
 *.pdb
+*.user
 
 # ---- scratch / local ----
 /build/

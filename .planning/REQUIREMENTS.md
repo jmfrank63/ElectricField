@@ -273,3 +273,28 @@ Which phases cover which requirements. Updated during roadmap creation.
 - [ ] **COL-07**: Save Collection As... saves under a new name and switches, keeping the tabs open
 - [ ] **COL-08**: Close Collection saves and switches to Original
 - [ ] **COL-09**: Each collection's open tabs persist per collection (Sessions/<Name>.ini) and are restored on switch and on start
+
+---
+
+# Milestone v2.5 Requirements (added 2026-10-12)
+
+## Collections flow
+
+- [ ] **OPEN-01**: File > Open Collection... (Ctrl+O) opens a collection chooser; starting with no restored tabs shows the collection chooser first, and after opening an empty collection the configuration chooser follows; configurations are never auto-opened
+
+## Grid style
+
+- [ ] **GRID-05**: Grid lines are light green
+- [ ] **GRID-06**: An intersections-only mode shows just the lattice points (Cartesian and polar) in a distinctly different colour; panel + API + session persistence
+
+## Charge size
+
+- [ ] **SIZE-01**: Charge size is a draw option (2-120 px, dot to very large, default 25) in View > Options and via options.set charge-size; persisted in options.ini; physics hit radius unchanged
+
+## Traceability (v2.5)
+
+| Requirement | Status |
+|-------------|--------|
+| OPEN-01 | Pending |
+| GRID-05..07 | Pending |
+| SIZE-01 | Pending |

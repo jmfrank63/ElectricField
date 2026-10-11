@@ -1,32 +1,26 @@
-# Roadmap — Milestone v2.4: Automation API & UX Repairs
+# Roadmap — Milestone v2.5: Collections Flow, Grid Style & Charge Size
 
-**Created:** 2026-10-11
+**Created:** 2026-10-12
 **Status:** Ready for planning
-**Milestone goal:** As a maintainer, I want every manual action callable through a command API with a script runner, so editor scenarios (and the reported bugs) are reproducible headlessly in CI; as a user, I want grids actually visible, no crash on New Collection, working tab close/rename, and collection-level save/save-as/close.
+**Milestone goal:** As a user, I want the collection-first flow (Open Collection before configurations), a light-green grid with an intersections-only mode in a distinct colour, and an adjustable charge size from a tiny dot to very large.
 
 ## Phases
 
-### Phase 1: Automation API & UX Repairs
-**Goal:** The API, the fixes, and the collection/tab UX.
+### Phase 1: Collections Flow & Grid/Size Options
+**Goal:** All of the above, API-callable and session-persisted where applicable.
 **Mode:** mvp
 **Depends on**: -
-**Requirements**: API-01..04, BUG-01, BUG-02, TAB-02..04, COL-06..09
+**Requirements**: OPEN-01, GRID-05..07, SIZE-01
 **Success Criteria** (what must be TRUE):
 
-1. Every menu action and every editor/collection operation is callable through a command API; a headless script runner (`ElectricField --script <file> [--user-dir <dir>]`) executes command files and dumps app state; a script-test suite runs in CI on all three OSes (API-01..04)
-2. Grids are visible (drawn behind the field lines, not overwritten by the canvas background) while snapping behaviour is unchanged (BUG-01)
-3. New Collection does not crash or lock the UI; pinned by a script regression (BUG-02)
-4. Tabs can be closed (x button, middle click, Close Tab) and renamed reliably; a right-click tab menu offers Close/Rename/Save As/Calculate (TAB-02..04)
-5. File menu is collection-centric: Save Collection (Ctrl+S, stores matching edited tabs into the collection), Save Collection As..., Close Collection (switches to Original); Save Configuration As... stays tab-level; each collection's open tabs persist per collection and are restored on switch/start (COL-06..09)
-6. CI green on all three OSes plus TSan; smoke green; README documents the API
+1. File > Open Collection... (Ctrl+O) shows a collection chooser (Original first, then alphabetical, plus New Collection...); starting with no restored tabs shows this chooser instead of the configuration chooser; after a UI-initiated switch to an empty workspace the configuration chooser follows; opening a collection never auto-opens configurations (but a collection's saved session tabs come back)
+2. Grid lines are light green; in intersections-only mode only the lattice points are drawn (Cartesian and polar), in a distinctly different colour; switchable in the panel, via `grid.set intersections on|off`, and persisted per tab in the session
+3. Charge size is a draw option: 2-120 px (dot to very large), default 25; settable in View > Options (Draw tab) and via `options.set charge-size`; persisted in options.ini; the physics hit radius is unchanged (parity preserved)
+4. CI green on all three OSes plus TSan; smoke green; script suite updated and green; docs updated (api.md, README)
 
-**Plans**: 2/2 complete (01-01: API + runner + grid core pass; 01-02: GUI repairs + collection menu + script suite)
+**Plans**: TBD
 
-## Progress
-
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Automation API & UX Repairs | 2/2 | Complete | 2026-10-11 |
+## Notes
 
 - Owner instruction: GSD auto-mode, always take the recommended answer (UAT gate auto-accepted and recorded).
-- Root-cause notes from the owner's report: grid invisible (drawn before the background fill overwrites it); UI lockup on New Collection (the leave-confirm modal is never closed after acting on its answer - reported as a crash); Save As was ambiguous between tab and collection scope.
+- Design choices (recommended): "Open Collection" is a chooser modal matching the configuration-chooser pattern (Enter/double-click/Esc/OK); the collection file-per-collection layout (v2.2) is untouched; charge size changes the DRAWN radius only (DrawStyle.chargeRadiusPx), not the physics seed/hit radius (ComputeParams.chargeRadiusPx stays 25 for parity).

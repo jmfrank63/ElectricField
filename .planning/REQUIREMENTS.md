@@ -165,3 +165,30 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CFG-03 | v2 Phase 1 | Complete |
 | EDIT-01..05 | v2 Phase 2 | Complete |
 | CALC-01..02 | v2 Phase 2 | Complete |
+
+---
+
+# Milestone v2.1 Requirements (added 2026-10-11)
+
+## Editor & Session Polish
+
+- [ ] **EDIT-06**: The editor panel has an Add-charge section (value, x, y inputs and an Add button) that appends and selects a charge without needing the canvas
+- [ ] **EDIT-07**: The six stepper buttons render as arrow glyphs (left/right for X, up/down for Y and Value)
+- [ ] **TAB-01**: The active tab can be renamed from the editor panel; the window title follows; an empty name is refused
+
+## Session Persistence
+
+- [ ] **SES-01**: Open tabs (title, source, charges) persist in a session.ini in the user config directory and restore on startup; restored titles never collide with later opens
+- [ ] **SES-02**: Each tab's calculation method is stored in the session file and restored with the tab
+- [ ] **SES-03**: Help > Open Configuration Folder reveals the folder holding options.ini / configurations.ini / session.ini
+
+## Traceability (v2.1)
+
+| Requirement | Status |
+|-------------|--------|
+| EDIT-06 | Pending |
+| EDIT-07 | Pending |
+| TAB-01 | Pending |
+| SES-01 | Pending |
+| SES-02 | Pending |
+| SES-03 | Pending |

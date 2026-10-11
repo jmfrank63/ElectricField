@@ -1104,6 +1104,8 @@ std::filesystem::path App::collectionFile(const std::string& name) const {
     safe += bad ? '_' : c;
   }
   if (efapp::ini::trim(safe).empty()) safe = "Collection";
+  // A name that already carries the extension is kept verbatim (API save-as with "Sandbox.ini").
+  if (safe.size() >= 4 && efapp::ini::toLower(safe.substr(safe.size() - 4)) == ".ini") return collectionsDir_ / safe;
   return collectionsDir_ / (safe + ".ini");
 }
 
@@ -1535,6 +1537,7 @@ std::string App::command(const std::string& line) {
   }
 
   if (cmd == "tab.new-empty") {
+    if (currentCollectionPath_.empty()) return "error: no collection open";  // mirrors the greyed menu (v2.5 CFG-04)
     ui_.selectSerial = ws_.openEmpty();
     ui_.activeSerial = ui_.selectSerial;
     pacer_.notifyActivity();

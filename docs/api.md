@@ -70,7 +70,7 @@ tab serial=2 title=Empty Configuration 1 state=done method=euler autocalc=0 stal
 ### Tabs
 | Command | Effect |
 |---|---|
-| `tab.new-empty` | open the "Empty Configuration" workbench tab |
+| `tab.new-empty` | open the "Empty Configuration" workbench tab (needs an open collection, like the menu) |
 | `tab.close [serial]` | close a tab (default: the active one) |
 | `tab.select <serial>` / `tab.rename <name>` / `tab.calculate [serial]` | selection, rename, recompute |
 | `tab.calculate-all` | close the tabs and open every configuration of the collection |

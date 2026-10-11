@@ -1,5 +1,18 @@
 # Milestones
 
+## v2.0 v2.0 (Shipped: 2026-10-11)
+
+**Phases completed:** 2 phases, 4 plans
+
+**Key accomplishments:**
+
+- User charge configurations: named charge sets in a human-readable `configurations.ini` (skip-and-count parser, case-insensitive dedupe, preset names reserved), Save As with overwrite confirmation, chooser integration and an "Empty Configuration" starting point.
+- The charge editor: click-select with ring, mouse drag, arrow-key nudging (Shift = larger), double-click to add, Delete with the one-charge invariant, and an editor panel with value/x/y fields and press-and-hold -/+ buttons that move charges in realtime without recomputing.
+- Explicit calculation: Calculate (F5) and a per-tab integration-method selector, with a stale marker on edited tabs until recomputation; `Workspace::calculate` reuses the session factory and Failed-tab paths.
+- Verified: 102 doctest cases + full headless smoke incl. the editor loop through the injected input queue (`editor=ok`), CI green on windows-x64, linux-x64, macos-arm64 and tsan-linux; human-approved walkthroughs for both phases.
+
+---
+
 ## v1.0 v1.0 (Shipped: 2026-10-11)
 
 **Phases completed:** 4 phases, 14 plans, 26 tasks

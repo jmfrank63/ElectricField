@@ -1,7 +1,7 @@
 ---
 phase: 2-charge-editor
 verified: 2026-10-11T02:50:00Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
@@ -18,8 +18,16 @@ human_verification:
 
 **Phase Goal:** As a user, I want to place and fine-tune charges in the canvas - by mouse, cursor keys and numeric fields with up/down buttons - see the charges move in realtime, and recompute explicitly with a Calculate button and a per-calculation method.
 **Verified:** 2026-10-11
-**Status:** human_needed (all automated checks pass; no gaps)
+**Status:** passed (human verification approved 2026-10-11)
 **Re-verification:** No, initial verification
+
+## Human Verification Results (2026-10-11)
+
+User verdict: "All good — continue".
+
+| Human test | Result |
+|---|---|
+| Editor walkthrough in the real window (select/drag/keys/double-click/Delete, panel fields with -/+ buttons, stale hint, Calculate F5, method combo, Save As of edited charges) | pass - user approved |
 
 ## Goal Achievement
 

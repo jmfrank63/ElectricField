@@ -7,6 +7,7 @@
 ## Phases
 
 ### Phase 1: User Configuration Files
+
 **Goal:** As a user, I want to save my charge arrangements by name and reopen them later, so that my own configurations are first-class citizens next to the 9 built-in presets.
 **Mode:** mvp
 **Depends on**: —
@@ -20,6 +21,7 @@
 **Plans**: TBD
 
 ### Phase 2: Charge Editor & Explicit Calculation
+
 **Goal:** As a user, I want to place and fine-tune charges in the canvas — by mouse, cursor keys and numeric fields with up/down buttons — see the charges move in realtime, and recompute explicitly with a Calculate button and a per-calculation method.
 **Mode:** mvp
 **Depends on**: Phase 1
@@ -41,8 +43,8 @@ Phases execute in numeric order: 1 → 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. User Configuration Files | 0/TBD | Not started | - |
-| 2. Charge Editor & Explicit Calculation | 0/TBD | Not started | - |
+| 1. User Configuration Files | 2/2 | Complete | 2026-10-11 |
+| 2. Charge Editor & Explicit Calculation | 2/2 | Complete | 2026-10-11 |
 
 ## Out of scope (v2)
 
@@ -59,8 +61,10 @@ migrations of the math core, not parameter additions —
 
 - **3D:** Vec2 → Vec3 across field/potential formulas, seeds, tracer and scene; the renderer needs a
   projection decision. The editor's 2D placement UX remains the basis, extended with a z input.
+
 - **Magnetic fields:** the traced ODE gains the Lorentz term (v x B); integrators and the de-dup/finalizer
   follow. B parameters belong to the physics config of that milestone, not to v2 files.
+
 - **Quantum behaviour:** a different computation engine (probability densities) alongside the
   deterministic lines; own requirements milestone.
 

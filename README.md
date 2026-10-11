@@ -36,10 +36,15 @@ preserved on the `master` branch.
   (Ctrl+S)** in `configurations.ini` in the per-user config directory; the New chooser lists them next to
   the built-ins, plus an "Empty Configuration" starting point.
 - **Charge editor**: click a charge to select it, drag it with the mouse, nudge it with the arrow keys
-  (Shift = bigger steps) or type exact numbers into the editor panel's value/x/y fields with their -/+
-  buttons. Double-click empty canvas adds a charge, Delete removes the selected one. Charges move in
-  realtime; the drawn lines keep showing the previous calculation (the tab is marked *edited*) until you
-  press **Calculate (F5)** — with a per-tab integration method selector in the panel.
+  (Shift = bigger steps) or type exact numbers into the editor panel's value/x/y fields with their
+  arrow buttons (press and hold to repeat). The **Add charge** section creates a charge with any value
+  and position, double-click empty canvas adds one, Delete removes the selected one. Rename the tab by
+  typing over its name at the top of the panel. Charges move in realtime; the drawn lines keep showing
+  the previous calculation (the tab is marked *edited*) until you press **Calculate (F5)** — with a
+  per-tab integration method selector in the panel.
+- **Your workspace comes back**: the open tabs — including each tab's calculation method and any charge
+  edits — are stored in `session.ini` when you quit and restored on the next start. **Help ▸ Open
+  Configuration Folder** shows where `options.ini`, `configurations.ini` and `session.ini` live.
 - Export of the current configuration view to **PNG** and **SVG** (File ▸ Export), matching what is on screen.
 - Tabs can be closed while they compute; quitting mid-computation is safe. The computation is cancelled
   within a fraction of a second.

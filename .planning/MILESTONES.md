@@ -1,5 +1,18 @@
 # Milestones
 
+## v2.1 v2.1 (Shipped: 2026-10-11)
+
+**Phases completed:** 1 phase, 2 plans
+
+**Key accomplishments:**
+
+- Add-charge section in the editor panel (value, x, y + button) and arrow-glyph stepper buttons with press-and-hold repeat.
+- Tab renaming from the editor panel (window title follows, empty names refused).
+- Session persistence: open tabs - including each tab's calculation method and charge edits - stored in `session.ini` on quit and restored on start, with counter bumps preventing duplicate titles; Help > Open Configuration Folder.
+- Verified: 107 unit tests + full headless smoke, CI green on windows-x64, linux-x64, macos-arm64 and tsan-linux.
+
+---
+
 ## v2.0 v2.0 (Shipped: 2026-10-11)
 
 **Phases completed:** 2 phases, 4 plans

@@ -1,6 +1,7 @@
 #include "app/workspace.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <exception>
 #include <stdexcept>
 #include <utility>
@@ -17,6 +18,14 @@ struct RealSession final : ISession {
   bool takeResult(ef::FieldResult& out) override { return s.takeResult(out); }
   ef::ComputeSession s;
 };
+
+std::string trim(const std::string& s) {
+  const auto isSpace = [](unsigned char c) { return std::isspace(c) != 0; };
+  std::size_t b = 0, e = s.size();
+  while (b < e && isSpace(static_cast<unsigned char>(s[b]))) ++b;
+  while (e > b && isSpace(static_cast<unsigned char>(s[e - 1]))) --e;
+  return s.substr(b, e - b);
+}
 }  // namespace
 
 SessionFactory defaultSessionFactory() {
@@ -25,12 +34,31 @@ SessionFactory defaultSessionFactory() {
 
 unsigned Workspace::open(std::size_t presetIndex) {
   const ef::Preset& p = ef::presets().at(presetIndex);
+  const unsigned number = ++counters_[presetIndex];
+  return spawn(presetIndex, number, std::string(p.displayName) + " " + std::to_string(number), ef::makeSystem(p));
+}
+
+unsigned Workspace::openUser(const std::string& name, const std::vector<ef::PresetCharge>& charges) {
+  const std::string trimmed = trim(name);
+  ef::ChargeSystem field;
+  field.charges.reserve(charges.size());
+  for (const ef::PresetCharge& c : charges) field.charges.push_back(ef::Charge{c.charge, ef::Vec2{c.x, c.y}});
+  const unsigned number = ++userCounters_[trimmed];
+  return spawn(kNoPreset, number, trimmed + " " + std::to_string(number), std::move(field));
+}
+
+unsigned Workspace::openEmpty() {
+  // One +1 charge at the origin: computable from the first frame, and the Phase 2 editor's starting point.
+  return openUser("Empty Configuration", {ef::PresetCharge{1, 0.0, 0.0}});
+}
+
+unsigned Workspace::spawn(std::size_t presetIndex, const unsigned number, const std::string& title, ef::ChargeSystem&& field) {
   auto t = std::make_unique<Tab>();
   t->serial = nextSerial_++;
   t->preset = presetIndex;
-  t->number = ++counters_[presetIndex];
-  t->title = std::string(p.displayName) + " " + std::to_string(t->number);
-  t->field = ef::makeSystem(p);
+  t->number = number;
+  t->title = title;
+  t->field = std::move(field);
   t->params = defaults_;
   t->expectedLines = ef::expectedLineCount(t->field, t->params);
   t->scene = ef::buildScene(t->field, ef::FieldResult{});  // charges only: drawn from the first frame

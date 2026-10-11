@@ -5,7 +5,9 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
+#include "app/configs.hpp"
 #include "app/options.hpp"
 #include "app/workspace.hpp"
 #include "imgui.h"
@@ -26,14 +28,22 @@ struct UiState {
   // requests (set by menu / shortcuts / startup, consumed by drawUi)
   bool openChooser = false, openAbout = false, requestQuit = false;
   bool openOptions = false;  // View > Options...
+  bool openSaveAs = false;   // File > Save As... (v2 CFG-03)
   int openPresetNow = -1;    // File > New > <preset>
+  int openUserConfig = -1;   // chooser: index into userConfigs (v2 CFG-02)
+  bool openEmpty = false;    // chooser: Empty Configuration (v2 CFG-02)
   int exportRequest = 0;     // File > Export: 1 = PNG..., 2 = SVG... (consumed by App::frame, D-06)
   unsigned closeSerial = 0;  // request to close a tab (0 = none)
   // state carried between frames
   bool chooserVisible = false, aboutVisible = false, optionsVisible = false;  // a modal was drawn last frame
+  bool saveAsVisible = false, saveAsConfirmVisible = false;                   // Save As modal (v2)
   int chooserSel = 0;
   efapp::OptionsEdit optionsEdit;                 // working copy behind the Options dialog (D-04)
   std::optional<efapp::Options> optionsToApply;   // set on OK after validation; consumed by App::frame (D-05)
+  std::vector<efapp::UserConfig> userConfigs;     // mirror of the App's user configurations (v2, one owner: App)
+  char saveAsName[128] = "";                      // Save As name field
+  std::string saveAsError;                        // inline Save As error (EMPTY/RESERVED name)
+  std::optional<efapp::UserConfig> saveAsApply;   // validated result consumed by App::frame
   unsigned activeSerial = 0;   // selected tab during the last frame
   unsigned selectSerial = 0;   // programmatic selection request (new tab)
   std::string linkNote;        // About: "Could not open a browser..." (cleared when the modal closes)

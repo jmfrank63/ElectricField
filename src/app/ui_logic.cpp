@@ -1,6 +1,7 @@
 #include "app/ui_logic.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 
 namespace efapp {
@@ -48,6 +49,14 @@ std::string versionLine(std::string_view semver, std::string_view hash) {
 std::string shortcutLabel(const char* keyName, bool mac) { return std::string(mac ? "Cmd+" : "Ctrl+") + keyName; }
 
 std::string failureDetail(const std::string& error) { return error.empty() ? std::string("Unknown error") : error; }
+
+std::string baseTitle(const std::string& title) {
+  const std::size_t space = title.rfind(' ');
+  if (space == std::string::npos || space + 1 >= title.size()) return title;
+  for (std::size_t i = space + 1; i < title.size(); ++i)
+    if (std::isdigit(static_cast<unsigned char>(title[i])) == 0) return title;
+  return title.substr(0, space);
+}
 
 float clampScale(float k) {
   if (!std::isfinite(k) || k <= 0.f) return 1.f;

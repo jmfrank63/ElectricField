@@ -104,13 +104,16 @@ bool App::init(const AppOptions& opt, std::string& step, std::string& message) {
   env_.aboutIcon = aboutIcon_;
   env_.semver = EF_VERSION;
   env_.gitHash = EF_GIT_HASH;
-  // User options (Phase 4, D-03): loaded from the per-user config directory. Headless modes skip both load
-  // and save so CI runs never depend on, or overwrite, the developer's options.ini.
+  // User options (Phase 4, D-03) and user configurations (v2 CFG-01) live in the per-user config directory.
+  // Headless modes skip both load and save so CI runs never depend on, or overwrite, user files.
   if (!opt_.headless()) {
     if (char* pref = SDL_GetPrefPath("ElectricField", "ElectricField")) {
-      optionsPath_ = std::filesystem::u8path(pref) / "options.ini";  // SDL hands out UTF-8; u8path keeps non-ASCII intact
+      const std::filesystem::path dir = std::filesystem::u8path(pref);  // SDL hands out UTF-8; u8path keeps non-ASCII intact
       SDL_free(pref);
+      optionsPath_ = dir / "options.ini";
       options_ = efapp::loadOptions(optionsPath_);
+      configsPath_ = dir / "configurations.ini";
+      userConfigs_ = efapp::loadConfigs(configsPath_);
     }
   }
   env_.options = &options_;
@@ -172,6 +175,7 @@ void App::handleEvent(const SDL_Event& e) {
 
 void App::frame() {
   ws_.pollAll();
+  ui_.userConfigs = userConfigs_;  // v2: the chooser reads the mirror; the App keeps the master list
   if (scaleDirty_) refreshScale();
   ImGui_ImplSDLRenderer3_NewFrame();
   ImGui_ImplSDL3_NewFrame();
@@ -190,6 +194,17 @@ void App::frame() {
     }
   }
   exportStep();  // EXP-01/02: start the save dialog / run a chosen export on the UI thread between frames
+  if (ui_.saveAsApply) {  // v2 CFG-03: Save As accepted — upsert (re-checked) and persist
+    std::vector<std::string> reserved;
+    for (const ef::Preset& p : ef::presets()) reserved.emplace_back(p.displayName);
+    efapp::upsertUserConfig(userConfigs_, *ui_.saveAsApply, reserved);
+    ui_.saveAsApply.reset();
+    pacer_.notifyActivity();
+    if (!configsPath_.empty()) {
+      std::string err;
+      if (!efapp::saveConfigs(configsPath_, userConfigs_, err)) std::fprintf(stderr, "configurations: %s\n", err.c_str());
+    }
+  }
   ImGui::Render();
   if (ui_.wantedTitle != lastTitle_) {
     SDL_SetWindowTitle(window_, ui_.wantedTitle.c_str());
@@ -451,6 +466,22 @@ bool App::smokeExtras(std::string& report) {
     if (options_.draw.electricThickness != 1.f) return fail("options were not restored to the defaults");
   }
 
+  // User configurations (v2): headless has no file, so the list is populated in memory; a user config and
+  // the empty entry must open and compute like preset tabs.
+  userConfigs_.push_back(efapp::UserConfig{"Smoke Pair", {{1, -2, 0}, {-1, 2, 0}}});
+  ui_.userConfigs = userConfigs_;
+  ui_.openUserConfig = 0;
+  frames(2);
+  if (ws_.tabs().empty() || ws_.tabs().back()->title != "Smoke Pair 1") return fail("the user configuration did not open");
+  if (!pumpUntilDone(lastSerial(), 60000)) return fail("the user configuration session did not finish");
+  ui_.closeSerial = lastSerial();
+  frames(2);
+  ui_.openEmpty = true;
+  frames(2);
+  if (ws_.tabs().empty() || ws_.tabs().back()->title != "Empty Configuration 1") return fail("the empty configuration did not open");
+  ui_.closeSerial = lastSerial();
+  frames(2);
+
   // Idle loop: with one finished tab and no input the loop must block (<= ~4 frames/s + the settle frames), not spin.
   SDL_SetWindowSize(window_, 1024, 824);
   SDL_SyncWindow(window_);
@@ -479,7 +510,7 @@ bool App::smokeExtras(std::string& report) {
   if (quitMs > 1000) return fail("closeAll with 3 busy sessions took " + std::to_string(quitMs) + " ms");
   frames(2);
   if (ws_.opened() - openedBase != ws_.closed() - closedBase) return fail("tab leak: opened != closed");
-  report = "keys=ok middle_click=ok failed_tab=ok overlay=ok options=ok idle_frames=" + std::to_string(idleFrames) + "/1.3s quit_ms=" + std::to_string(quitMs);
+  report = "keys=ok middle_click=ok failed_tab=ok overlay=ok options=ok user_configs=ok idle_frames=" + std::to_string(idleFrames) + "/1.3s quit_ms=" + std::to_string(quitMs);
   return true;
 }
 

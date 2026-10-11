@@ -24,6 +24,8 @@ std::string versionLine(std::string_view semver, std::string_view hash);
 std::string shortcutLabel(const char* keyName, bool mac);
 // session error text or "Unknown error"
 std::string failureDetail(const std::string& error);
+// The tab title without the trailing " <N>" counter ("Dipole 1" -> "Dipole"); prefills Save As (v2).
+std::string baseTitle(const std::string& title);
 
 // Display-scale k: clamp to [0.75, 4.0]; non-finite or <= 0 falls back to 1.0.
 float clampScale(float k);

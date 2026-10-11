@@ -191,27 +191,53 @@ void chooserModal(UiState& ui, const UiEnv& env) {
   ui.chooserVisible = open;
   if (!open) return;
 
+  // Row order (v2 CFG-02): the 9 built-ins, then - when any exist - a separator and the user configurations
+  // in file order, then "Empty Configuration". The separator is not a Selectable, so keyboard focus skips it.
   const auto& presets = ef::presets();
+  const std::size_t presetCount = presets.size();
+  const std::size_t userCount = ui.userConfigs.size();
+  const bool hasUsers = userCount > 0;
+  const std::size_t rowCount = presetCount + (hasUsers ? 1 + userCount : 0) + 1;
+  // kind: -1 = separator, 0 = preset, 1 = user configuration, 2 = empty configuration
+  auto rowKind = [&](std::size_t i) {
+    if (i < presetCount) return 0;
+    if (hasUsers && i == presetCount) return -1;  // separator
+    if (hasUsers && i > presetCount && i <= presetCount + userCount) return 1;
+    return 2;  // "Empty Configuration" (always the last row)
+  };
+  auto userIndex = [&](std::size_t i) { return static_cast<int>(i - presetCount - 1); };
+
   ImGui::TextUnformatted("Choose a charge configuration:");
   ImGui::Dummy(ImVec2(0.f, 4.f * env.k));
 
   bool openSelected = false;
-  const bool appearing = ImGui::IsWindowAppearing();
   const float rowH = ImGui::GetFrameHeight();
   // A plain framed child (NOT BeginListBox): without ImGuiChildFlags_NavFlattened the child is a separate nav scope that must first be
   // entered with Enter, so Up/Down would never reach the rows.
-  const bool listOpen = ImGui::BeginChild("##presets", ImVec2(-FLT_MIN, rowH * static_cast<float>(presets.size()) + 2.f * ImGui::GetStyle().FramePadding.y), ImGuiChildFlags_FrameStyle | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+  const bool listOpen = ImGui::BeginChild("##presets", ImVec2(-FLT_MIN, rowH * static_cast<float>(rowCount) + 2.f * ImGui::GetStyle().FramePadding.y), ImGuiChildFlags_FrameStyle | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
   if (listOpen) {
     ImGui::PushStyleVarY(ImGuiStyleVar_ItemSpacing, 0.f);
-    for (int i = 0; i < static_cast<int>(presets.size()); ++i) {
-      const std::string name(presets[static_cast<std::size_t>(i)].displayName);
-      if (ImGui::Selectable(name.c_str(), ui.chooserSel == i, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(0.f, rowH))) {
-        ui.chooserSel = i;
+    for (std::size_t i = 0; i < rowCount; ++i) {
+      const int kind = rowKind(i);
+      if (kind < 0) {
+        ImGui::Separator();
+        ImGui::TextDisabled("User configurations");
+        continue;
+      }
+      std::string label;
+      if (kind == 0)
+        label = std::string(presets[i].displayName);
+      else if (kind == 1)
+        label = ui.userConfigs[static_cast<std::size_t>(userIndex(i))].name;
+      else
+        label = "Empty Configuration";
+      if (ImGui::Selectable(label.c_str(), ui.chooserSel == static_cast<int>(i), ImGuiSelectableFlags_AllowDoubleClick, ImVec2(0.f, rowH))) {
+        ui.chooserSel = static_cast<int>(i);
         if (ImGui::IsMouseDoubleClicked(0) || ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter)) openSelected = true;
       } else if (ImGui::IsItemFocused()) {
-        ui.chooserSel = i;  // selection follows keyboard focus (Up/Down)
+        ui.chooserSel = static_cast<int>(i);  // selection follows keyboard focus (Up/Down)
       }
-      if (ui.chooserSel == i) ImGui::SetItemDefaultFocus();  // canonical list pattern: the preselected row is the default nav focus on appearing
+      if (ui.chooserSel == static_cast<int>(i)) ImGui::SetItemDefaultFocus();
     }
     ImGui::PopStyleVar();
   }
@@ -228,12 +254,111 @@ void chooserModal(UiState& ui, const UiEnv& env) {
   bool close = ImGui::Button("Close Chooser");
   if (ImGui::IsKeyPressed(ImGuiKey_Escape)) close = true;
 
-  if (openSelected) {
-    ui.openPresetNow = ui.chooserSel;
+  if (openSelected && ui.chooserSel >= 0 && static_cast<std::size_t>(ui.chooserSel) < rowCount) {
+    const int kind = rowKind(static_cast<std::size_t>(ui.chooserSel));
+    if (kind == 0)
+      ui.openPresetNow = ui.chooserSel;
+    else if (kind == 1)
+      ui.openUserConfig = userIndex(static_cast<std::size_t>(ui.chooserSel));
+    else
+      ui.openEmpty = true;
     ImGui::CloseCurrentPopup();
   } else if (close) {
     ImGui::CloseCurrentPopup();
   }
+  ImGui::EndPopup();
+}
+
+// File > Save As (v2 CFG-03, D-07): name field prefilled from the active tab, inline errors for an empty or
+// reserved name, and an overwrite confirmation for an existing user configuration. The actual file write is
+// the App's job (saveAsApply).
+void saveAsModal(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
+  const ImGuiViewport* vp = ImGui::GetMainViewport();
+  if (ui.openSaveAs) {
+    ImGui::OpenPopup("Save Configuration As##saveas");
+    ui.openSaveAs = false;
+    ui.saveAsError.clear();
+    const efapp::Tab* t = ws.find(ui.activeSerial);
+    const std::string base = t ? efapp::baseTitle(t->title) : "";
+    std::snprintf(ui.saveAsName, sizeof(ui.saveAsName), "%s", base.c_str());
+  }
+  ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+  ImGui::SetNextWindowSizeConstraints(ImVec2(380.f * env.k, 0.f), ImVec2(520.f * env.k, FLT_MAX));
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.f * env.k, 16.f * env.k));
+  const bool open = ImGui::BeginPopupModal("Save Configuration As##saveas", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
+  ImGui::PopStyleVar();
+  ui.saveAsVisible = open;
+  if (!open) {
+    ui.saveAsConfirmVisible = false;
+    return;
+  }
+  const efapp::Tab* t = ws.find(ui.activeSerial);
+  if (!t) {  // the tab vanished under the dialog: nothing to save
+    ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+    return;
+  }
+
+  ImGui::TextUnformatted("Save the charges of this tab as a user configuration:");
+  ImGui::Dummy(ImVec2(0.f, 4.f * env.k));
+  ImGui::InputText("##name", ui.saveAsName, sizeof(ui.saveAsName));
+  if (!ui.saveAsError.empty()) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.75f, 0.f, 0.f, 1.f));
+    ImGui::TextWrapped("%s", ui.saveAsError.c_str());
+    ImGui::PopStyleColor();
+  }
+  ImGui::Dummy(ImVec2(0.f, 8.f * env.k));
+
+  const ImGuiStyle& st = ImGui::GetStyle();
+  const float w1 = ImGui::CalcTextSize("Save").x + 2 * st.FramePadding.x;
+  const float w2 = ImGui::CalcTextSize("Cancel").x + 2 * st.FramePadding.x;
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - (w1 + 8.f * env.k + w2));
+  bool close = false;
+  if (ImGui::Button("Save")) {
+    std::vector<std::string> reserved;
+    for (const ef::Preset& p : ef::presets()) reserved.emplace_back(p.displayName);
+    efapp::UserConfig candidate;
+    candidate.name = ui.saveAsName;
+    candidate.charges.reserve(t->field.charges.size());
+    for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::PresetCharge{c.charge, c.position.X, c.position.Y});
+    // Check on a scratch copy: upsert is the single decision core (also used by App::frame for the real write).
+    std::vector<efapp::UserConfig> scratch = ui.userConfigs;
+    const efapp::UpsertResult res = efapp::upsertUserConfig(scratch, candidate, reserved);
+    if (res == efapp::UpsertResult::EMPTY_NAME)
+      ui.saveAsError = "Enter a name.";
+    else if (res == efapp::UpsertResult::RESERVED_NAME)
+      ui.saveAsError = "'" + candidate.name + "' is a built-in preset and cannot be overwritten.";
+    else if (efapp::findUserConfig(ui.userConfigs, candidate.name) >= 0)
+      ImGui::OpenPopup("Overwrite?##saveas");
+    else {
+      ui.saveAsApply = candidate;
+      close = true;
+    }
+  }
+  ImGui::SetItemDefaultFocus();
+  ImGui::SameLine(0.f, 8.f * env.k);
+  if (ImGui::Button("Cancel")) close = true;
+  if (ImGui::IsKeyPressed(ImGuiKey_Escape)) close = true;
+
+  // Overwrite confirmation for an existing user configuration name.
+  if (ImGui::BeginPopupModal("Overwrite?##saveas", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse)) {
+    ui.saveAsConfirmVisible = true;
+    ImGui::Text("A configuration named '%s' already exists. Overwrite it?", ui.saveAsName);
+    if (ImGui::Button("Overwrite")) {
+      efapp::UserConfig candidate;
+      candidate.name = ui.saveAsName;
+      candidate.charges.reserve(t->field.charges.size());
+      for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::PresetCharge{c.charge, c.position.X, c.position.Y});
+      ui.saveAsApply = candidate;
+      ImGui::CloseCurrentPopup();
+      close = true;
+    }
+    ImGui::SameLine(0.f, 8.f * env.k);
+    if (ImGui::Button("Keep Existing") || ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+  }
+
+  if (close) ImGui::CloseCurrentPopup();
   ImGui::EndPopup();
 }
 
@@ -366,13 +491,15 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
 
   ui.failedShown = false;
   ui.overlayMin = ui.overlayMax = ImVec2(0, 0);
-  const bool modalOpen = ui.chooserVisible || ui.aboutVisible || ui.optionsVisible || ui.openChooser || ui.openAbout || ui.openOptions;
+  const bool modalOpen = ui.chooserVisible || ui.aboutVisible || ui.optionsVisible || ui.saveAsVisible || ui.openChooser || ui.openAbout ||
+                         ui.openOptions || ui.openSaveAs;
   const bool hasTabs = !ws.tabs().empty();
 
   // Shortcuts (UI-SPEC "Keyboard"): ignored while a modal is open.
   if (!modalOpen) {
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_N)) ui.openChooser = true;
     if (hasTabs && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_W)) ui.closeSerial = ui.activeSerial;
+    if (hasTabs && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S)) ui.openSaveAs = true;
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Q)) ui.requestQuit = true;
   }
 
@@ -389,6 +516,7 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
       if (ImGui::MenuItem("New...", efapp::shortcutLabel("N", env.mac).c_str())) ui.openChooser = true;
       ImGui::Separator();
       if (ImGui::MenuItem("Close Tab", efapp::shortcutLabel("W", env.mac).c_str(), false, hasTabs)) ui.closeSerial = ui.activeSerial;
+      if (ImGui::MenuItem("Save As...", efapp::shortcutLabel("S", env.mac).c_str(), false, hasTabs)) ui.openSaveAs = true;
       ImGui::Separator();
       // EXP-01/02 (D-06): export replaces MFC's printing. Only a finished tab has a complete scene, so a busy or
       // failed tab greys the submenu out.
@@ -417,6 +545,17 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
   if (ui.openPresetNow >= 0) {
     ui.selectSerial = ws.open(static_cast<std::size_t>(ui.openPresetNow));
     ui.openPresetNow = -1;
+  }
+  if (ui.openUserConfig >= 0) {  // v2 CFG-02: a user configuration from the chooser
+    if (static_cast<std::size_t>(ui.openUserConfig) < ui.userConfigs.size()) {
+      const efapp::UserConfig& c = ui.userConfigs[static_cast<std::size_t>(ui.openUserConfig)];
+      ui.selectSerial = ws.openUser(c.name, c.charges);
+    }
+    ui.openUserConfig = -1;
+  }
+  if (ui.openEmpty) {
+    ui.selectSerial = ws.openEmpty();
+    ui.openEmpty = false;
   }
 
   if (!ws.tabs().empty()) {
@@ -455,6 +594,7 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
   chooserModal(ui, env);
   aboutModal(ui, env);
   optionsModal(ui, env);
+  saveAsModal(ws, ui, env);
 
   ImGui::End();
 

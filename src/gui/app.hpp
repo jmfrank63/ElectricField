@@ -73,6 +73,8 @@ class App {
   efapp::FramePacer pacer_;
   efapp::Options options_;            // user options (Phase 4); loaded at startup, saved when the dialog is accepted
   std::filesystem::path optionsPath_; // empty in headless modes (nothing is loaded or persisted there)
+  std::vector<efapp::UserConfig> userConfigs_;  // user configurations (v2 CFG-01); master list, mirrored into ui_
+  std::filesystem::path configsPath_;           // configurations.ini; empty in headless modes
   // Export state (Phase 4). The SDL save-dialog callback may run on any thread (portald/zenity on Linux), so the
   // chosen path crosses into the UI thread behind a mutex and is exported at the next frame boundary.
   std::mutex exportMutex_;

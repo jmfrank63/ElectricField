@@ -418,3 +418,60 @@ TEST_CASE("workspace: two tabs of one preset stay independent and numbers keep r
   CHECK(ws.find(c)->title == "Dipole 3");
   CHECK(ws.find(c)->number > ws.find(a)->number);
 }
+
+TEST_CASE("openUser: trimmed title, per-name counter never reused, charges and kNoPreset (v2 CFG-02)") {
+  efapp::Workspace ws(ef::ComputeParams{}, [](const ef::ChargeSystem&, const ef::ComputeParams&) -> std::unique_ptr<efapp::ISession> {
+    throw std::runtime_error("no compute in this structural test");
+  });
+  const unsigned s1 = ws.openUser("  Mine  ", {{1, -2, 0}, {-1, 2, 0}});
+  const efapp::Tab* t = ws.find(s1);
+  REQUIRE(t != nullptr);
+  CHECK(t->title == "Mine 1");
+  CHECK(t->preset == efapp::kNoPreset);
+  CHECK(t->number == 1);
+  CHECK(t->state == efapp::TabState::Failed);  // the throwing factory marks it Failed; the structure is intact
+  REQUIRE(t->field.charges.size() == 2);
+  CHECK(t->field.charges[0].charge == 1);
+  CHECK(t->field.charges[0].position.X == doctest::Approx(-2.0));
+  CHECK(t->field.charges[1].charge == -1);
+  CHECK(t->field.charges[1].position.X == doctest::Approx(2.0));
+
+  // The per-name counter is never reused after a close; a different name counts from 1.
+  CHECK(ws.close(s1));
+  const unsigned s2 = ws.openUser("Mine", {});
+  CHECK(ws.find(s2)->title == "Mine 2");
+  const unsigned s3 = ws.openUser("Other", {});
+  CHECK(ws.find(s3)->title == "Other 1");
+  CHECK(ws.find(s3)->number == 1);
+}
+
+TEST_CASE("openEmpty: one +1 charge at the origin, own counter, presets unaffected (v2 CFG-02)") {
+  efapp::Workspace ws(ef::ComputeParams{}, [](const ef::ChargeSystem&, const ef::ComputeParams&) -> std::unique_ptr<efapp::ISession> {
+    throw std::runtime_error("no compute in this structural test");
+  });
+  const unsigned s1 = ws.openEmpty();
+  const efapp::Tab* t = ws.find(s1);
+  REQUIRE(t != nullptr);
+  CHECK(t->title == "Empty Configuration 1");
+  REQUIRE(t->field.charges.size() == 1);
+  CHECK(t->field.charges[0].charge == 1);
+  CHECK(t->field.charges[0].position.X == doctest::Approx(0.0));
+  CHECK(t->field.charges[0].position.Y == doctest::Approx(0.0));
+
+  CHECK(ws.close(s1));
+  CHECK(ws.openEmpty() == s1 + 1);  // next serial; the counter would now read "Empty Configuration 2"
+  CHECK(ws.find(ws.open(0))->title == "Dipole 1");  // preset counters untouched by user tabs
+}
+
+TEST_CASE("openUser computes through the real session path like a preset tab (v2 CFG-02)") {
+  efapp::Workspace ws;
+  const unsigned s = ws.openUser("Mine", {{1, -2, 0}, {-1, 2, 0}});
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+  while (ws.find(s) != nullptr && ws.find(s)->state == efapp::TabState::Computing && std::chrono::steady_clock::now() < deadline) {
+    ws.pollAll();
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  REQUIRE(ws.find(s) != nullptr);
+  REQUIRE(ws.find(s)->state == efapp::TabState::Done);
+  CHECK(ws.find(s)->scene.electric.size() == 16);  // dipole charges, default options: the parity count
+}

@@ -4,6 +4,8 @@
 #include <array>
 #include <cstddef>
 #include <functional>
+#include <limits>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -14,6 +16,10 @@
 #include "ef/session.hpp"
 
 namespace efapp {
+
+// Tab::preset value for tabs that do not come from the built-in registry (user configurations, the empty
+// configuration). Everything downstream keys off the title, so the value is inert.
+inline constexpr std::size_t kNoPreset = std::numeric_limits<std::size_t>::max();
 
 // The slice of ef::ComputeSession the UI needs. A seam so the state machine (failed / cancelled / no-result paths, which a
 // real session only reaches under allocation failure) is testable with scripted fakes and so smoke can show the failed tab.
@@ -30,8 +36,8 @@ enum class TabState { Computing, Done, Failed };
 
 struct Tab {
   unsigned serial = 0;       // stable ImGui id seed ("###ef<serial>"), never reused
-  std::size_t preset = 0;    // index into ef::presets()
-  unsigned number = 0;       // per-preset counter, starts at 1, never reused after a close
+  std::size_t preset = 0;    // index into ef::presets(); kNoPreset for user configurations
+  unsigned number = 0;       // per-preset (or per-name) counter, starts at 1, never reused after a close
   std::string title;         // "<Display Name> <N>"
   ef::ChargeSystem field;
   ef::ComputeParams params;
@@ -53,6 +59,12 @@ class Workspace {
 
   // Opens a tab and starts its session. Never throws for a session that cannot start: that yields a Failed tab.
   unsigned open(std::size_t presetIndex);
+  // Opens a tab from arbitrary charges (a user configuration, v2 Phase 1). The name is trimmed; the title is
+  // "<name> <N>" with a per-name counter that is never reused after a close.
+  unsigned openUser(const std::string& name, const std::vector<ef::PresetCharge>& charges);
+  // The "Empty Configuration" entry: a single +1 charge at the origin, immediately computable — the Phase 2
+  // editor's starting point.
+  unsigned openEmpty();
   // Options dialog (Phase 4): new tabs open with these params; tabs already open keep the params they were opened with.
   void setDefaults(const ef::ComputeParams& p) { defaults_ = p; }
   // Cancels and destroys the session (RAII join) and removes the tab. False if the serial is unknown.
@@ -71,11 +83,14 @@ class Workspace {
 
  private:
   void poll(Tab& t);
+  // Shared tail of open/openUser/openEmpty: builds the tab, starts the session (Failed tab on error), pushes it.
+  unsigned spawn(std::size_t presetIndex, unsigned number, const std::string& title, ef::ChargeSystem&& field);
 
   ef::ComputeParams defaults_;
   SessionFactory factory_;
   std::vector<std::unique_ptr<Tab>> tabs_;
   std::array<unsigned, ef::kPresetCount> counters_{};
+  std::map<std::string, unsigned> userCounters_;  // per user-configuration name (exact spelling)
   unsigned nextSerial_ = 1;
   unsigned opened_ = 0, closed_ = 0;
 };

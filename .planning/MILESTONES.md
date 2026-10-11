@@ -1,12 +1,17 @@
 # Milestones
 
-## v1.0 v1.0 (Shipped: 2026-10-11)
+## v2.4 Automation API and UX Repairs (Shipped: 2026-10-11)
 
-**Phases completed:** 4 phases, 14 plans
+**Phases completed:** 1 phase, 2 plans
 
 **Key accomplishments:**
 
-- The MFC application fully replaced by the cross-platform port: Zig 0.17 build (SDL3 + Dear ImGui), identical physics and visuals, options with persistence, PNG/SVG export, headless CLI + parity oracle, CI on three OSes plus ThreadSanitizer.
+- The command API: every menu entry and editor/collection operation callable by text command; a headless script runner (`--script/--user-dir/--out/--lenient`) with the `app.state`/`app.expect` oracle; 5 scenario scripts running in CI on all three OSes; docs/api.md.
+- BUG-01 fixed: the grid became a core render pass inside renderScene (bg -> grid -> lines -> charges), so the canvas background can never overwrite it again.
+- BUG-02 fixed: the leave prompt closes after its answer (the ghost modal that locked the UI on New Collection); smoke regression through the real UI path.
+- Collection-centric File menu: Save Collection (Ctrl+S), Save Collection As..., Close Collection, Save Configuration As...; per-collection Sessions files restore on switch and start.
+- Tab context menu: Close / Rename / Save Configuration As / Calculate; restored tabs establish the active tab (CI-caught, fe96c4f).
+- Verified: 114 unit tests + smoke + script suite green; CI run 38150402997 green on windows-x64, linux-x64, macos-arm64 and tsan-linux.
 
 ---
 
@@ -50,3 +55,13 @@
 - Verified: 107 unit tests + full headless smoke, CI green on windows-x64, linux-x64, macos-arm64 and tsan-linux.
 
 ---
+
+## v1.0 v1.0 (Shipped: 2026-10-11)
+**Phases completed:** 4 phases, 14 plans
+
+**Key accomplishments:**
+
+- The MFC application fully replaced by the cross-platform port: Zig 0.17 build (SDL3 + Dear ImGui), identical physics and visuals, options with persistence, PNG/SVG export, headless CLI + parity oracle, CI on three OSes plus ThreadSanitizer.
+
+---
+

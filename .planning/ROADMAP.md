@@ -20,9 +20,13 @@
 5. File menu is collection-centric: Save Collection (Ctrl+S, stores matching edited tabs into the collection), Save Collection As..., Close Collection (switches to Original); Save Configuration As... stays tab-level; each collection's open tabs persist per collection and are restored on switch/start (COL-06..09)
 6. CI green on all three OSes plus TSan; smoke green; README documents the API
 
-**Plans**: TBD
+**Plans**: 2/2 complete (01-01: API + runner + grid core pass; 01-02: GUI repairs + collection menu + script suite)
 
-## Notes
+## Progress
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 1. Automation API & UX Repairs | 2/2 | Complete | 2026-10-11 |
 
 - Owner instruction: GSD auto-mode, always take the recommended answer (UAT gate auto-accepted and recorded).
 - Root-cause notes from the owner's report: grid invisible (drawn before the background fill overwrites it); UI lockup on New Collection (the leave-confirm modal is never closed after acting on its answer - reported as a crash); Save As was ambiguous between tab and collection scope.

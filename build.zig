@@ -33,6 +33,7 @@ const app_sources = [_][]const u8{
     "app/ui_logic.cpp",
     "app/options.cpp",
     "app/configs.cpp",
+    "app/editor.cpp",
 };
 
 const test_sources = [_][]const u8{
@@ -40,6 +41,7 @@ const test_sources = [_][]const u8{
     "test_app.cpp",
     "test_options.cpp",
     "test_configs.cpp",
+    "test_editor.cpp",
     "test_vec2.cpp",
     "test_field.cpp",
     "test_rk_order.cpp",

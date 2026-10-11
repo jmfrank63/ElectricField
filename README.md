@@ -32,6 +32,14 @@ preserved on the `master` branch.
 - Field lines per unit charge, equipotentials with an adjustable potential interval, a thread count and
   all draw colours/thicknesses in **View ▸ Options…**; the settings persist between runs and draw changes
   repaint the open tabs immediately.
+- **Your own charge configurations**: arrange charges in the tab and store them with **File ▸ Save As…
+  (Ctrl+S)** in `configurations.ini` in the per-user config directory; the New chooser lists them next to
+  the built-ins, plus an "Empty Configuration" starting point.
+- **Charge editor**: click a charge to select it, drag it with the mouse, nudge it with the arrow keys
+  (Shift = bigger steps) or type exact numbers into the editor panel's value/x/y fields with their -/+
+  buttons. Double-click empty canvas adds a charge, Delete removes the selected one. Charges move in
+  realtime; the drawn lines keep showing the previous calculation (the tab is marked *edited*) until you
+  press **Calculate (F5)** — with a per-tab integration method selector in the panel.
 - Export of the current configuration view to **PNG** and **SVG** (File ▸ Export), matching what is on screen.
 - Tabs can be closed while they compute; quitting mid-computation is safe. The computation is cancelled
   within a fraction of a second.

@@ -482,6 +482,53 @@ bool App::smokeExtras(std::string& report) {
   ui_.closeSerial = lastSerial();
   frames(2);
 
+  // Charge editor (v2): the full loop through the injected input queue - select, drag, add, delete, calculate.
+  ui_.openEmpty = true;
+  frames(2);
+  if (ws_.tabs().empty()) return fail("editor test: the empty configuration did not open");
+  const unsigned es = lastSerial();
+  frames(3);
+  ImGuiIO& eio = ImGui::GetIO();
+  const float cx = (ui_.canvasMin.x + ui_.canvasMax.x) * 0.5f, cy = (ui_.canvasMin.y + ui_.canvasMax.y) * 0.5f;
+  eio.AddMousePosEvent(cx, cy);
+  frames(2);
+  eio.AddMouseButtonEvent(0, true);
+  frames(1);
+  eio.AddMouseButtonEvent(0, false);
+  frames(2);
+  if (ws_.find(es)->selected != 0) return fail("editor: clicking the origin charge did not select it");
+  eio.AddMouseButtonEvent(0, true);
+  frames(1);
+  eio.AddMousePosEvent(cx + 60.f, cy);
+  frames(2);
+  eio.AddMouseButtonEvent(0, false);
+  frames(2);
+  if (ws_.find(es)->field.charges[0].position.X < 0.4) return fail("editor: dragging did not move the charge");
+  eio.AddMousePosEvent(cx + 150.f, cy - 80.f);
+  frames(2);
+  eio.AddMouseButtonEvent(0, true);
+  frames(1);
+  eio.AddMouseButtonEvent(0, false);
+  frames(2);
+  eio.AddMouseButtonEvent(0, true);
+  frames(1);
+  eio.AddMouseButtonEvent(0, false);
+  frames(3);
+  if (ws_.find(es)->field.charges.size() != 2)
+    return fail("editor: double-click did not add a charge (count=" + std::to_string(ws_.find(es)->field.charges.size()) +
+                " canvas=(" + std::to_string(ui_.canvasMin.x) + "," + std::to_string(ui_.canvasMin.y) + ")-(" +
+                std::to_string(ui_.canvasMax.x) + "," + std::to_string(ui_.canvasMax.y) + ") click=(" + std::to_string(cx + 150.f) + "," +
+                std::to_string(cy - 80.f) + ") selected=" + std::to_string(ws_.find(es)->selected) + ")");
+  chord(0, ImGuiKey_Delete);
+  if (ws_.find(es)->field.charges.size() != 1) return fail("editor: Delete did not remove the added charge");
+  if (!ws_.find(es)->stale) return fail("editor: edits did not mark the tab stale");
+  chord(0, ImGuiKey_F5);
+  if (!pumpUntilDone(es, 60000)) return fail("editor: calculate did not finish");
+  if (ws_.find(es)->state != efapp::TabState::Done || ws_.find(es)->scene.electric.empty() || ws_.find(es)->stale)
+    return fail("editor: calculate did not produce fresh lines");
+  ui_.closeSerial = es;
+  frames(2);
+
   // Idle loop: with one finished tab and no input the loop must block (<= ~4 frames/s + the settle frames), not spin.
   SDL_SetWindowSize(window_, 1024, 824);
   SDL_SyncWindow(window_);
@@ -510,7 +557,7 @@ bool App::smokeExtras(std::string& report) {
   if (quitMs > 1000) return fail("closeAll with 3 busy sessions took " + std::to_string(quitMs) + " ms");
   frames(2);
   if (ws_.opened() - openedBase != ws_.closed() - closedBase) return fail("tab leak: opened != closed");
-  report = "keys=ok middle_click=ok failed_tab=ok overlay=ok options=ok user_configs=ok idle_frames=" + std::to_string(idleFrames) + "/1.3s quit_ms=" + std::to_string(quitMs);
+  report = "keys=ok middle_click=ok failed_tab=ok overlay=ok options=ok user_configs=ok editor=ok idle_frames=" + std::to_string(idleFrames) + "/1.3s quit_ms=" + std::to_string(quitMs);
   return true;
 }
 
@@ -520,6 +567,10 @@ int App::runSmoke() {
   // Software frames of a finished scene take ~100 ms, so a key held for 3 injected frames outlasts ImGui key-repeat delay (0.275 s) and
   // Down moves the chooser row several times. Injected chords must be a single press: switch repeat off for the whole smoke run.
   ImGui::GetIO().KeyRepeatDelay = 1e9f;
+  // Same idea for double-clicks (the editor's add-by-double-click): two injected clicks span several 100 ms frames, far beyond the
+  // 0.3 s real window, so widen the window for the smoke run (the assert requires SingleClickDelay > DoubleClickTime).
+  ImGui::GetIO().MouseDoubleClickTime = 10.0f;
+  ImGui::GetIO().MouseSingleClickDelay = 11.0f;
   // 1) a busy tab is opened and closed again within the first two frames (cancel path).
   ui_.openPresetNow = 5;  // Four Charges Same Sign
   frames(2);

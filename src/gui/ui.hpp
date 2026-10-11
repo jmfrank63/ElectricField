@@ -32,6 +32,7 @@ struct UiState {
   int openPresetNow = -1;    // File > New > <preset>
   int openUserConfig = -1;   // chooser: index into userConfigs (v2 CFG-02)
   bool openEmpty = false;    // chooser: Empty Configuration (v2 CFG-02)
+  bool calculateActive = false;  // F5 / panel button (v2 CALC-01); consumed by drawUi via Workspace::calculate
   int exportRequest = 0;     // File > Export: 1 = PNG..., 2 = SVG... (consumed by App::frame, D-06)
   unsigned closeSerial = 0;  // request to close a tab (0 = none)
   // state carried between frames
@@ -46,6 +47,7 @@ struct UiState {
   std::optional<efapp::UserConfig> saveAsApply;   // validated result consumed by App::frame
   unsigned activeSerial = 0;   // selected tab during the last frame
   unsigned selectSerial = 0;   // programmatic selection request (new tab)
+  bool canvasDrag = false;     // v2 editor: a charge drag that started on the canvas is in progress
   std::string linkNote;        // About: "Could not open a browser..." (cleared when the modal closes)
   // outputs for the loop / tests
   std::string wantedTitle;     // SDL window title for this frame

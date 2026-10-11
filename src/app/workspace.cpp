@@ -78,6 +78,27 @@ unsigned Workspace::spawn(std::size_t presetIndex, const unsigned number, const 
   return serial;
 }
 
+bool Workspace::calculate(const unsigned serial) {
+  Tab* t = find(serial);
+  if (!t || t->session) return false;  // unknown serial or still computing (v2 D-03)
+  t->expectedLines = ef::expectedLineCount(t->field, t->params);
+  t->scene = ef::buildScene(t->field, ef::FieldResult{});  // parity: a fresh computation starts charges-only
+  t->linesReceived = 0;
+  t->state = TabState::Computing;
+  t->stale = false;
+  try {
+    t->session = factory_(t->field, t->params);
+    if (!t->session) throw std::runtime_error("no session");
+  } catch (const std::exception& e) {
+    t->state = TabState::Failed;
+    t->error = e.what();
+  } catch (...) {
+    t->state = TabState::Failed;
+    t->error = "unknown error while starting the computation";
+  }
+  return true;
+}
+
 bool Workspace::close(unsigned serial) {
   const auto it = std::find_if(tabs_.begin(), tabs_.end(), [&](const auto& t) { return t->serial == serial; });
   if (it == tabs_.end()) return false;

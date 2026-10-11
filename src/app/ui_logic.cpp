@@ -92,6 +92,18 @@ ef::DrawStyle scaledStyle(const ef::DrawStyle& base, float k) {
   return s;
 }
 
+ef::Vec2 worldFromCanvas(const ef::View& v, const double originX, const double originY, const double screenX, const double screenY) {
+  const double ppu = v.pixelsPerUnit > 0 ? v.pixelsPerUnit : 1.0;
+  return {(screenX - originX - static_cast<double>(v.widthPx) * 0.5) / ppu,
+          (static_cast<double>(v.heightPx) * 0.5 - (screenY - originY)) / ppu};
+}
+
+ef::Vec2 canvasFromWorld(const ef::View& v, const double originX, const double originY, const ef::Vec2& world) {
+  const double ppu = v.pixelsPerUnit > 0 ? v.pixelsPerUnit : 1.0;
+  return {originX + static_cast<double>(v.widthPx) * 0.5 + world.X * ppu,
+          originY + static_cast<double>(v.heightPx) * 0.5 - world.Y * ppu};
+}
+
 ef::DrawStyle scaledStyle(float k) { return scaledStyle(ef::DrawStyle{}, k); }
 
 }  // namespace efapp

@@ -44,6 +44,11 @@ ef::DrawStyle scaledStyle(float k);
 // Scales the given (user, Phase 4) draw style by k; colours unchanged.
 ef::DrawStyle scaledStyle(const ef::DrawStyle& base, float k);
 
+// v2 editor: canvas (device px) <-> world conversions. The world origin sits at the canvas centre, y up;
+// (originX, originY) is the canvas top-left corner in the same coordinate space as screenX/screenY.
+ef::Vec2 worldFromCanvas(const ef::View& v, double originX, double originY, double screenX, double screenY);
+ef::Vec2 canvasFromWorld(const ef::View& v, double originX, double originY, const ef::Vec2& world);
+
 // UI-SPEC "Main loop (D-12)": idle => block in SDL_WaitEventTimeout(kIdleWaitMs); any session computing => poll + render every frame;
 // at least kSettleFrames rendered frames after every input event or state change (ImGui needs them for hover/focus/popup
 // settling); a modal opening or closing arms kModalFadeFrames (ImGui fades the dim layer in over ~0.2 s).

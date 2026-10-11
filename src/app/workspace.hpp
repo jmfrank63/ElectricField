@@ -47,6 +47,8 @@ struct Tab {
   std::string error;              // Failed only
   ef::FieldScene scene;           // charges from the start; lines after Done (world units: never rebuilt on resize / scale change)
   std::unique_ptr<ISession> session;  // null once Done/Failed
+  int selected = -1;              // editor (v2): index into field.charges, -1 = nothing selected
+  bool stale = false;             // editor (v2): charges edited after the drawn lines were computed
 };
 
 class Workspace {
@@ -65,6 +67,9 @@ class Workspace {
   // The "Empty Configuration" entry: a single +1 charge at the origin, immediately computable — the Phase 2
   // editor's starting point.
   unsigned openEmpty();
+  // Charge editor (v2 CALC-01): restarts a Done/Failed tab from its CURRENT charges and params (the same
+  // factory and Failed-tab paths as open()). False for unknown serials and tabs that are still computing.
+  bool calculate(unsigned serial);
   // Options dialog (Phase 4): new tabs open with these params; tabs already open keep the params they were opened with.
   void setDefaults(const ef::ComputeParams& p) { defaults_ = p; }
   // Cancels and destroys the session (RAII join) and removes the tab. False if the serial is unknown.

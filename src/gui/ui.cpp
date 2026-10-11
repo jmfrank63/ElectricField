@@ -4,11 +4,14 @@
 #include <cfloat>
 #include <cmath>
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
 #include <cstdio>
 #include <cstdlib>
 
 #include "app/ui_logic.hpp"
+#include "app/configs.hpp"
+#include "app/editor.hpp"
 #include "ef/presets.hpp"
 #include "render/imgui_painter.hpp"
 
@@ -19,6 +22,8 @@ namespace {
 constexpr const char* kBlogUrl = "https://compphys.go.ro/electric-field-lines/";
 constexpr const char* kRepoUrl = "https://github.com/jmfrank63/ElectricField";
 constexpr const char* kUpstreamUrl = "https://github.com/aromanro/ElectricField";
+constexpr float kEditorPanelWidth = 230.f;    // v2 editor panel, logical px
+constexpr double kEditorHitRadius = 0.30;     // world units: charge radius 0.25 + slack (D-06)
 
 ImU32 rgba(int r, int g, int b, int a = 255) { return IM_COL32(r, g, b, a); }
 
@@ -72,6 +77,41 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   }
   ui.canvasMin = p;
   ui.canvasMax = ImVec2(p.x + static_cast<float>(view.widthPx), p.y + static_cast<float>(view.heightPx));
+
+  // Charge editor (v2, EDIT-01..04): all mutations go through efapp::editor, nothing recomputes implicitly.
+  const bool canEdit = t.session == nullptr;
+  const ImGuiIO& io = ImGui::GetIO();
+  const ef::Vec2 mouseWorld = efapp::worldFromCanvas(view, p.x, p.y, io.MousePos.x, io.MousePos.y);
+  if (canEdit && hovered) {
+    if (ImGui::IsMouseDoubleClicked(0)) {
+      if (efapp::editor::hitCharge(t.field, mouseWorld, kEditorHitRadius) < 0) efapp::editor::addCharge(t, mouseWorld, 1);
+    } else if (ImGui::IsMouseClicked(0)) {
+      t.selected = efapp::editor::hitCharge(t.field, mouseWorld, kEditorHitRadius);
+    }
+  }
+  // A drag that started on the canvas keeps moving the charge even past the edge until the button is released.
+  if (canEdit && t.selected >= 0 && ImGui::IsMouseDragging(0) && (hovered || ui.canvasDrag)) {
+    efapp::editor::moveCharge(t, static_cast<std::size_t>(t.selected), mouseWorld);
+    ui.canvasDrag = ImGui::IsMouseDown(0);
+  } else {
+    ui.canvasDrag = false;
+  }
+  if (canEdit && t.selected >= 0 && (hovered || ImGui::IsItemFocused())) {
+    const double step = ImGui::IsKeyDown(ImGuiMod_Shift) ? 0.5 : 0.1;  // EDIT-02
+    ef::Vec2 d{0, 0};
+    if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow, true)) d.X -= step;
+    if (ImGui::IsKeyPressed(ImGuiKey_RightArrow, true)) d.X += step;
+    if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, true)) d.Y += step;
+    if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, true)) d.Y -= step;
+    if (d.X != 0 || d.Y != 0) efapp::editor::stepSelected(t, d);
+    if (ImGui::IsKeyPressed(ImGuiKey_Delete)) efapp::editor::removeSelected(t);  // EDIT-04: keeps the last charge
+  }
+
+  // Selection ring (v2): over the drawn scene, only when the charge exists.
+  if (t.state != efapp::TabState::Computing && t.selected >= 0 && static_cast<std::size_t>(t.selected) < t.scene.charges.size()) {
+    const ef::Vec2 c = efapp::canvasFromWorld(view, p.x, p.y, t.scene.charges[static_cast<std::size_t>(t.selected)].position);
+    dl->AddCircle(ImVec2(static_cast<float>(c.X), static_cast<float>(c.Y)), style.chargeRadiusPx + 3.f * env.k, rgba(0x42, 0x96, 0xFA), 0, 1.5f * env.k);
+  }
 
   if (t.state == efapp::TabState::Computing) {
     drawBusyOverlay(dl, ui.canvasMin, ui.canvasMax, t, env.k, ui);
@@ -439,6 +479,112 @@ void optionsModal(UiState& ui, const UiEnv& env) {
   ImGui::EndPopup();
 }
 
+// Press-and-hold repeat for the panel's -/+ buttons (v2 EDIT-03): one step on click, then steps every
+// 60 ms after a 300 ms delay, while the button is held.
+bool stepButton(const char* label) {
+  const bool clicked = ImGui::Button(label, ImVec2(22.f, 0.f));
+  static std::unordered_map<ImGuiID, double> s_nextRepeat;
+  const ImGuiID id = ImGui::GetID(label);
+  if (ImGui::IsItemActive()) {
+    const double now = ImGui::GetTime();
+    if (clicked) {
+      s_nextRepeat[id] = now + 0.30;
+      return true;
+    }
+    const auto it = s_nextRepeat.find(id);
+    if (it != s_nextRepeat.end() && now >= it->second) {
+      it->second = now + 0.06;
+      return true;
+    }
+  } else {
+    s_nextRepeat.erase(id);
+  }
+  return clicked;
+}
+
+// The editor panel (v2, D-05): selection fields with up/down buttons, Remove, Method, Calculate, stale hint.
+void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
+  ImGui::BeginChild("##editor", ImVec2(kEditorPanelWidth * env.k, 0.f), ImGuiChildFlags_None);
+  const bool canEdit = t.session == nullptr;
+  ImGui::TextUnformatted("Charge editor");
+  ImGui::Separator();
+  ImGui::BeginDisabled(!canEdit);
+
+  const bool have = t.selected >= 0 && static_cast<std::size_t>(t.selected) < t.field.charges.size();
+  if (!have) {
+    ImGui::PushTextWrapPos(0.f);
+    ImGui::TextDisabled("Click a charge to select it. Double-click empty canvas to add one. Arrow keys nudge, Delete removes.");
+    ImGui::PopTextWrapPos();
+  } else {
+    const std::size_t at = static_cast<std::size_t>(t.selected);
+    ef::Charge& c = t.field.charges[at];
+
+    int value = c.charge;
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2 * (22.f + 8.f * env.k));
+    if (ImGui::InputInt("##value", &value, 0, 0)) efapp::editor::stepValue(t, value - c.charge);  // realtime per keystroke
+    ImGui::SameLine(0.f, 8.f * env.k);
+    if (stepButton("##value-")) efapp::editor::stepValue(t, -1);
+    ImGui::SameLine(0.f, 4.f * env.k);
+    if (stepButton("##value+")) efapp::editor::stepValue(t, +1);
+    ImGui::SameLine(0.f, 8.f * env.k);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Value");
+
+    double x = c.position.X;
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2 * (22.f + 8.f * env.k));
+    if (ImGui::InputDouble("##x", &x, 0.0, 0.0, "%.3f")) efapp::editor::moveCharge(t, at, ef::Vec2{x, c.position.Y});
+    ImGui::SameLine(0.f, 8.f * env.k);
+    if (stepButton("##x-")) efapp::editor::stepSelected(t, ef::Vec2{-0.1, 0});
+    ImGui::SameLine(0.f, 4.f * env.k);
+    if (stepButton("##x+")) efapp::editor::stepSelected(t, ef::Vec2{0.1, 0});
+    ImGui::SameLine(0.f, 8.f * env.k);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("X");
+
+    double y = c.position.Y;
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2 * (22.f + 8.f * env.k));
+    if (ImGui::InputDouble("##y", &y, 0.0, 0.0, "%.3f")) efapp::editor::moveCharge(t, at, ef::Vec2{c.position.X, y});
+    ImGui::SameLine(0.f, 8.f * env.k);
+    if (stepButton("##y-")) efapp::editor::stepSelected(t, ef::Vec2{0, -0.1});
+    ImGui::SameLine(0.f, 4.f * env.k);
+    if (stepButton("##y+")) efapp::editor::stepSelected(t, ef::Vec2{0, 0.1});
+    ImGui::SameLine(0.f, 8.f * env.k);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Y");
+
+    ImGui::BeginDisabled(t.field.charges.size() <= 1);  // EDIT-04: at least one charge remains
+    if (ImGui::Button("Remove charge")) efapp::editor::removeSelected(t);
+    ImGui::EndDisabled();
+  }
+
+  ImGui::Separator();
+  const int mIdx = static_cast<int>(t.params.method);
+  const std::string mCurrent(ef::kMethods[static_cast<std::size_t>(mIdx)].display);
+  ImGui::SetNextItemWidth(-FLT_MIN);
+  if (ImGui::BeginCombo("Method", mCurrent.c_str())) {
+    for (std::size_t i = 0; i < ef::kMethodCount; ++i) {
+      const std::string label(ef::kMethods[i].display);
+      if (ImGui::Selectable(label.c_str(), static_cast<int>(i) == mIdx) && static_cast<int>(i) != mIdx) {
+        t.params.method = ef::kMethods[i].method;  // CALC-02: applies at the next Calculate
+        t.stale = true;
+      }
+      if (static_cast<int>(i) == mIdx) ImGui::SetItemDefaultFocus();
+    }
+    ImGui::EndCombo();
+  }
+  if (ImGui::Button("Calculate (F5)", ImVec2(-FLT_MIN, 0.f))) ui.calculateActive = true;
+
+  if (t.stale && t.state == efapp::TabState::Done) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.72f, 0.45f, 0.f, 1.f));
+    ImGui::PushTextWrapPos(0.f);
+    ImGui::TextUnformatted("Edited - the lines show the previous calculation. Press Calculate (F5).");
+    ImGui::PopTextWrapPos();
+    ImGui::PopStyleColor();
+  }
+  ImGui::EndDisabled();
+  ImGui::EndChild();
+}
+
 }  // namespace
 
 ImGuiStyle makeBaseStyle() {
@@ -500,6 +646,7 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_N)) ui.openChooser = true;
     if (hasTabs && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_W)) ui.closeSerial = ui.activeSerial;
     if (hasTabs && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S)) ui.openSaveAs = true;
+    if (hasTabs && ImGui::Shortcut(ImGuiKey_F5)) ui.calculateActive = true;  // v2 CALC-01
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Q)) ui.requestQuit = true;
   }
 
@@ -557,6 +704,10 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
     ui.selectSerial = ws.openEmpty();
     ui.openEmpty = false;
   }
+  if (ui.calculateActive) {  // v2 CALC-01: explicit recalculation of the active tab
+    ws.calculate(ui.activeSerial);
+    ui.calculateActive = false;
+  }
 
   if (!ws.tabs().empty()) {
     const ImGuiTabBarFlags tbf = ImGuiTabBarFlags_Reorderable | ImGuiTabBarFlags_AutoSelectNewTabs | ImGuiTabBarFlags_FittingPolicyScroll |
@@ -573,7 +724,14 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
           seenActive = t.serial;
           ui.tabMin = ImGui::GetItemRectMin();
           ui.tabMax = ImGui::GetItemRectMax();
+          // v2 editor: canvas (left) + editor panel (right, D-05)
+          const float panelW = kEditorPanelWidth * env.k;
+          const ImVec2 avail = ImGui::GetContentRegionAvail();
+          ImGui::BeginChild("##canvasarea", ImVec2(std::max(1.f, avail.x - panelW), 0.f), ImGuiChildFlags_None);
           drawCanvas(t, ui, env);
+          ImGui::EndChild();
+          ImGui::SameLine(0.f, 0.f);
+          drawEditorPanel(t, ui, env);
           ImGui::EndTabItem();
         }
         if (!open) toClose.push_back(t.serial);

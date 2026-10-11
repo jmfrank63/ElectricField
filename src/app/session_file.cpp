@@ -29,15 +29,17 @@ bool parseTabHeader(const std::string& line, std::string& title) {
 
 }  // namespace
 
-std::string serializeSession(const std::vector<SavedTab>& tabs) {
+std::string serializeSession(const std::vector<SavedTab>& tabs, const std::string& collection) {
   std::ostringstream os;
   os << "# Electric Field open tabs\n";
+  os << "collection = " << collection << '\n';
   for (const SavedTab& t : tabs) {
     std::string title = t.title;
     title.erase(std::remove(title.begin(), title.end(), '"'), title.end());
     os << "\n[tab \"" << title << "\"]\n";
     os << "preset = " << (t.preset == kNoPreset ? std::string("none") : std::to_string(t.preset)) << '\n';
     os << "method = " << (t.method.empty() ? std::string("euler") : t.method) << '\n';
+    if (t.autoRecalc) os << "autocalc = true\n";
     for (const ef::PresetCharge& c : t.charges) {
       char x[32], y[32];
       std::snprintf(x, sizeof(x), "%.10g", c.x);
@@ -80,7 +82,11 @@ ParsedSession parseSession(const std::string& text) {
     const std::string key = ini::trim(t.substr(0, eq));
     const std::string value = ini::trim(t.substr(eq + 1));
 
-    if (key == "preset") {
+    if (key == "collection") {
+      if (!value.empty()) r.collection = value;  // v2.2: which collection the tabs belong to
+    } else if (key == "autocalc") {
+      if (inTab && ini::toLower(value) == "true") cur.autoRecalc = true;
+    } else if (key == "preset") {
       if (!inTab) continue;
       if (ini::toLower(value) == "none")
         cur.preset = kNoPreset;
@@ -108,13 +114,13 @@ ParsedSession parseSession(const std::string& text) {
   return r;
 }
 
-bool saveSession(const std::filesystem::path& file, const std::vector<SavedTab>& tabs, std::string& error) {
+bool saveSession(const std::filesystem::path& file, const std::vector<SavedTab>& tabs, const std::string& collection, std::string& error) {
   std::ofstream out(file, std::ios::binary | std::ios::trunc);
   if (!out) {
     error = "Could not write the session file.";
     return false;
   }
-  out << serializeSession(tabs);
+  out << serializeSession(tabs, collection);
   out.flush();
   if (!out) {
     error = "Could not write the session file.";
@@ -123,10 +129,24 @@ bool saveSession(const std::filesystem::path& file, const std::vector<SavedTab>&
   return true;
 }
 
+bool saveSession(const std::filesystem::path& file, const std::vector<SavedTab>& tabs, std::string& error) {
+  return saveSession(file, tabs, "Original", error);
+}
+
 std::vector<SavedTab> loadSession(const std::filesystem::path& file) {
   std::string text;
   if (!readFile(file, text)) return {};
   return parseSession(text).value;
+}
+
+SavedSession loadSessionFull(const std::filesystem::path& file) {
+  SavedSession s;
+  std::string text;
+  if (!readFile(file, text)) return s;
+  const ParsedSession r = parseSession(text);
+  s.collection = r.collection;
+  s.tabs = r.value;
+  return s;
 }
 
 }  // namespace efapp

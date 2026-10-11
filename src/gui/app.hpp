@@ -58,6 +58,13 @@ class App {
   void exportStep();
   void runExport(const std::string& path);
   void exportFailed(const std::string& what);
+  // Collections (v2.2): switch / create; the session is saved with the collection tag on both paths, and
+  // the unsaved-changes prompt (leaveConfirmed_) gates the actual switch.
+  std::filesystem::path collectionFile(const std::string& name) const;
+  void refreshCollections();
+  void switchCollection(const std::string& name);
+  void createCollection(const std::string& name);
+  void saveSessionNow();
 
   AppOptions opt_;
   SDL_Window* window_ = nullptr;
@@ -77,6 +84,11 @@ class App {
   std::filesystem::path configsPath_;           // configurations.ini; empty in headless modes
   std::filesystem::path configDir_;             // the user config directory (v2.1 SES-03: Help > Open Configuration Folder)
   std::filesystem::path sessionPath_;           // session.ini (v2.1 SES-01); empty in headless modes
+  std::filesystem::path collectionsDir_;        // Collections\ (v2.2 COL-01); empty in headless modes
+  std::string currentCollection_ = "Original";  // v2.2 COL: the collection being worked on
+  std::vector<std::string> collections_;        // known collection names (switcher)
+  bool leaveConfirmed_ = false;                 // v2.2: the unsaved-changes prompt was answered with "leave"
+  std::string pendingCollection_;               // v2.2: collection to switch to once confirmed
   // Export state (Phase 4). The SDL save-dialog callback may run on any thread (portald/zenity on Linux), so the
   // chosen path crosses into the UI thread behind a mutex and is exported at the next frame boundary.
   std::mutex exportMutex_;

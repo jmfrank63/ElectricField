@@ -60,6 +60,36 @@ void drawBusyOverlay(ImDrawList* dl, ImVec2 canvasMin, ImVec2 canvasMax, const e
   dl->PopClipRect();
 }
 
+// Continuous calculation (v2.2 CALC-03): re-arms the debounced recompute deadline after an edit.
+void armAutoRecalc(efapp::Tab& t) {
+  if (t.autoRecalc && t.stale) t.pendingRecalcAt = ImGui::GetTime() + efapp::kAutoRecalcDelay;
+}
+
+// v2.2 zoom/pan interaction state (UI thread only).
+bool uiCanvasPan = false;
+
+// v2.2 zoom/pan: wheel zooms at the cursor, right-drag pans; with no charge selected the arrow keys pan
+// the view instead of nudging a charge (EDIT-02 keeps nudging while a charge is selected).
+void viewControls(efapp::Tab& t, const ef::View& view, const ef::Vec2& mouseWorld, const bool hovered) {
+  const ImGuiIO& io = ImGui::GetIO();
+  if (hovered && io.MouseWheel != 0.f) efapp::editor::zoomAt(t, io.MouseWheel > 0.f ? 1.15 : 1.0 / 1.15, mouseWorld);
+  if (ImGui::IsMouseDragging(1) && (hovered || uiCanvasPan)) {
+    efapp::editor::pan(t, ef::Vec2{io.MouseDelta.x, io.MouseDelta.y}, view.pixelsPerUnit);
+    uiCanvasPan = ImGui::IsMouseDown(1);
+  } else {
+    uiCanvasPan = false;
+  }
+  if (t.selected < 0 && (hovered || ImGui::IsItemFocused())) {
+    const double stepPx = 20.0;
+    ef::Vec2 d{0, 0};
+    if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow, true)) d.X -= stepPx;
+    if (ImGui::IsKeyPressed(ImGuiKey_RightArrow, true)) d.X += stepPx;
+    if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, true)) d.Y -= stepPx;
+    if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, true)) d.Y += stepPx;
+    if (d.X != 0 || d.Y != 0) efapp::editor::pan(t, d, view.pixelsPerUnit);
+  }
+}
+
 void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   ImVec2 avail = ImGui::GetContentRegionAvail();
   avail.x = std::max(1.f, avail.x);
@@ -71,7 +101,9 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   const bool hovered = ImGui::IsItemHovered();
   ImDrawList* dl = ImGui::GetWindowDrawList();
 
-  const ef::View view = efapp::canvasView(avail.x, avail.y, env.k);
+  ef::View view = efapp::canvasView(avail.x, avail.y, env.k);
+  view.pixelsPerUnit *= t.zoom;  // v2.2 zoom
+  view.centre = t.centre;        // v2.2 pan
   const ef::DrawStyle style = efapp::scaledStyle(env.drawStyle, env.k);  // user draw options (Phase 4), scaled for HiDPI
   {
     efrender::ImGuiPainter painter(dl, p);
@@ -108,6 +140,10 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     if (d.X != 0 || d.Y != 0) efapp::editor::stepSelected(t, d);
     if (ImGui::IsKeyPressed(ImGuiKey_Delete)) efapp::editor::removeSelected(t);  // EDIT-04: keeps the last charge
   }
+  // EDIT-05/CALC-03: continuous calculation re-arms the (debounced) recompute deadline after every edit.
+  armAutoRecalc(t);
+  // v2.2 zoom/pan: wheel + right-drag + (unselected) arrow keys. View-only: never stale, works while computing.
+  viewControls(t, view, mouseWorld, hovered);
 
   // Selection ring (v2): over the drawn scene, only when the charge exists.
   if (t.state != efapp::TabState::Computing && t.selected >= 0 && static_cast<std::size_t>(t.selected) < t.scene.charges.size()) {
@@ -218,6 +254,9 @@ void aboutModal(UiState& ui, const UiEnv& env) {
   ImGui::EndPopup();
 }
 
+// v2.2 COL-02: the chooser lists the configurations of the CURRENT COLLECTION in file order, then
+// "Empty Configuration" (a new/empty collection shows just that row). Keyboard behaviour is unchanged:
+// Up/Down move the selection, Enter/double-click open, Esc closes.
 void chooserModal(UiState& ui, const UiEnv& env) {
   const ImGuiViewport* vp = ImGui::GetMainViewport();
   if (ui.openChooser) {
@@ -233,21 +272,8 @@ void chooserModal(UiState& ui, const UiEnv& env) {
   ui.chooserVisible = open;
   if (!open) return;
 
-  // Row order (v2 CFG-02): the 9 built-ins, then - when any exist - a separator and the user configurations
-  // in file order, then "Empty Configuration". The separator is not a Selectable, so keyboard focus skips it.
-  const auto& presets = ef::presets();
-  const std::size_t presetCount = presets.size();
-  const std::size_t userCount = ui.userConfigs.size();
-  const bool hasUsers = userCount > 0;
-  const std::size_t rowCount = presetCount + (hasUsers ? 1 + userCount : 0) + 1;
-  // kind: -1 = separator, 0 = preset, 1 = user configuration, 2 = empty configuration
-  auto rowKind = [&](std::size_t i) {
-    if (i < presetCount) return 0;
-    if (hasUsers && i == presetCount) return -1;  // separator
-    if (hasUsers && i > presetCount && i <= presetCount + userCount) return 1;
-    return 2;  // "Empty Configuration" (always the last row)
-  };
-  auto userIndex = [&](std::size_t i) { return static_cast<int>(i - presetCount - 1); };
+  const std::size_t cfgCount = ui.userConfigs.size();
+  const std::size_t rowCount = cfgCount + 1;  // configurations of the collection, then "Empty Configuration"
 
   ImGui::TextUnformatted("Choose a charge configuration:");
   ImGui::Dummy(ImVec2(0.f, 4.f * env.k));
@@ -260,19 +286,8 @@ void chooserModal(UiState& ui, const UiEnv& env) {
   if (listOpen) {
     ImGui::PushStyleVarY(ImGuiStyleVar_ItemSpacing, 0.f);
     for (std::size_t i = 0; i < rowCount; ++i) {
-      const int kind = rowKind(i);
-      if (kind < 0) {
-        ImGui::Separator();
-        ImGui::TextDisabled("User configurations");
-        continue;
-      }
-      std::string label;
-      if (kind == 0)
-        label = std::string(presets[i].displayName);
-      else if (kind == 1)
-        label = ui.userConfigs[static_cast<std::size_t>(userIndex(i))].name;
-      else
-        label = "Empty Configuration";
+      const bool isCfg = i < cfgCount;
+      const std::string label = isCfg ? ui.userConfigs[i].name : std::string("Empty Configuration");
       if (ImGui::Selectable(label.c_str(), ui.chooserSel == static_cast<int>(i), ImGuiSelectableFlags_AllowDoubleClick, ImVec2(0.f, rowH))) {
         ui.chooserSel = static_cast<int>(i);
         if (ImGui::IsMouseDoubleClicked(0) || ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter)) openSelected = true;
@@ -297,11 +312,8 @@ void chooserModal(UiState& ui, const UiEnv& env) {
   if (ImGui::IsKeyPressed(ImGuiKey_Escape)) close = true;
 
   if (openSelected && ui.chooserSel >= 0 && static_cast<std::size_t>(ui.chooserSel) < rowCount) {
-    const int kind = rowKind(static_cast<std::size_t>(ui.chooserSel));
-    if (kind == 0)
-      ui.openPresetNow = ui.chooserSel;
-    else if (kind == 1)
-      ui.openUserConfig = userIndex(static_cast<std::size_t>(ui.chooserSel));
+    if (static_cast<std::size_t>(ui.chooserSel) < cfgCount)
+      ui.openUserConfig = ui.chooserSel;
     else
       ui.openEmpty = true;
     ImGui::CloseCurrentPopup();
@@ -311,9 +323,77 @@ void chooserModal(UiState& ui, const UiEnv& env) {
   ImGui::EndPopup();
 }
 
-// File > Save As (v2 CFG-03, D-07): name field prefilled from the active tab, inline errors for an empty or
-// reserved name, and an overwrite confirmation for an existing user configuration. The actual file write is
-// the App's job (saveAsApply).
+// File > New Collection (v2.2 COL-02): a name is all it takes - the collection file is created empty and
+// becomes current (the App consumes newCollectionApply).
+void newCollectionModal(UiState& ui, const UiEnv& env) {
+  const ImGuiViewport* vp = ImGui::GetMainViewport();
+  if (ui.newCollectionOpen) {
+    ImGui::OpenPopup("New Collection##newcol");
+    ui.newCollectionOpen = false;
+    ui.newCollectionBuf[0] = '\0';
+  }
+  ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+  ImGui::SetNextWindowSizeConstraints(ImVec2(360.f * env.k, 0.f), ImVec2(520.f * env.k, FLT_MAX));
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.f * env.k, 16.f * env.k));
+  const bool open = ImGui::BeginPopupModal("New Collection##newcol", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
+  ImGui::PopStyleVar();
+  ui.newCollectionVisible = open;
+  if (!open) return;
+
+  ImGui::TextUnformatted("Name of the new collection:");
+  ImGui::Dummy(ImVec2(0.f, 4.f * env.k));
+  ImGui::InputText("##colname", ui.newCollectionBuf, sizeof(ui.newCollectionBuf));
+  ImGui::Dummy(ImVec2(0.f, 8.f * env.k));
+
+  const ImGuiStyle& st = ImGui::GetStyle();
+  const float w1 = ImGui::CalcTextSize("Create").x + 2 * st.FramePadding.x;
+  const float w2 = ImGui::CalcTextSize("Cancel").x + 2 * st.FramePadding.x;
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - (w1 + 8.f * env.k + w2));
+  bool close = false;
+  if (ImGui::Button("Create")) {
+    const std::string name = efapp::ini::trim(std::string(ui.newCollectionBuf));
+    if (!name.empty()) {
+      ui.newCollectionApply = name;
+      close = true;
+    }
+  }
+  ImGui::SetItemDefaultFocus();
+  ImGui::SameLine(0.f, 8.f * env.k);
+  if (ImGui::Button("Cancel")) close = true;
+  if (ImGui::IsKeyPressed(ImGuiKey_Escape)) close = true;
+  if (close) ImGui::CloseCurrentPopup();
+  ImGui::EndPopup();
+}
+
+// v2.2: the unsaved-changes prompt shown before quitting or switching collections. The App owns the
+// pending action; the modal only reports the answer through leaveDecision.
+void leaveConfirmModal(UiState& ui, const UiEnv& env) {
+  const ImGuiViewport* vp = ImGui::GetMainViewport();
+  if (ui.openLeaveConfirm) {
+    ImGui::OpenPopup("Unsaved changes##leave");
+    ui.openLeaveConfirm = false;
+  }
+  ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.f * env.k, 16.f * env.k));
+  const bool open = ImGui::BeginPopupModal("Unsaved changes##leave", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
+  ImGui::PopStyleVar();
+  ui.leaveConfirmVisible = open;
+  if (!open) return;
+  ImGui::PushTextWrapPos(280.f * env.k);
+  ImGui::TextWrapped("%s", ui.leaveText.c_str());
+  ImGui::PopTextWrapPos();
+  ImGui::Dummy(ImVec2(0.f, 8.f * env.k));
+
+  const ImGuiStyle& st = ImGui::GetStyle();
+  const float w1 = ImGui::CalcTextSize(ui.leaveButton.c_str()).x + 2 * st.FramePadding.x;
+  const float w2 = ImGui::CalcTextSize("Cancel").x + 2 * st.FramePadding.x;
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - (w1 + 8.f * env.k + w2));
+  if (ImGui::Button(ui.leaveButton.c_str())) ui.leaveDecision = 1;
+  ImGui::SetItemDefaultFocus();
+  ImGui::SameLine(0.f, 8.f * env.k);
+  if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) ui.leaveDecision = 2;
+  ImGui::EndPopup();
+}
 void saveAsModal(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
   const ImGuiViewport* vp = ImGui::GetMainViewport();
   if (ui.openSaveAs) {
@@ -373,6 +453,7 @@ void saveAsModal(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
     else if (efapp::findUserConfig(ui.userConfigs, candidate.name) >= 0)
       ImGui::OpenPopup("Overwrite?##saveas");
     else {
+      ui.saveAsSerial = ui.activeSerial;
       ui.saveAsApply = candidate;
       close = true;
     }
@@ -391,6 +472,7 @@ void saveAsModal(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
       candidate.name = ui.saveAsName;
       candidate.charges.reserve(t->field.charges.size());
       for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::PresetCharge{c.charge, c.position.X, c.position.Y});
+      ui.saveAsSerial = ui.activeSerial;
       ui.saveAsApply = candidate;
       ImGui::CloseCurrentPopup();
       close = true;
@@ -549,13 +631,27 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     if (!name.empty()) t.title = name;  // an empty name is ignored (TAB-01)
   }
 
-  // EDIT-06: add a charge with an explicit value and position, without the canvas.
-  if (ImGui::CollapsingHeader("Add charge")) {
-    ImGui::InputInt("Value##add", &ui.addValue, 0, 0);
-    ImGui::InputDouble("X##add", &ui.addX, 0.0, 0.0, "%.3f");
-    ImGui::InputDouble("Y##add", &ui.addY, 0.0, 0.0, "%.3f");
-    if (ImGui::Button("Add charge", ImVec2(-FLT_MIN, 0.f))) efapp::editor::addCharge(t, ef::Vec2{ui.addX, ui.addY}, ui.addValue);
+  // v2.2 zoom buttons (anchor = the current centre: pure zoom); Reset view restores zoom 1 / centre origin.
+  {
+    const float bw = (kEditorPanelWidth * env.k - 2 * ImGui::GetStyle().ItemSpacing.x) / 3.f;
+    if (ImGui::Button("Zoom -", ImVec2(bw, 0.f))) efapp::editor::zoomAt(t, 1.0 / 1.25, t.centre);
+    ImGui::SameLine();
+    if (ImGui::Button("Zoom +", ImVec2(bw, 0.f))) efapp::editor::zoomAt(t, 1.25, t.centre);
+    ImGui::SameLine();
+    if (ImGui::Button("Reset view", ImVec2(bw, 0.f))) efapp::editor::resetView(t);
   }
+
+  // EDIT-06/EDIT-08 (v2.2): always visible - enter value and position, press Add.
+  ImGui::Separator();
+  ImGui::TextUnformatted("New charge");
+  ImGui::InputInt("Value##add", &ui.addValue, 0, 0);
+  ImGui::InputDouble("X##add", &ui.addX, 0.0, 0.0, "%.3f");
+  ImGui::InputDouble("Y##add", &ui.addY, 0.0, 0.0, "%.3f");
+  if (ImGui::Button("Add", ImVec2(-FLT_MIN, 0.f))) {
+    efapp::editor::addCharge(t, ef::Vec2{ui.addX, ui.addY}, ui.addValue);
+    armAutoRecalc(t);
+  }
+  ImGui::Separator();
 
   const bool have = t.selected >= 0 && static_cast<std::size_t>(t.selected) < t.field.charges.size();
   if (!have) {
@@ -567,40 +663,76 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     ef::Charge& c = t.field.charges[at];
 
     int value = c.charge;
-    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2 * (22.f + 8.f * env.k));
-    if (ImGui::InputInt("##value", &value, 0, 0)) efapp::editor::stepValue(t, value - c.charge);  // realtime per keystroke
-    ImGui::SameLine(0.f, 8.f * env.k);
-    if (stepArrowButton("##value-", 3)) efapp::editor::stepValue(t, -1);
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 3 * (22.f + 6.f * env.k) - 8.f * env.k);
+    if (ImGui::InputInt("##value", &value, 0, 0)) {
+      efapp::editor::stepValue(t, value - c.charge);  // realtime per keystroke
+      armAutoRecalc(t);
+    }
+    ImGui::SameLine(0.f, 6.f * env.k);
+    if (stepArrowButton("##value-", 3)) {
+      efapp::editor::stepValue(t, -1);
+      armAutoRecalc(t);
+    }
     ImGui::SameLine(0.f, 4.f * env.k);
-    if (stepArrowButton("##value+", 1)) efapp::editor::stepValue(t, +1);
+    if (stepArrowButton("##value+", 1)) {
+      efapp::editor::stepValue(t, +1);
+      armAutoRecalc(t);
+    }
+    ImGui::SameLine(0.f, 4.f * env.k);
+    if (ImGui::Button("+/-", ImVec2(22.f + 12.f, 0.f))) {
+      efapp::editor::flipSign(t);  // EDIT-09: -10 <-> 10
+      armAutoRecalc(t);
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Switch sign");
     ImGui::SameLine(0.f, 8.f * env.k);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Value");
 
     double x = c.position.X;
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2 * (22.f + 8.f * env.k));
-    if (ImGui::InputDouble("##x", &x, 0.0, 0.0, "%.3f")) efapp::editor::moveCharge(t, at, ef::Vec2{x, c.position.Y});
+    if (ImGui::InputDouble("##x", &x, 0.0, 0.0, "%.3f")) {
+      efapp::editor::moveCharge(t, at, ef::Vec2{x, c.position.Y});
+      armAutoRecalc(t);
+    }
     ImGui::SameLine(0.f, 8.f * env.k);
-    if (stepArrowButton("##x-", 0)) efapp::editor::stepSelected(t, ef::Vec2{-0.1, 0});
+    if (stepArrowButton("##x-", 0)) {
+      efapp::editor::stepSelected(t, ef::Vec2{-0.1, 0});
+      armAutoRecalc(t);
+    }
     ImGui::SameLine(0.f, 4.f * env.k);
-    if (stepArrowButton("##x+", 2)) efapp::editor::stepSelected(t, ef::Vec2{0.1, 0});
+    if (stepArrowButton("##x+", 2)) {
+      efapp::editor::stepSelected(t, ef::Vec2{0.1, 0});
+      armAutoRecalc(t);
+    }
     ImGui::SameLine(0.f, 8.f * env.k);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("X");
 
     double y = c.position.Y;
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2 * (22.f + 8.f * env.k));
-    if (ImGui::InputDouble("##y", &y, 0.0, 0.0, "%.3f")) efapp::editor::moveCharge(t, at, ef::Vec2{c.position.X, y});
+    if (ImGui::InputDouble("##y", &y, 0.0, 0.0, "%.3f")) {
+      efapp::editor::moveCharge(t, at, ef::Vec2{c.position.X, y});
+      armAutoRecalc(t);
+    }
     ImGui::SameLine(0.f, 8.f * env.k);
-    if (stepArrowButton("##y-", 3)) efapp::editor::stepSelected(t, ef::Vec2{0, -0.1});
+    if (stepArrowButton("##y-", 3)) {
+      efapp::editor::stepSelected(t, ef::Vec2{0, -0.1});
+      armAutoRecalc(t);
+    }
     ImGui::SameLine(0.f, 4.f * env.k);
-    if (stepArrowButton("##y+", 1)) efapp::editor::stepSelected(t, ef::Vec2{0, 0.1});
+    if (stepArrowButton("##y+", 1)) {
+      efapp::editor::stepSelected(t, ef::Vec2{0, 0.1});
+      armAutoRecalc(t);
+    }
     ImGui::SameLine(0.f, 8.f * env.k);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Y");
 
     ImGui::BeginDisabled(t.field.charges.size() <= 1);  // EDIT-04: at least one charge remains
-    if (ImGui::Button("Remove charge")) efapp::editor::removeSelected(t);
+    if (ImGui::Button("Remove charge")) {
+      efapp::editor::removeSelected(t);
+      armAutoRecalc(t);
+    }
     ImGui::EndDisabled();
   }
 
@@ -614,10 +746,14 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
       if (ImGui::Selectable(label.c_str(), static_cast<int>(i) == mIdx) && static_cast<int>(i) != mIdx) {
         t.params.method = ef::kMethods[i].method;  // CALC-02: applies at the next Calculate
         t.stale = true;
+        armAutoRecalc(t);  // v2.2 CALC-03: a method change is a canvas change
       }
       if (static_cast<int>(i) == mIdx) ImGui::SetItemDefaultFocus();
     }
     ImGui::EndCombo();
+  }
+  if (ImGui::Checkbox("Continuous calculation", &t.autoRecalc)) {  // v2.2 CALC-03
+    t.pendingRecalcAt = (t.autoRecalc && t.stale) ? ImGui::GetTime() + efapp::kAutoRecalcDelay : -1.0;
   }
   if (ImGui::Button("Calculate (F5)", ImVec2(-FLT_MIN, 0.f))) ui.calculateActive = true;
 
@@ -684,8 +820,8 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
 
   ui.failedShown = false;
   ui.overlayMin = ui.overlayMax = ImVec2(0, 0);
-  const bool modalOpen = ui.chooserVisible || ui.aboutVisible || ui.optionsVisible || ui.saveAsVisible || ui.openChooser || ui.openAbout ||
-                         ui.openOptions || ui.openSaveAs;
+  const bool modalOpen = ui.chooserVisible || ui.aboutVisible || ui.optionsVisible || ui.saveAsVisible || ui.newCollectionVisible ||
+                         ui.leaveConfirmVisible || ui.openChooser || ui.openAbout || ui.openOptions || ui.openSaveAs || ui.newCollectionOpen;
   const bool hasTabs = !ws.tabs().empty();
 
   // Shortcuts (UI-SPEC "Keyboard"): ignored while a modal is open.
@@ -711,6 +847,8 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
       ImGui::Separator();
       if (ImGui::MenuItem("Close Tab", efapp::shortcutLabel("W", env.mac).c_str(), false, hasTabs)) ui.closeSerial = ui.activeSerial;
       if (ImGui::MenuItem("Save As...", efapp::shortcutLabel("S", env.mac).c_str(), false, hasTabs)) ui.openSaveAs = true;
+      if (ImGui::MenuItem("Calculate All")) ui.calculateAll = true;  // v2.2 COL-03
+      if (ImGui::MenuItem("New Collection...")) ui.newCollectionOpen = true;  // v2.2 COL-02
       ImGui::Separator();
       // EXP-01/02 (D-06): export replaces MFC's printing. Only a finished tab has a complete scene, so a busy or
       // failed tab greys the submenu out.
@@ -733,6 +871,20 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
       if (ImGui::MenuItem("Open Configuration Folder")) ui.openConfigFolder = true;
       ImGui::EndMenu();
     }
+    // v2.2 COL-02/03: collection switcher + Calculate All, right side of the menu bar.
+    ImGui::SetNextItemWidth(180.f * env.k);
+    const std::string cur = ui.currentCollection.empty() ? std::string("Original") : ui.currentCollection;
+    if (ImGui::BeginCombo("##collection", cur.c_str())) {
+      for (const std::string& name : ui.collections) {
+        if (ImGui::Selectable(name.c_str(), name == cur)) ui.switchToCollection = name;
+        if (name == cur) ImGui::SetItemDefaultFocus();
+      }
+      ImGui::Separator();
+      if (ImGui::Selectable("New Collection...")) ui.newCollectionOpen = true;
+      ImGui::EndCombo();
+    }
+    ImGui::SameLine(0.f, 8.f * env.k);
+    if (ImGui::Button("Calculate All")) ui.calculateAll = true;
     ImGui::EndMenuBar();
   }
 
@@ -751,6 +903,11 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
   if (ui.openEmpty) {
     ui.selectSerial = ws.openEmpty();
     ui.openEmpty = false;
+  }
+  if (ui.calculateAll) {  // v2.2 COL-03: open every configuration of the current collection in tabs
+    ws.closeAll();
+    for (const efapp::UserConfig& c : ui.userConfigs) ws.openUser(c.name, c.charges);
+    ui.calculateAll = false;
   }
   if (ui.calculateActive) {  // v2 CALC-01: explicit recalculation of the active tab
     ws.calculate(ui.activeSerial);
@@ -801,6 +958,8 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
   aboutModal(ui, env);
   optionsModal(ui, env);
   saveAsModal(ws, ui, env);
+  newCollectionModal(ui, env);
+  leaveConfirmModal(ui, env);
 
   ImGui::End();
 

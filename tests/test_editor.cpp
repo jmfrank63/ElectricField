@@ -159,3 +159,96 @@ TEST_CASE("canvas conversions: round-trip with y flip (D-06)") {
   CHECK(rt.X == doctest::Approx(123));
   CHECK(rt.Y == doctest::Approx(456));
 }
+
+TEST_CASE("flipSign and the view controls (v2.2 EDIT-09, ZOOM/PAN)") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);
+  t.selected = 0;
+  CHECK(t.field.charges[0].charge == 1);
+  CHECK(efapp::editor::flipSign(t));
+  CHECK(t.field.charges[0].charge == -1);
+  CHECK(t.scene.charges[0].charge == -1);  // scene follows
+  CHECK(efapp::editor::flipSign(t));
+  CHECK(t.field.charges[0].charge == 1);
+  t.selected = -1;
+  CHECK_FALSE(efapp::editor::flipSign(t));
+
+  // Zoom keeps the anchor world point at its screen position (centre = anchor + (centre - anchor) / factor).
+  efapp::Tab& v = dipoleTab(f);
+  CHECK(v.centre.X == doctest::Approx(0.0));
+  CHECK(efapp::editor::zoomAt(v, 2.0, ef::Vec2{0, 0}));
+  CHECK(v.zoom == doctest::Approx(2.0));
+  CHECK(v.centre.X == doctest::Approx(0.0));  // anchor == centre: centre unmoved
+  CHECK(efapp::editor::zoomAt(v, 2.0, ef::Vec2{-2.0, 0.0}));
+  CHECK(v.zoom == doctest::Approx(4.0));
+  CHECK(v.centre.X == doctest::Approx(-1.0));  // 0 + (0 - (-2)) / 2
+  CHECK_FALSE(efapp::editor::zoomAt(v, 0.0, ef::Vec2{0, 0}));
+  CHECK(efapp::editor::zoomAt(v, 1.0 / 4.0, ef::Vec2{0, 0}));
+  CHECK(v.zoom == doctest::Approx(1.0));
+
+  // Pan moves the centre opposite to the screen delta; reset restores the default view.
+  CHECK(efapp::editor::resetView(v));
+  CHECK(efapp::editor::pan(v, ef::Vec2{50, -25}, 100.0));
+  CHECK(v.centre.X == doctest::Approx(-0.5));
+  CHECK(v.centre.Y == doctest::Approx(-0.25));
+  CHECK(efapp::editor::resetView(v));
+  CHECK(v.zoom == doctest::Approx(1.0));
+  CHECK(v.centre.X == doctest::Approx(0.0));
+
+  // View changes never mark the tab stale or dirty (they do not touch the computation).
+  CHECK_FALSE(v.stale);
+  CHECK_FALSE(v.dirty);
+}
+
+TEST_CASE("dirty tracking and anyDirty (v2.2 leave prompt)") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);
+  CHECK_FALSE(f.ws.anyDirty());
+  CHECK(efapp::editor::moveCharge(t, 0, ef::Vec2{-1, 0}));
+  CHECK(t.dirty);
+  CHECK(f.ws.anyDirty());
+  t.dirty = false;  // Save As marks the tab clean (App does exactly this)
+  CHECK_FALSE(f.ws.anyDirty());
+}
+
+TEST_CASE("autoRecalcTick recomputes stale autoRecalc tabs after the deadline (v2.2 CALC-03)") {
+  efapp::Workspace ws;
+  const unsigned s = ws.openEmpty();
+  efapp::Tab& t = *ws.find(s);
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+  while (t.state == efapp::TabState::Computing && std::chrono::steady_clock::now() < deadline) {
+    ws.pollAll();
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  REQUIRE(t.state == efapp::TabState::Done);
+  const std::size_t lines = t.scene.electric.size();
+  REQUIRE(lines > 0);
+
+  // Continuous calculation on, one edit: stale, and the tick only fires once the deadline passes.
+  t.autoRecalc = true;
+  CHECK(efapp::editor::moveCharge(t, 0, ef::Vec2{1, 0}));
+  CHECK(t.stale);
+  const double now = 100.0;
+  t.pendingRecalcAt = now + efapp::kAutoRecalcDelay;
+  ws.autoRecalcTick(now);  // before the deadline: nothing happens
+  CHECK(t.state == efapp::TabState::Done);
+  CHECK(t.stale);
+  ws.autoRecalcTick(now + efapp::kAutoRecalcDelay + 0.01);  // deadline passed: recalculation starts
+  CHECK(t.state == efapp::TabState::Computing);
+  CHECK_FALSE(t.stale);
+  CHECK(t.pendingRecalcAt < 0);  // disarmed by calculate
+
+  while (t.state == efapp::TabState::Computing && std::chrono::steady_clock::now() < deadline) {
+    ws.pollAll();
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  REQUIRE(t.state == efapp::TabState::Done);
+  CHECK(t.scene.electric.size() == lines);  // one +1 charge: same count, drawn at the new position
+
+  // Continuous calculation off: edits stay stale, no tick effect.
+  t.autoRecalc = false;
+  CHECK(efapp::editor::moveCharge(t, 0, ef::Vec2{2, 0}));
+  ws.autoRecalcTick(1000.0);
+  CHECK(t.state == efapp::TabState::Done);
+  CHECK(t.stale);
+}

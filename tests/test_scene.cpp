@@ -134,3 +134,22 @@ TEST_CASE("every preset renders to a finite SVG (headless end to end, default op
     CHECK(svg.find("inf") == std::string::npos);
   }
 }
+
+TEST_CASE("renderScene honours the view centre (v2.2 zoom/pan)") {
+  Recorder r;
+  FieldScene scene;
+  scene.charges.push_back(SceneCharge{Vec2{0, 0}, 1});
+  const View view{200, 200, 100.};
+  renderScene(r, scene, DrawStyle{}, view);
+  REQUIRE(r.circles.size() == 1);
+  CHECK(r.circles[0].c.x == doctest::Approx(100));
+  CHECK(r.circles[0].c.y == doctest::Approx(100));
+
+  Recorder shifted;
+  View off{200, 200, 100.};
+  off.centre = Vec2{1, 0};  // world (1, 0) sits at the canvas centre -> the origin charge moves left by 100 px
+  renderScene(shifted, scene, DrawStyle{}, off);
+  REQUIRE(shifted.circles.size() == 1);
+  CHECK(shifted.circles[0].c.x == doctest::Approx(0));
+  CHECK(shifted.circles[0].c.y == doctest::Approx(100));
+}

@@ -9,7 +9,7 @@
 namespace {
 
 efapp::SavedTab sample() {
-  return {"Dipole 1", 0, "euler", {{1, -2.0, 0.0}, {-1, 2.0, 0.0}}};
+  return {"Dipole 1", 0, "euler", false, {{1, -2.0, 0.0}, {-1, 2.0, 0.0}}};
 }
 
 }  // namespace
@@ -17,8 +17,8 @@ efapp::SavedTab sample() {
 TEST_CASE("serialize -> parse round-trips titles, sources, methods and charges (SES-01/02)") {
   const std::vector<efapp::SavedTab> tabs = {
       sample(),
-      {"My Field", efapp::kNoPreset, "adaptive-dormand-prince", {{2, 0.5, -0.25}}},
-      {"Empty Configuration 1", efapp::kNoPreset, "", {{1, 0.0, 0.0}}},
+      {"My Field", efapp::kNoPreset, "adaptive-dormand-prince", false, {{2, 0.5, -0.25}}},
+      {"Empty Configuration 1", efapp::kNoPreset, "", false, {{1, 0.0, 0.0}}},
   };
   const efapp::ParsedSession r = efapp::parseSession(efapp::serializeSession(tabs));
   CHECK(r.skippedTabs == 0);
@@ -68,4 +68,39 @@ TEST_CASE("file round-trip and missing-file default (SES-01)") {
   std::error_code ec;
   std::filesystem::remove(file, ec);
   std::filesystem::remove(tmp, ec);
+}
+
+TEST_CASE("the session records the current collection (v2.2 COL-04)") {
+  const std::vector<efapp::SavedTab> tabs = {sample()};
+  const efapp::ParsedSession r = efapp::parseSession(efapp::serializeSession(tabs, "My Collection"));
+  CHECK(r.collection == "My Collection");
+  REQUIRE(r.value.size() == 1);
+
+  // Files from before collections parse as the Original collection.
+  const efapp::ParsedSession legacy = efapp::parseSession(efapp::serializeSession(tabs));
+  CHECK(legacy.collection == "Original");
+
+  // The collection key survives the file round-trip.
+  const auto tmp = std::filesystem::temp_directory_path() / "ef-test-session-col";
+  std::filesystem::create_directories(tmp);
+  const auto file = tmp / "session.ini";
+  std::string err;
+  REQUIRE(efapp::saveSession(file, tabs, "My Collection", err));
+  const efapp::ParsedSession loaded = efapp::parseSession(efapp::serializeSession(efapp::loadSessionFull(file).tabs, efapp::loadSessionFull(file).collection));
+  CHECK(loaded.collection == "My Collection");
+  std::error_code ec;
+  std::filesystem::remove(file, ec);
+  std::filesystem::remove(tmp, ec);
+}
+
+TEST_CASE("autocalc is persisted per tab (v2.2 CALC-03)") {
+  std::vector<efapp::SavedTab> tabs = {sample()};
+  tabs[0].autoRecalc = true;
+  const efapp::ParsedSession r = efapp::parseSession(efapp::serializeSession(tabs));
+  REQUIRE(r.value.size() == 1);
+  CHECK(r.value[0].autoRecalc);
+
+  efapp::ParsedSession r2 = efapp::parseSession("[tab \"X\"]\nautocalc = true\ncharge = 1, 0, 0\n");
+  REQUIRE(r2.value.size() == 1);
+  CHECK(r2.value[0].autoRecalc);
 }

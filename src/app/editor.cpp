@@ -46,6 +46,7 @@ bool moveCharge(Tab& t, std::size_t index, ef::Vec2 world) {
   t.field.charges[index].position = clamped(world);
   syncScene(t, index);
   t.stale = true;
+  t.dirty = true;
   return true;
 }
 
@@ -55,6 +56,7 @@ bool addCharge(Tab& t, ef::Vec2 world, int value) {
   t.scene.charges.push_back(ef::SceneCharge{clamped(world), value});
   t.selected = static_cast<int>(t.field.charges.size()) - 1;
   t.stale = true;
+  t.dirty = true;
   return true;
 }
 
@@ -66,6 +68,7 @@ bool removeSelected(Tab& t) {
   t.scene.charges.erase(t.scene.charges.begin() + static_cast<std::ptrdiff_t>(at));
   t.selected = -1;
   t.stale = true;
+  t.dirty = true;
   return true;
 }
 
@@ -81,6 +84,39 @@ bool stepValue(Tab& t, int delta) {
   t.field.charges[at].charge = std::clamp(t.field.charges[at].charge + delta, -1000000, 1000000);
   syncScene(t, at);
   t.stale = true;
+  t.dirty = true;
+  return true;
+}
+
+bool flipSign(Tab& t) {
+  if (!editable(t) || t.selected < 0 || static_cast<std::size_t>(t.selected) >= t.field.charges.size()) return false;
+  const std::size_t at = static_cast<std::size_t>(t.selected);
+  t.field.charges[at].charge = -t.field.charges[at].charge;  // +10 -> -10 and back; 0 stays 0
+  syncScene(t, at);
+  t.stale = true;
+  t.dirty = true;
+  return true;
+}
+
+bool zoomAt(Tab& t, const double factor, const ef::Vec2 anchor) {
+  if (!(factor > 0.0) || !std::isfinite(factor)) return false;
+  const double z = std::clamp(t.zoom * factor, kZoomMin, kZoomMax);
+  if (z == t.zoom) return false;
+  // Keep the anchor world point at the same screen position: centre = anchor + (centre - anchor) / factor.
+  t.centre = ef::Vec2{anchor.X + (t.centre.X - anchor.X) / factor, anchor.Y + (t.centre.Y - anchor.Y) / factor};
+  t.zoom = z;
+  return true;
+}
+
+bool pan(Tab& t, const ef::Vec2 screenDeltaPx, const double pixelsPerUnit) {
+  if (!(pixelsPerUnit > 0.0)) return false;
+  t.centre = ef::Vec2{t.centre.X - screenDeltaPx.X / pixelsPerUnit, t.centre.Y + screenDeltaPx.Y / pixelsPerUnit};
+  return true;
+}
+
+bool resetView(Tab& t) {
+  t.zoom = 1.0;
+  t.centre = ef::Vec2{0, 0};
   return true;
 }
 

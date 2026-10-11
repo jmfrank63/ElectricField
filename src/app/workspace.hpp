@@ -17,6 +17,10 @@
 
 namespace efapp {
 
+// Continuous calculation (v2.2 CALC-03): after an edit, recompute once this many seconds have passed
+// without a further edit (a drag arms the deadline on every frame, so one recompute fires when it settles).
+inline constexpr double kAutoRecalcDelay = 0.35;
+
 // Tab::preset value for tabs that do not come from the built-in registry (user configurations, the empty
 // configuration). Everything downstream keys off the title, so the value is inert.
 inline constexpr std::size_t kNoPreset = std::numeric_limits<std::size_t>::max();
@@ -49,6 +53,15 @@ struct Tab {
   std::unique_ptr<ISession> session;  // null once Done/Failed
   int selected = -1;              // editor (v2): index into field.charges, -1 = nothing selected
   bool stale = false;             // editor (v2): charges edited after the drawn lines were computed
+  bool dirty = false;             // v2.2: charges edited since the tab was opened / last saved to a collection
+  // View state (v2.2 zoom/pan): device px = centre-anchored transform, pixelsPerUnit *= zoom. View changes
+  // are never stale edits (they do not touch the computation).
+  double zoom = 1.0;              // 1 = 100 px per world unit (at k = 1); clamped to [0.05, 20]
+  ef::Vec2 centre;                // world point shown at the canvas centre
+  // Continuous calculation (v2.2 CALC-03): when autoRecalc is on and the tab is stale, the GUI calls
+  // autoRecalcTick(now) every frame and the tab recomputes once `pendingRecalcAt` (now + delay) passes.
+  bool autoRecalc = false;
+  double pendingRecalcAt = -1.0;  // absolute deadline in seconds; -1 = not armed
 };
 
 class Workspace {
@@ -75,7 +88,12 @@ class Workspace {
   // Restores a saved session tab (v2.1 SES-01) with its EXACT title and params. Bumps the matching counter
   // so later opens never duplicate a restored title.
   unsigned openRestored(const std::string& title, std::size_t presetIndex, const ef::ComputeParams& params,
-                        const std::vector<ef::PresetCharge>& charges);
+                        const std::vector<ef::PresetCharge>& charges, bool autoRecalc = false);
+  // Continuous calculation (v2.2 CALC-03): recalculates every tab that has autoRecalc on, is stale, and
+  // whose pending deadline has passed. Called every frame by the GUI with the current time in seconds.
+  void autoRecalcTick(double nowSeconds);
+  // v2.2: true when at least one open tab has charge edits that are not stored in any collection file.
+  bool anyDirty() const;
   // Options dialog (Phase 4): new tabs open with these params; tabs already open keep the params they were opened with.
   void setDefaults(const ef::ComputeParams& p) { defaults_ = p; }
   // Cancels and destroys the session (RAII join) and removes the tab. False if the serial is unknown.

@@ -9,6 +9,7 @@
 
 #include "app/session_file.hpp"
 #include "app/ui_logic.hpp"
+#include "app/ini_text.hpp"
 #include "ef/presets.hpp"
 #include "ef/svg.hpp"
 #include "ef_build_info.h"
@@ -119,13 +120,35 @@ bool App::init(const AppOptions& opt, std::string& step, std::string& message) {
       configsPath_ = dir / "configurations.ini";
       userConfigs_ = efapp::loadConfigs(configsPath_);
       sessionPath_ = dir / "session.ini";
-  // SES-01: restore the open tabs (exact titles, charges, per-tab method). Unknown method names fall
-  // back to the current default.
-      for (const efapp::SavedTab& s : efapp::loadSession(sessionPath_)) {
+      // v2.2 COL-01: the Original collection is seeded once with the built-ins + any legacy configurations.
+      collectionsDir_ = dir / "Collections";
+      std::filesystem::create_directories(collectionsDir_);
+      const std::filesystem::path original = collectionsDir_ / "Original.ini";
+      if (!std::filesystem::exists(original)) {
+        std::vector<efapp::UserConfig> seed;
+        for (const ef::Preset& p : ef::presets()) {
+          efapp::UserConfig u;
+          u.name = std::string(p.displayName);
+          for (int k = 0; k < p.count; ++k) u.charges.push_back(p.charges[static_cast<std::size_t>(k)]);
+          seed.push_back(std::move(u));
+        }
+        for (const efapp::UserConfig& u : efapp::loadConfigs(configsPath_)) seed.push_back(u);
+        std::string migErr;
+        efapp::saveConfigs(original, seed, migErr);
+      }
+      // COL-04: restore the current collection (and its tabs) from the session.
+      const efapp::SavedSession ses = efapp::loadSessionFull(sessionPath_);
+      currentCollection_ = std::filesystem::exists(collectionsDir_ / (ses.collection + ".ini")) ? ses.collection : std::string("Original");
+      userConfigs_ = efapp::loadConfigs(collectionFile(currentCollection_));
+      // SES-01: restore the open tabs (exact titles, charges, per-tab method, continuous calculation).
+      // Unknown method names fall back to the current default.
+      for (const efapp::SavedTab& s : ses.tabs) {
         ef::ComputeParams params = options_.compute;
         if (const std::optional<ef::Method> m = ef::methodFromName(s.method)) params.method = *m;
-        ws_.openRestored(s.title, s.preset, params, s.charges);
+        ws_.openRestored(s.title, s.preset, params, s.charges, s.autoRecalc);
+        restoredTabs = true;
       }
+      refreshCollections();
     }
   }
   env_.options = &options_;
@@ -187,7 +210,10 @@ void App::handleEvent(const SDL_Event& e) {
 
 void App::frame() {
   ws_.pollAll();
-  ui_.userConfigs = userConfigs_;  // v2: the chooser reads the mirror; the App keeps the master list
+  ws_.autoRecalcTick(ImGui::GetTime());  // v2.2 CALC-03: fire due continuous recalculations
+  ui_.userConfigs = userConfigs_;  // the chooser reads the mirror; the App keeps the master list
+  ui_.collections = collections_;
+  ui_.currentCollection = currentCollection_;
   if (scaleDirty_) refreshScale();
   ImGui_ImplSDLRenderer3_NewFrame();
   ImGui_ImplSDL3_NewFrame();
@@ -206,16 +232,67 @@ void App::frame() {
     }
   }
   exportStep();  // EXP-01/02: start the save dialog / run a chosen export on the UI thread between frames
-  if (ui_.saveAsApply) {  // v2 CFG-03: Save As accepted — upsert (re-checked) and persist
+  if (ui_.saveAsApply) {  // v2 CFG-03 / v2.2 COL: Save As accepted - upsert into the CURRENT collection
     std::vector<std::string> reserved;
     for (const ef::Preset& p : ef::presets()) reserved.emplace_back(p.displayName);
     efapp::upsertUserConfig(userConfigs_, *ui_.saveAsApply, reserved);
+    if (efapp::Tab* saved = ws_.find(ui_.saveAsSerial)) saved->dirty = false;  // stored: no longer unsaved work
     ui_.saveAsApply.reset();
     pacer_.notifyActivity();
-    if (!configsPath_.empty()) {
+    refreshCollections();  // a first Save As in a fresh collection creates it on disk
+    if (!collectionsDir_.empty()) {
       std::string err;
-      if (!efapp::saveConfigs(configsPath_, userConfigs_, err)) std::fprintf(stderr, "configurations: %s\n", err.c_str());
+      if (!efapp::saveConfigs(collectionFile(currentCollection_), userConfigs_, err)) std::fprintf(stderr, "configurations: %s\n", err.c_str());
     }
+  }
+  // v2.2 COL-02/03: collection switching (gated by the unsaved-changes prompt) and Calculate All.
+  if (ui_.leaveDecision != 0) {
+    if (ui_.leaveDecision == 1) {
+      leaveConfirmed_ = true;
+      if (!pendingCollection_.empty()) {
+        switchCollection(pendingCollection_);
+        pendingCollection_.clear();
+        leaveConfirmed_ = false;
+      } else {
+        quit_ = true;  // the next iterate() leaves the loop and the session is saved
+      }
+    } else {
+      leaveConfirmed_ = false;
+      pendingCollection_.clear();
+    }
+    ui_.leaveDecision = 0;
+  }
+  if (!ui_.switchToCollection.empty()) {
+    if (ws_.anyDirty() && !leaveConfirmed_) {
+      pendingCollection_ = ui_.switchToCollection;
+      ui_.leaveText = "Some tabs have changes that are not saved to a collection.";
+      ui_.leaveButton = "Switch anyway";
+      ui_.openLeaveConfirm = true;
+      leaveConfirmed_ = true;  // the prompt is up; do not re-open every frame
+    } else {
+      switchCollection(ui_.switchToCollection);
+      leaveConfirmed_ = false;
+    }
+    ui_.switchToCollection.clear();
+  }
+  if (!ui_.newCollectionApply.empty()) {
+    if (ws_.anyDirty() && !leaveConfirmed_) {
+      pendingCollection_ = ui_.newCollectionApply;
+      ui_.leaveText = "Some tabs have changes that are not saved to a collection.";
+      ui_.leaveButton = "Switch anyway";
+      ui_.openLeaveConfirm = true;
+      leaveConfirmed_ = true;
+    } else {
+      createCollection(ui_.newCollectionApply);
+      leaveConfirmed_ = false;
+    }
+    ui_.newCollectionApply.clear();
+  }
+  if (ui_.calculateAll) {  // v2.2 COL-03: open every configuration of the current collection in tabs
+    ui_.calculateAll = false;
+    ws_.closeAll();
+    for (const efapp::UserConfig& c : userConfigs_) ws_.openUser(c.name, c.charges);
+    pacer_.notifyActivity();
   }
   if (ui_.openConfigFolder) {  // v2.1 SES-03
     ui_.openConfigFolder = false;
@@ -264,7 +341,18 @@ bool App::iterate() {
     while (SDL_PollEvent(&e)) handleEvent(e);
   }
   if (gotEvent) pacer_.notifyActivity();
+  // v2.2: quitting with unsaved tab edits asks first (once; the prompt modal collects the answer).
+  if ((quit_ || ui_.requestQuit) && ws_.anyDirty() && !leaveConfirmed_) {
+    ui_.leaveText = "Some tabs have changes that are not saved to a collection. They are restored on the next start, but quitting now will not store them in any collection file.";
+    ui_.leaveButton = "Quit anyway";
+    ui_.openLeaveConfirm = true;
+    quit_ = false;
+    ui_.requestQuit = false;
+    leaveConfirmed_ = true;
+    pacer_.notifyActivity();
+  }
   if (quit_) return false;
+  if (ui_.requestQuit) return false;
   if (SDL_GetWindowFlags(window_) & SDL_WINDOW_MINIMIZED) {  // sessions keep being polled, nothing is drawn
     ws_.pollAll();
     SDL_Delay(16);
@@ -372,10 +460,12 @@ bool App::checkCanvas(unsigned serial, int w, int h, std::string& report) {
           break;
         }
   }
-  // 2) clipping backstop: no scene ink in the chrome right of the tab text (x >= 400 x k), above the canvas
+  // 2) clipping backstop: no scene ink in the chrome right of the tab text (x >= 400 x k). The scan covers
+  //    the TAB-BAR band only (the lower half of the strip above the canvas): since v2.2 the MENU bar hosts
+  //    the collection switcher and Calculate All on the right, whose dark text is legitimate chrome.
   long bleed = 0;
   const int x0 = static_cast<int>(400.f * k_);
-  for (int y = 0; y < cy0; ++y) {
+  for (int y = cy0 / 2; y < cy0; ++y) {
     const Uint8* a = static_cast<const Uint8*>(gui->pixels) + static_cast<std::size_t>(y) * static_cast<std::size_t>(gui->pitch);
     for (int x = x0; x < gui->w; ++x)
       if (a[x * 4] < 128 && a[x * 4 + 1] < 128 && a[x * 4 + 2] < 128) ++bleed;
@@ -406,6 +496,16 @@ bool App::smokeExtras(std::string& report) {
     report = what;
     return false;
   };
+  // v2.2 COL: the chooser lists the CURRENT COLLECTION; headless runs have no collection files, so the
+  // Original seed (the built-ins) is created in memory for the keyboard test below.
+  for (const ef::Preset& p : ef::presets()) {
+    efapp::UserConfig u;
+    u.name = std::string(p.displayName);
+    for (int k = 0; k < p.count; ++k) u.charges.push_back(p.charges[static_cast<std::size_t>(k)]);
+    userConfigs_.push_back(std::move(u));
+  }
+  ui_.userConfigs = userConfigs_;
+
   SDL_SetWindowSize(window_, 1024, 824);
   SDL_SyncWindow(window_);
   frames(4);
@@ -506,7 +606,7 @@ bool App::smokeExtras(std::string& report) {
   // the empty entry must open and compute like preset tabs.
   userConfigs_.push_back(efapp::UserConfig{"Smoke Pair", {{1, -2, 0}, {-1, 2, 0}}});
   ui_.userConfigs = userConfigs_;
-  ui_.openUserConfig = 0;
+  ui_.openUserConfig = 9;  // after the nine seeded built-ins
   frames(2);
   if (ws_.tabs().empty() || ws_.tabs().back()->title != "Smoke Pair 1") return fail("the user configuration did not open");
   if (!pumpUntilDone(lastSerial(), 60000)) return fail("the user configuration session did not finish");
@@ -533,6 +633,13 @@ bool App::smokeExtras(std::string& report) {
   eio.AddMouseButtonEvent(0, false);
   frames(2);
   if (ws_.find(es)->selected != 0) return fail("editor: clicking the origin charge did not select it");
+  // Wheel zoom at the cursor (v2.2): zoom in, then out.
+  eio.AddMouseWheelEvent(0.f, 1.f);
+  frames(2);
+  if (!(ws_.find(es)->zoom > 1.0)) return fail("editor: the mouse wheel did not zoom in");
+  eio.AddMouseWheelEvent(0.f, -1.f);
+  frames(2);
+  if (ws_.find(es)->zoom < 0.99 || ws_.find(es)->zoom > 1.01) return fail("editor: the mouse wheel did not zoom back out");
   eio.AddMouseButtonEvent(0, true);
   frames(1);
   eio.AddMousePosEvent(cx + 60.f, cy);
@@ -757,6 +864,69 @@ void App::exportFailed(const std::string& what) {
     return;
   }
   SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Electric Field", what.c_str(), window_);
+}
+
+// --- Collections (v2.2, COL-01..04) ----------------------------------------------------------------------
+
+// One file per collection under Collections\; characters that are illegal in file names become '_'.
+std::filesystem::path App::collectionFile(const std::string& name) const {
+  std::string safe;
+  for (const char c : name) {
+    const bool bad = c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|';
+    safe += bad ? '_' : c;
+  }
+  if (efapp::ini::trim(safe).empty()) safe = "Collection";
+  return collectionsDir_ / (safe + ".ini");
+}
+
+void App::refreshCollections() {
+  collections_.clear();
+  std::error_code ec;
+  for (const std::filesystem::directory_entry& e : std::filesystem::directory_iterator(collectionsDir_, ec)) {
+    if (e.is_regular_file() && e.path().extension() == ".ini") collections_.push_back(e.path().stem().string());
+  }
+  std::sort(collections_.begin(), collections_.end());
+  // Original first (the seeded collection), then everything else alphabetically.
+  for (std::size_t i = 0; i < collections_.size(); ++i)
+    if (collections_[i] == "Original") {
+      std::swap(collections_[0], collections_[i]);
+      break;
+    }
+  if (std::find(collections_.begin(), collections_.end(), currentCollection_) == collections_.end()) collections_.push_back(currentCollection_);
+}
+
+void App::switchCollection(const std::string& name) {
+  if (name == currentCollection_) return;
+  saveSessionNow();  // the tabs of the collection being left
+  currentCollection_ = name;
+  userConfigs_ = efapp::loadConfigs(collectionFile(name));
+  ws_.closeAll();  // a fresh start in the new collection (the user creates configurations there)
+  saveSessionNow();  // empty session tagged with the new collection
+  refreshCollections();
+  pacer_.notifyActivity();
+}
+
+void App::createCollection(const std::string& name) {
+  std::string err;
+  efapp::saveConfigs(collectionFile(name), {}, err);  // empty collection
+  switchCollection(name);
+}
+
+void App::saveSessionNow() {
+  if (sessionPath_.empty()) return;
+  std::vector<efapp::SavedTab> saved;
+  for (const auto& tp : ws_.tabs()) {
+    efapp::SavedTab s;
+    s.title = tp->title;
+    s.preset = tp->preset;
+    s.method = std::string(ef::info(tp->params.method).name);
+    s.autoRecalc = tp->autoRecalc;
+    s.charges.reserve(tp->field.charges.size());
+    for (const ef::Charge& c : tp->field.charges) s.charges.push_back(ef::PresetCharge{c.charge, c.position.X, c.position.Y});
+    saved.push_back(std::move(s));
+  }
+  std::string err;
+  if (!efapp::saveSession(sessionPath_, saved, currentCollection_, err)) std::fprintf(stderr, "session: %s\n", err.c_str());
 }
 
 // --export <dir>: the export path CI exercises on all three OSes (D-06). Fixed inputs — the Dipole preset with

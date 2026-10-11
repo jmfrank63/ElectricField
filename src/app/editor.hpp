@@ -28,6 +28,20 @@ bool removeSelected(Tab& t);
 bool stepSelected(Tab& t, ef::Vec2 delta);
 // Value +/- 1 on the selected charge (editor panel buttons).
 bool stepValue(Tab& t, int delta);
+// Flips the sign of the selected charge's value (+10 -> -10); 0 stays 0 (v2.2 EDIT-09).
+bool flipSign(Tab& t);
+
+// View controls (v2.2 zoom/pan). View-only: they never mark the tab stale and never touch the computation.
+inline constexpr double kZoomMin = 0.05;
+inline constexpr double kZoomMax = 20.0;
+// Multiplies the zoom by `factor` while keeping `anchor` (the world point under the mouse) at the same
+// screen position. Clamped to [kZoomMin, kZoomMax].
+bool zoomAt(Tab& t, double factor, ef::Vec2 anchor);
+// Pans by a screen-space delta in device pixels (right-drag, arrow keys): the world centre moves opposite.
+// `pixelsPerUnit` is the tab's current view scale.
+bool pan(Tab& t, ef::Vec2 screenDeltaPx, double pixelsPerUnit);
+// Back to zoom 1 with the world origin at the canvas centre.
+bool resetView(Tab& t);
 
 }  // namespace editor
 

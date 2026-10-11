@@ -38,7 +38,8 @@ void drawPath(Painter& painter, const ScenePath& path, const View& view, const R
   const std::size_t n = path.points.size();
   if (n < 2) return;  // MFC: a single point draws nothing
 
-  const double cx = view.widthPx / 2.0, cy = view.heightPx / 2.0;
+  const double cx = view.widthPx / 2.0 - view.centre.X * view.pixelsPerUnit;
+  const double cy = view.heightPx / 2.0 + view.centre.Y * view.pixelsPerUnit;
   std::vector<PointF> dev(n);
   for (std::size_t i = 0; i < n; ++i) {
     dev[i].x = static_cast<float>(cx + path.points[i].X * view.pixelsPerUnit);
@@ -92,7 +93,8 @@ void renderScene(Painter& painter, const FieldScene& scene, const DrawStyle& sty
   for (const auto& l : scene.electric) drawPath(painter, l, view, vis, style.electricLine, style.electricThickness);
   for (const auto& l : scene.potential) drawPath(painter, l, view, vis, style.potentialLine, style.potentialThickness);
 
-  const double cx = view.widthPx / 2.0, cy = view.heightPx / 2.0;
+  const double cx = view.widthPx / 2.0 - view.centre.X * view.pixelsPerUnit;
+  const double cy = view.heightPx / 2.0 + view.centre.Y * view.pixelsPerUnit;
   for (const auto& c : scene.charges) {
     const PointF center{static_cast<float>(cx + c.position.X * view.pixelsPerUnit), static_cast<float>(cy - c.position.Y * view.pixelsPerUnit)};
     painter.fillCircle(center, style.chargeRadiusPx, c.charge > 0 ? style.positiveCharge : style.negativeCharge);

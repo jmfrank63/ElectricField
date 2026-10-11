@@ -29,11 +29,14 @@ struct DrawStyle {
   float chargeRadiusPx = 25.f;
 };
 
-// Output surface: origin at the centre, y up, `pixelsPerUnit` device pixels per world unit (view scale only, never physics).
+// Output surface: the world point `centre` appears at the canvas centre (v2.2 zoom/pan), y up,
+// `pixelsPerUnit` device pixels per world unit (view only, never physics). centre defaults to the
+// world origin, which keeps every existing view byte-identical.
 struct View {
   int widthPx = 1024;
   int heightPx = 768;
   double pixelsPerUnit = 100.;
+  Vec2 centre{0, 0};
 };
 
 struct ScenePath {

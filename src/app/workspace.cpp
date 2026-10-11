@@ -88,6 +88,7 @@ bool Workspace::calculate(const unsigned serial) {
   t->linesReceived = 0;
   t->state = TabState::Computing;
   t->stale = false;
+  t->pendingRecalcAt = -1.0;  // a manual/automatic recalculation disarms the auto deadline
   try {
     t->session = factory_(t->field, t->params);
     if (!t->session) throw std::runtime_error("no session");
@@ -101,6 +102,19 @@ bool Workspace::calculate(const unsigned serial) {
   return true;
 }
 
+void Workspace::autoRecalcTick(const double nowSeconds) {
+  for (auto& tp : tabs_) {
+    Tab& t = *tp;
+    if (t.autoRecalc && t.stale && t.pendingRecalcAt >= 0 && nowSeconds >= t.pendingRecalcAt) calculate(t.serial);
+  }
+}
+
+bool Workspace::anyDirty() const {
+  for (const auto& t : tabs_)
+    if (t->dirty) return true;
+  return false;
+}
+
 bool Workspace::rename(const unsigned serial, const std::string& name) {
   Tab* t = find(serial);
   const std::string trimmed = trim(name);
@@ -110,7 +124,7 @@ bool Workspace::rename(const unsigned serial, const std::string& name) {
 }
 
 unsigned Workspace::openRestored(const std::string& title, const std::size_t presetIndex, const ef::ComputeParams& params,
-                                 const std::vector<ef::PresetCharge>& charges) {
+                                 const std::vector<ef::PresetCharge>& charges, const bool autoRecalc) {
   ef::ChargeSystem field;
   field.charges.reserve(charges.size());
   for (const ef::PresetCharge& c : charges) field.charges.push_back(ef::Charge{c.charge, ef::Vec2{c.x, c.y}});
@@ -118,6 +132,7 @@ unsigned Workspace::openRestored(const std::string& title, const std::size_t pre
   Tab* t = find(serial);
   t->params = params;
   t->selected = -1;
+  t->autoRecalc = autoRecalc;
   // Bump the matching counter past the restored number so a later open never duplicates this title (SES-01).
   const std::size_t sp = t->title.rfind(' ');
   if (sp != std::string::npos && sp + 1 < t->title.size()) {

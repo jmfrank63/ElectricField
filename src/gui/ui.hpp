@@ -33,12 +33,25 @@ struct UiState {
   int openUserConfig = -1;   // chooser: index into userConfigs (v2 CFG-02)
   bool openEmpty = false;    // chooser: Empty Configuration (v2 CFG-02)
   bool calculateActive = false;  // F5 / panel button (v2 CALC-01); consumed by drawUi via Workspace::calculate
+  bool calculateAll = false;     // Calculate All (v2.2 COL-03): close tabs, open every configuration of the collection
+  bool openLeaveConfirm = false, leaveConfirmVisible = false;  // v2.2: unsaved-changes prompt
+  std::string leaveText;         // body text of the prompt
+  std::string leaveButton;       // "Quit anyway" / "Switch anyway"
+  int leaveDecision = 0;         // 1 = leave anyway (consumed by App::frame)
   bool openConfigFolder = false; // Help > Open Configuration Folder (v2.1 SES-03)
+  // v2.2 collections: the App owns the master list; ui_ mirrors names for the switcher and chooser
+  std::vector<std::string> collections;
+  std::string currentCollection;
+  std::string switchToCollection;   // set by the switcher; consumed by App::frame
+  std::string newCollectionApply;   // validated name from the New Collection modal; consumed by App::frame
+  bool newCollectionOpen = false, newCollectionVisible = false;
+  char newCollectionBuf[128] = "";
   // v2.1 editor panel: Add-charge section and the per-tab rename buffer
   int addValue = 1;
   double addX = 0.0, addY = 0.0;
   char tabNameBuf[128] = "";
   unsigned tabNameBufSerial = 0;
+  unsigned saveAsSerial = 0;  // the tab whose charges Save As stored (marked clean by App::frame)
   int exportRequest = 0;     // File > Export: 1 = PNG..., 2 = SVG... (consumed by App::frame, D-06)
   unsigned closeSerial = 0;  // request to close a tab (0 = none)
   // state carried between frames

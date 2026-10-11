@@ -132,3 +132,36 @@ Which phases cover which requirements. Updated during roadmap creation.
 ---
 *Requirements defined: 2026-10-10*
 *Last updated: 2026-10-10 after roadmap creation (traceability filled)*
+
+---
+
+# Milestone v2.0 Requirements (added 2026-10-11)
+
+## User Configuration Files
+
+- [ ] **CFG-01**: Named charge configurations (value, x, y per charge) persist in a human-readable configurations.ini in the platform user config directory; invalid entries are skipped safely and never affect the 9 built-in presets
+- [ ] **CFG-02**: The preset chooser lists user configurations below the built-ins; File > New > "Empty Configuration" opens an editable empty tab
+- [ ] **CFG-03**: Save As (Ctrl+S / File > Save As) stores the current tab's charges under a chosen name; overwriting an existing name asks for confirmation; built-in presets cannot be overwritten
+
+## Charge Editor
+
+- [ ] **EDIT-01**: Clicking on or near a charge selects it; dragging with the mouse moves it, with the charge glyph following in realtime
+- [ ] **EDIT-02**: The arrow keys nudge the selected charge (Shift = larger step)
+- [ ] **EDIT-03**: The editor panel shows the selected charge's value, x and y as input fields with up/down buttons; every change updates the canvas immediately without starting a computation
+- [ ] **EDIT-04**: Double-clicking empty canvas adds a charge; Delete removes the selected one; at least one charge must remain
+- [ ] **EDIT-05**: A tab edited after its computation is marked stale (drawn lines belong to the pre-edit charges) until it is recalculated
+
+## Explicit Calculation
+
+- [ ] **CALC-01**: A Calculate button (F5) recomputes the tab from the current charges, reusing the busy/close/cancel behaviour of the existing sessions
+- [ ] **CALC-02**: The editor panel offers a calculation method selector defaulting to the app option; it applies at the next Calculate
+
+## Traceability (v2)
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| CFG-01 | v2 Phase 1 | Pending |
+| CFG-02 | v2 Phase 1 | Pending |
+| CFG-03 | v2 Phase 1 | Pending |
+| EDIT-01..05 | v2 Phase 2 | Pending |
+| CALC-01..02 | v2 Phase 2 | Pending |

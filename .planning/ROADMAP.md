@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Foundation & Portable Physics Core** - Clean repo, hash-pinned Zig build, 3-OS CI gate, tested GUI-free physics core, MFC visual baseline captured
 - [x] **Phase 2: Compute Engine & Headless Parity** - Cancellable threaded compute, equipotential de-dup, toolkit-free scene with SVG/PNG, headless CLI parity check in CI (completed 2026-10-10)
-- [ ] **Phase 3: GUI Shell** - ImGui + SDL3 app with preset tabs, anti-aliased rendering, busy indicator, About box, GUI subsystem
+- [x] **Phase 3: GUI Shell** - ImGui + SDL3 app with preset tabs, anti-aliased rendering, busy indicator, About box, GUI subsystem (completed 2026-10-11)
 - [ ] **Phase 4: Options, Export & MFC Removal** - Options dialog, portable persistence, PNG/SVG export, MFC deleted, README updated
 
 ## Phase Details
@@ -96,7 +96,7 @@ Plans:
   4. User sees charges as filled circles colored by sign and field and equipotential lines anti-aliased with Bezier smoothing, y-up and centered at 100 px per unit, sharp and correctly scaled on a HiDPI display, visually matching the Phase 1 MFC reference images
   5. User can open an About box showing the project and blog links
 
-**Plans:** 3/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 **Wave 1**
@@ -139,5 +139,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Foundation & Portable Physics Core | 4/4 | In Progress|  |
 | 2. Compute Engine & Headless Parity | 4/4 | Complete    | 2026-10-10 |
-| 3. GUI Shell | 3/3 | In Progress|  |
+| 3. GUI Shell | 3/3 | Complete    | 2026-10-11 |
 | 4. Options, Export & MFC Removal | 0/TBD | Not started | - |

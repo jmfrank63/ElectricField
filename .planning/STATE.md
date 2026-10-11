@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 03
-current_phase_name: gui-shell
-status: verifying
+current_phase: 4
+current_phase_name: Options, Export & MFC Removal
+status: planning
 stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-10-10T18:26:32.646Z"
+last_updated: "2026-10-11T00:31:57.835Z"
 last_activity: 2026-10-11
-last_activity_desc: Phase 03 execution started
+last_activity_desc: Phase 03 complete, transitioned to Phase 4
 progress:
   total_phases: 3
   completed_phases: 3
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-10-10 after Phase 2)
 
 ## Current Position
 
-Phase: 03 (gui-shell) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
-Last activity: 2026-10-11 — Phase 03 execution started
+Phase: 4 — Options, Export & MFC Removal
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-11 — Phase 03 complete, transitioned to Phase 4
 
 Progress: [██████████] 100%
 
@@ -38,7 +38,7 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 4
+- Total plans completed: 7
 - Average duration: - min
 - Total execution time: 0.0 hours
 
@@ -47,6 +47,7 @@ Progress: [██████████] 100%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 2 | 4 | - | - |
+| 03 | 3 | - | - |
 
 **Recent Trend:**
 
@@ -128,4 +129,4 @@ Resume file: None
 
 | Phase | State | Resume |
 |-------|-------|--------|
-| 01 | verification_deferred_human | /gsd-verify-work 01 |
+| 01 | resolved 2026-10-11 - both items superseded and covered by the Phase 3 human approval: the hello window was replaced by the real GUI (walkthrough approved), and the 9 MFC baseline PNGs were approved in the Phase 2 side-by-side | - |

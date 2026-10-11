@@ -1,7 +1,7 @@
 ---
 phase: 03-gui-shell
 verified: 2026-10-11T00:00:00Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
@@ -27,8 +27,19 @@ human_verification:
 
 **Phase Goal:** As a user, I want to open the 9 preset configurations in tabs, so that I can see their field lines and equipotentials on any desktop OS.
 **Verified:** 2026-10-11
-**Status:** human_needed (all automated checks pass; no gaps)
+**Status:** passed (human verification approved 2026-10-11)
 **Re-verification:** No, initial verification
+
+## Human Verification Results (2026-10-11)
+
+User verdict: "All good — continue".
+
+| Human test | Result |
+|---|---|
+| Windows real-window walkthrough | pass - user approved |
+| HiDPI on a real 125-200 % display | skipped - no multi-monitor HiDPI rig available; scale arithmetic and k=2 rendering covered by the automated checks |
+| Real windows on Linux (X11/Wayland) and macOS (Retina) | skipped - no local Linux/macOS desktop; CI covers the same binary and event loop on all three OSes |
+| Visual side-by-side vs MFC dipole baseline | pass - zig-out/check/phase3-gui-vs-mfc.png approved in-thread |
 
 ## Goal Achievement
 

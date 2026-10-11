@@ -1,0 +1,1 @@
+{"content":"zig c++ uses bundled libc++; system Qt/GTK built against libstdc++ have different std symbol names; link_libcpp=false still pulls libc++ headers (Ziggit 2026-05). Qt API does not expose std types so mixing sometimes works; wx/gtkmm do not.","source":"web","provider":"websearch","confidence":"LOW","fetched_at":"2026-10-10T06:53:53.505Z","ttl":86400000,"kind":"web"}

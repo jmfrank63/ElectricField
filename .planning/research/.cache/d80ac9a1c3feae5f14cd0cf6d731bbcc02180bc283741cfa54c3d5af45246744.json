@@ -1,0 +1,1 @@
+{"content":"GCC defaults -ffp-contract=fast (GNU mode); clang default is on (per-expression); aarch64 always has FMA so results differ from unfused x86 SSE2; set -ffp-contract=off for reproducibility; tests need tolerance.","source":"web","provider":"websearch","confidence":"LOW","fetched_at":"2026-10-10T06:53:56.410Z","ttl":86400000,"kind":"web"}

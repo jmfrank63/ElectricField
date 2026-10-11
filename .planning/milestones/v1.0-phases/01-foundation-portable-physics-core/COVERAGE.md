@@ -1,0 +1,1 @@
+No external API integration: SDL3, Dear ImGui and doctest are hash-pinned compile-time C/C++ libraries vendored through build.zig.zon (the detector matched "Module API" of the Zig build system), and GitHub Actions / the gh CLI are only CI infrastructure used to run and read the build, not a service the application integrates with.

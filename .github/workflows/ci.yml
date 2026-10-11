@@ -1,0 +1,152 @@
+name: CI
+
+# D-11 (phase 1): every push to the working branch and every pull request, on all three desktop OSes.
+# Phase 2 adds: headless parity step (D-12) on every OS + a Linux ThreadSanitizer job (D-20).
+# Phase 3 adds: render-context tests, the Windows GUI-subsystem check, the full GUI smoke and headless GUI screenshots.
+on:
+  push:
+    branches: [feature/cross-platform, master] # IN-04: master too, so a merge is built
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false # a red macOS job must not hide the Windows/Linux result
+      matrix:
+        include:
+          - { name: windows-x64, os: windows-latest }
+          - { name: linux-x64, os: ubuntu-latest } # Ubuntu 24.04: no apt packages needed (X11/Wayland are dlopen'ed)
+          - { name: macos-arm64, os: macos-latest } # macOS 26, Apple silicon. NEVER pass -Dtarget here (native build only).
+    defaults:
+      run:
+        shell: bash # same shell syntax on all three OSes (Git Bash on windows-latest)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Third-party action: pinned to the commit of v2.2.1. Caches ~/.cache/zig (package tarballs + compiled artifacts).
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.17.0
+
+      - name: Zig version
+        run: zig version
+
+      # Core gate first. With sdl3/imgui `.lazy = true` (D-14) -Dgui=false never fetches the GUI stack, so a GUI-dependency
+      # problem cannot mask a physics problem.
+      - name: Core tests (Debug + UBSan)
+        run: zig build test -Dgui=false --summary all
+
+      - name: Core tests (ReleaseFast; catches optimisation/FMA-sensitive numerics)
+        run: zig build test -Dgui=false -Doptimize=ReleaseFast --summary all
+
+      # GUI gate (fetches SDL3 + ImGui lazily). ReleaseFast: also produces the ef-cli binary used by the parity step.
+      - name: Build everything (core lib + tests + GUI exe + ef-cli)
+        run: zig build -Doptimize=ReleaseFast --summary all
+
+      # Render-context regression tests (D-16): the efrender ImGui/SDL context rule, headless.
+      - name: Render-context regression tests (headless)
+        run: zig build test-render -Doptimize=ReleaseFast --summary all
+
+      # VIEW-05: the exe must be a GUI-subsystem PE (Subsystem = 2), so no console window opens on Windows.
+      # e_lfanew = 4 bytes at offset 60; the optional-header Subsystem is 2 bytes at e_lfanew + 92.
+      - name: Windows GUI subsystem (VIEW-05 - no console window)
+        if: runner.os == 'Windows'
+        run: |
+          exe=zig-out/bin/ElectricField.exe
+          lfanew=$(od -An -tu4 -j60 -N4 "$exe" | tr -d ' ')
+          sub=$(od -An -tu2 -j$((lfanew + 92)) -N2 "$exe" | tr -d ' ')
+          echo "PE subsystem=$sub"
+          test "$sub" -eq 2
+
+      # BUILD-06: the MFC version is gone; nothing may reintroduce MFC / Win32-GUI / Direct2D / GDI code or
+      # MSVC project files. (assets/ElectricField.rc is the icon-only resource from phase-3 D-14; src/gui/main.cpp's
+      # windows.h include is the headless crash-dialog suppression, not a UI dependency. Prose comments that name
+      # Direct2D as replaced history are fine.)
+      - name: MFC-free tree guard (BUILD-06)
+        run: |
+          if git grep -inE "afx|CWinApp|CWnd|CDocument|CMDIF|d2d1|dwrite\.h|gdi32|GetProfileInt|\.vcxproj|\.sln" \
+              -- src tests tests_gui tools build.zig build.zig.zon README.md; then
+            echo "MFC / Win32 / Direct2D / GDI remnants found (see above)"; exit 1
+          fi
+
+      # Full UI smoke (D-16): scripted session through the real GUI code path on the dummy driver.
+      - name: Headless GUI start-up (SDL dummy video driver + software renderer)
+        run: zig build smoke -Doptimize=ReleaseFast --summary all
+
+      # Real-UI screenshots (software renderer): finished Dipole tab, About modal, chooser at --scale 2. Uploaded below.
+      - name: Headless GUI screenshots
+        run: |
+          mkdir -p gui-out
+          ./zig-out/bin/ElectricField --screenshot dipole gui-out/gui-dipole.png --size 1024x820 | tee -a gui-out/screenshots.txt
+          ./zig-out/bin/ElectricField --screenshot dipole gui-out/gui-about.png --size 1024x820 --modal about | tee -a gui-out/screenshots.txt
+          ./zig-out/bin/ElectricField --screenshot dipole gui-out/gui-chooser-k2.png --size 2048x1648 --scale 2 --modal chooser | tee -a gui-out/screenshots.txt
+
+      # D-12 / QA-04: render all 9 presets with the MFC default options to SVG + PNG without a display. ef-cli exits 1 when
+      # charges / field lines differ from, or equipotentials are outside the tolerance of, the committed expectations.
+      # GitHub's bash runs with pipefail, so a failing ef-cli fails the step despite the pipe into tee.
+      - name: Headless parity - render all 9 presets and check counts
+        run: |
+          mkdir -p parity-out
+          ./zig-out/bin/ef-cli --all --out-dir parity-out --expect tools/parity/expected-counts.csv | tee parity-out/summary.txt
+
+      # EXP-01/02: the GUI's own export path (menu -> save dialog -> renderPng/renderSvg between frames) with fixed
+      # inputs must produce exactly the ef-cli oracle's bytes for the same preset, style and view.
+      - name: Headless GUI export equals the ef-cli oracle
+        run: |
+          mkdir -p gui-out/export
+          ./zig-out/bin/ElectricField --export gui-out/export | tee gui-out/export/export.txt
+          cmp gui-out/export/dipole.png parity-out/dipole.png
+          cmp gui-out/export/dipole.svg parity-out/dipole.svg
+
+      - name: Upload SVG/PNG parity artifacts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: parity-${{ matrix.name }}
+          path: parity-out
+          retention-days: 14
+
+      - name: Upload GUI screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: gui-${{ matrix.name }}
+          path: gui-out
+          retention-days: 14
+
+  # D-20 / QA-03: ThreadSanitizer on the core tests (incl. the session/cancel stress tests) + a threaded ef-cli run.
+  tsan-linux:
+    name: tsan-linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.17.0
+
+      # Precaution: old TSan runtimes abort with "unexpected memory mapping" when vm.mmap_rnd_bits=32 (kernel >= 6.x).
+      # Zig 0.17 bundles a current LLVM TSan runtime, so this is expected to be a no-op; keep it until a run proves it unneeded.
+      - name: Lower mmap ASLR entropy (TSan compatibility)
+        run: sudo sysctl -w vm.mmap_rnd_bits=28 || true
+
+      # ReleaseSafe: instrumented but optimised (Debug+TSan is ~3x slower on 4 vCPUs). Any race => exit code 66 => red job.
+      - name: Core tests under ThreadSanitizer
+        run: zig build test -Dgui=false -Dsanitize=thread -Doptimize=ReleaseSafe --summary all
+
+      - name: Threaded ef-cli under ThreadSanitizer
+        run: |
+          zig build -Dgui=false -Dsanitize=thread -Doptimize=ReleaseSafe
+          ./zig-out/bin/ef-cli --preset parallel-dipoles --threads 8 --svg /tmp/p.svg

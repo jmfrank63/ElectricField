@@ -1,0 +1,1 @@
+{"content":"Zig .rc via resinator; set subsystem Windows to avoid console; manifest via win32_manifest on Compile; .rc must not include MFC headers.","source":"web","provider":"websearch","confidence":"LOW","fetched_at":"2026-10-10T06:53:54.963Z","ttl":86400000,"kind":"web"}

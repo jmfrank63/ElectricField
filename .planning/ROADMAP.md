@@ -1,35 +1,28 @@
-# Roadmap — Milestone v2.3: Editor Depth (title, collections UX, undo/redo, grid, continuous fix)
+# Roadmap — Milestone v2.4: Automation API & UX Repairs
 
 **Created:** 2026-10-11
 **Status:** Ready for planning
-**Milestone goal:** As a user, I want the window title to show the collection, to remove configurations from a collection, a proper New menu, a working continuous calculation, Esc reverting uncalculated edits with Undo/Redo in the menu, and a snap grid (Cartesian or polar, origin-definable, independently active and visible).
+**Milestone goal:** As a maintainer, I want every manual action callable through a command API with a script runner, so editor scenarios (and the reported bugs) are reproducible headlessly in CI; as a user, I want grids actually visible, no crash on New Collection, working tab close/rename, and collection-level save/save-as/close.
 
 ## Phases
 
-### Phase 1: Editor Depth
-**Goal:** All of the above, with the continuous-calculation regression fixed and pinned by a smoke test.
+### Phase 1: Automation API & UX Repairs
+**Goal:** The API, the fixes, and the collection/tab UX.
 **Mode:** mvp
 **Depends on**: -
-**Requirements**: TITLE-01, COL-05, MENU-01, CALC-04, EDIT-11, EDIT-12, EDIT-13, GRID-01..04
+**Requirements**: API-01..04, BUG-01, BUG-02, TAB-02..04, COL-06..09
 **Success Criteria** (what must be TRUE):
 
-1. The window title shows the collection (with a tab: "Electric Field - <Collection> - <Tab>"; without: "Electric Field - <Collection>")
-2. Right-clicking a configuration in the chooser offers Remove (with confirmation); the configuration is deleted from the collection file; open tabs are unaffected
-3. The File menu shows "New Configuration..." (opens the chooser) and "New Collection..." - the bare "New"/"New..." entries are gone
-4. Continuous calculation works: after an edit (and only then), the tab recomputes once the 0.35 s debounce passes - pinned by a smoke regression test
-5. Esc on a stale tab reverts the charges to the last calculated state; Edit > Undo (Ctrl+Z) / Redo (Ctrl+Y) steps through charge and method changes per tab
-6. A grid can be enabled (snapping) and shown (rendering) independently, is Cartesian or polar, and its origin is definable; snapping applies to drag, double-click add and typed positions; the session persists grid settings
-7. CI stays green on all three OSes plus TSan; smoke stays green
+1. Every menu action and every editor/collection operation is callable through a command API; a headless script runner (`ElectricField --script <file> [--user-dir <dir>]`) executes command files and dumps app state; a script-test suite runs in CI on all three OSes (API-01..04)
+2. Grids are visible (drawn behind the field lines, not overwritten by the canvas background) while snapping behaviour is unchanged (BUG-01)
+3. New Collection does not crash or lock the UI; pinned by a script regression (BUG-02)
+4. Tabs can be closed (x button, middle click, Close Tab) and renamed reliably; a right-click tab menu offers Close/Rename/Save As/Calculate (TAB-02..04)
+5. File menu is collection-centric: Save Collection (Ctrl+S, stores matching edited tabs into the collection), Save Collection As..., Close Collection (switches to Original); Save Configuration As... stays tab-level; each collection's open tabs persist per collection and are restored on switch/start (COL-06..09)
+6. CI green on all three OSes plus TSan; smoke green; README documents the API
 
 **Plans**: TBD
-
-## Progress
-
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Editor Depth | 2/2 | Complete | 2026-10-11 |
 
 ## Notes
 
 - Owner instruction: GSD auto-mode, always take the recommended answer (UAT gate auto-accepted and recorded).
-- The interaction contract stays: double-click empty canvas adds a charge in one go; single click selects it for editing.
+- Root-cause notes from the owner's report: grid invisible (drawn before the background fill overwrites it); UI lockup on New Collection (the leave-confirm modal is never closed after acting on its answer - reported as a crash); Save As was ambiguous between tab and collection scope.

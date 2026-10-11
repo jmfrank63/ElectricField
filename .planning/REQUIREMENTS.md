@@ -247,3 +247,29 @@ Which phases cover which requirements. Updated during roadmap creation.
 - [ ] **GRID-02**: A grid can be shown or hidden independently
 - [ ] **GRID-03**: The grid is Cartesian or polar
 - [ ] **GRID-04**: The grid origin is definable for both grid types; snapping applies to drag, double-click add and typed positions; grid settings persist in the session
+
+---
+
+# Milestone v2.4 Requirements (added 2026-10-11)
+
+## Automation API
+
+- [ ] **API-01**: A command API exposes every menu action and every editor/collection operation (app/tab/config/charge/view/grid/options commands) with a text result per call
+- [ ] **API-02**: A headless script runner executes command files (ElectricField --script <file> [--user-dir <dir>] [--out <file>]); app.state dumps the full UI state as a test oracle
+- [ ] **API-03**: Script tests in CI cover the editor scenarios (open/edit/undo/redo/esc/grid/save/remove/collection flows) on all three OSes
+- [ ] **API-04**: --user-dir redirects all user-file paths (options/configurations/Collections/sessions) so scripts never touch real user data
+
+## Bug fixes
+
+- [ ] **BUG-01**: Grids are visible (BUG: the background fill overwrote them)
+- [ ] **BUG-02**: New Collection works (BUG: the leave-confirm modal stayed open after its answer and locked the UI)
+
+## Tab & Collection UX
+
+- [ ] **TAB-02**: Tabs closable via x button, middle click and Close Tab (verified; tab right-click menu added)
+- [ ] **TAB-03**: Tab rename works (panel name field + tab right-click menu)
+- [ ] **TAB-04**: The tab right-click menu offers Close / Rename / Save Configuration As / Calculate
+- [ ] **COL-06**: Save Collection (Ctrl+S) stores the collection file, merging matching edited tabs
+- [ ] **COL-07**: Save Collection As... saves under a new name and switches, keeping the tabs open
+- [ ] **COL-08**: Close Collection saves and switches to Original
+- [ ] **COL-09**: Each collection's open tabs persist per collection (Sessions/<Name>.ini) and are restored on switch and on start

@@ -5,7 +5,7 @@ name: CI
 # Phase 3 adds: render-context tests, the Windows GUI-subsystem check, the full GUI smoke and headless GUI screenshots.
 on:
   push:
-    branches: [feature/cross-platform, master] # IN-04: master too, so a merge is built
+    branches: [feature/cross-platform, feature/v2-charge-editor, master] # IN-04: master too, so a merge is built
   pull_request:
   workflow_dispatch:
 

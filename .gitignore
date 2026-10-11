@@ -3,6 +3,12 @@
 zig-out/
 zig-pkg/
 
+# ---- Visual Studio / MSVC leftovers on developer machines (the MFC build is gone; its outputs may still exist locally) ----
+.vs/
+x64/
+*.suo
+*.pdb
+
 # ---- scratch / local ----
 /build/
 /out/

@@ -21,6 +21,17 @@ namespace efapp {
 // without a further edit (a drag arms the deadline on every frame, so one recompute fires when it settles).
 inline constexpr double kAutoRecalcDelay = 0.35;
 
+// v2.3 GRID: the snap grid of a tab. active = snapping on; visible = drawn; Cartesian (spacing) or
+// polar (radial spacing + angular step), both around a definable origin.
+struct GridSettings {
+  bool active = false;
+  bool visible = false;
+  bool polar = false;
+  ef::Vec2 origin;
+  double spacing = 0.5;
+  double angleStepDeg = 15.0;
+};
+
 // Tab::preset value for tabs that do not come from the built-in registry (user configurations, the empty
 // configuration). Everything downstream keys off the title, so the value is inert.
 inline constexpr std::size_t kNoPreset = std::numeric_limits<std::size_t>::max();
@@ -62,6 +73,15 @@ struct Tab {
   // autoRecalcTick(now) every frame and the tab recomputes once `pendingRecalcAt` (now + delay) passes.
   bool autoRecalc = false;
   double pendingRecalcAt = -1.0;  // absolute deadline in seconds; -1 = not armed
+  // v2.3 EDIT-11/12: the charges of the last (re)computation (Esc reverts here) and the per-tab history.
+  ef::ChargeSystem computed;
+  struct HistoryEntry {
+    ef::ChargeSystem field;
+    ef::Method method;
+  };
+  std::vector<HistoryEntry> undo, redo;
+  // v2.3 GRID: snap grid settings (independently active and visible; Cartesian or polar; own origin).
+  GridSettings grid;
 };
 
 class Workspace {
@@ -88,7 +108,7 @@ class Workspace {
   // Restores a saved session tab (v2.1 SES-01) with its EXACT title and params. Bumps the matching counter
   // so later opens never duplicate a restored title.
   unsigned openRestored(const std::string& title, std::size_t presetIndex, const ef::ComputeParams& params,
-                        const std::vector<ef::PresetCharge>& charges, bool autoRecalc = false);
+                        const std::vector<ef::PresetCharge>& charges, bool autoRecalc = false, const GridSettings& grid = GridSettings{});
   // Continuous calculation (v2.2 CALC-03): recalculates every tab that has autoRecalc on, is stale, and
   // whose pending deadline has passed. Called every frame by the GUI with the current time in seconds.
   void autoRecalcTick(double nowSeconds);

@@ -1,23 +1,25 @@
-# Roadmap — Milestone v2.2: Collections
+# Roadmap — Milestone v2.3: Editor Depth (title, collections UX, undo/redo, grid, continuous fix)
 
 **Created:** 2026-10-11
 **Status:** Ready for planning
-**Milestone goal:** As a user, I want to organise my configurations into collections: the Original collection holds everything that exists today, a new collection starts empty so I can build it up, and a Calculate All opens every configuration of the current collection in tabs.
+**Milestone goal:** As a user, I want the window title to show the collection, to remove configurations from a collection, a proper New menu, a working continuous calculation, Esc reverting uncalculated edits with Undo/Redo in the menu, and a snap grid (Cartesian or polar, origin-definable, independently active and visible).
 
 ## Phases
 
-### Phase 1: Collections
-**Goal:** As a user, I want to group my configurations into collections stored as one file per collection, switch between them, and open a whole collection at once.
+### Phase 1: Editor Depth
+**Goal:** All of the above, with the continuous-calculation regression fixed and pinned by a smoke test.
 **Mode:** mvp
-**Depends on**: —
-**Requirements**: COL-01, COL-02, COL-03, COL-04, EDIT-08, EDIT-09
+**Depends on**: -
+**Requirements**: TITLE-01, COL-05, MENU-01, CALC-04, EDIT-11, EDIT-12, EDIT-13, GRID-01..04
 **Success Criteria** (what must be TRUE):
 
-1. Collections live as one human-readable file per collection under `Collections\` in the user config directory; on first run the Original collection is seeded with the 9 built-in presets plus any legacy user configurations from configurations.ini (which is then left untouched)
-2. The menu bar shows the current collection with a switcher; File > New Collection… creates and switches to an empty collection (no tabs, no configurations); switching saves the current session and closes its tabs
-3. Calculate All (menu-bar button and File menu) closes the open tabs and opens every configuration of the current collection in tabs, each computing as usual
-4. The session file records the current collection and restores it (with its tabs) on startup; Save As stores into the current collection file; CI stays green on all three OSes plus TSan; smoke stays green
-5. The New-charge entry is always visible in the panel; a switch-sign button flips the selected charge's value and marks the tab stale
+1. The window title shows the collection (with a tab: "Electric Field - <Collection> - <Tab>"; without: "Electric Field - <Collection>")
+2. Right-clicking a configuration in the chooser offers Remove (with confirmation); the configuration is deleted from the collection file; open tabs are unaffected
+3. The File menu shows "New Configuration..." (opens the chooser) and "New Collection..." - the bare "New"/"New..." entries are gone
+4. Continuous calculation works: after an edit (and only then), the tab recomputes once the 0.35 s debounce passes - pinned by a smoke regression test
+5. Esc on a stale tab reverts the charges to the last calculated state; Edit > Undo (Ctrl+Z) / Redo (Ctrl+Y) steps through charge and method changes per tab
+6. A grid can be enabled (snapping) and shown (rendering) independently, is Cartesian or polar, and its origin is definable; snapping applies to drag, double-click add and typed positions; the session persists grid settings
+7. CI stays green on all three OSes plus TSan; smoke stays green
 
 **Plans**: TBD
 
@@ -25,9 +27,9 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Collections | 2/2 | Complete | 2026-10-11 |
+| 1. Editor Depth | 2/2 | Complete | 2026-10-11 |
 
 ## Notes
 
 - Owner instruction: GSD auto-mode, always take the recommended answer (UAT gate auto-accepted and recorded).
-- Design choices (recommended): one .ini file per collection under `Collections\` (not a folder per collection), reusing the configurations grammar; per-configuration method stays a per-TAB property (session), not a collection property; File > New keeps the 9 built-ins as quick access while the chooser shows the current collection.
+- The interaction contract stays: double-click empty canvas adds a charge in one go; single click selects it for editing.

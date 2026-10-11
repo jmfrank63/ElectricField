@@ -25,6 +25,7 @@ struct SavedTab {
   std::size_t preset = kNoPreset;  // kNoPreset = "none"
   std::string method;              // a kMethods persistence name ("" = default)
   bool autoRecalc = false;         // v2.2 CALC-03: continuous calculation
+  GridSettings grid;               // v2.3 GRID: snap grid settings
   std::vector<ef::PresetCharge> charges;
 };
 

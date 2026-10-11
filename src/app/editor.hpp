@@ -31,6 +31,20 @@ bool stepValue(Tab& t, int delta);
 // Flips the sign of the selected charge's value (+10 -> -10); 0 stays 0 (v2.2 EDIT-09).
 bool flipSign(Tab& t);
 
+// v2.3 EDIT-12: history. Every successful charge/method mutation records the pre-state (capped);
+// undo/redo restore it. Both refuse while the tab is computing.
+inline constexpr std::size_t kHistoryLimit = 100;
+bool undo(Tab& t);
+bool redo(Tab& t);
+// v2.3 EDIT-11: restore the charges of the last (re)computation (Esc). False when the tab has no
+// uncalculated changes.
+bool revertToComputed(Tab& t);
+
+// v2.3 GRID: snap a world position to the grid lattice (no-op when the grid is inactive).
+ef::Vec2 snapPoint(const GridSettings& g, ef::Vec2 world);
+// The arrow-key step in world units: the grid spacing when snapping is on, else 0.1.
+double arrowStep(const GridSettings& g);
+
 // View controls (v2.2 zoom/pan). View-only: they never mark the tab stale and never touch the computation.
 inline constexpr double kZoomMin = 0.05;
 inline constexpr double kZoomMax = 20.0;

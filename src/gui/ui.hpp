@@ -38,6 +38,10 @@ struct UiState {
   std::string leaveText;         // body text of the prompt
   std::string leaveButton;       // "Quit anyway" / "Switch anyway"
   int leaveDecision = 0;         // 1 = leave anyway (consumed by App::frame)
+  bool undoRequest = false, redoRequest = false;  // v2.3 EDIT-12 (Edit menu / Ctrl+Z, Ctrl+Y)
+  std::string removeConfigName;  // v2.3 COL-05: right-clicked configuration awaiting confirmation
+  bool removeConfigOpen = false; // the confirm popup was requested this frame
+  std::string removeConfigApply; // confirmed removal; consumed by App::frame
   bool openConfigFolder = false; // Help > Open Configuration Folder (v2.1 SES-03)
   // v2.2 collections: the App owns the master list; ui_ mirrors names for the switcher and chooser
   std::vector<std::string> collections;

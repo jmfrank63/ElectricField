@@ -216,3 +216,34 @@ Which phases cover which requirements. Updated during roadmap creation.
 | COL-01..04 | Complete |
 | EDIT-08 | Complete |
 | EDIT-09 | Complete |
+| TITLE-01, COL-05, MENU-01, CALC-04, EDIT-11..13, GRID-01..04 (v2.3) | Complete |
+
+---
+
+# Milestone v2.3 Requirements (added 2026-10-11)
+
+## Title & Menus
+
+- [ ] **TITLE-01**: The window title shows the collection (with the active tab when one is open)
+- [ ] **MENU-01**: The File menu shows New Configuration... (opens the chooser) and New Collection...; the bare New / New... entries are removed
+
+## Collections
+
+- [ ] **COL-05**: Right-clicking a configuration in the chooser offers Remove (with confirmation); it is deleted from the collection file; open tabs are unaffected
+
+## Calculation
+
+- [ ] **CALC-04**: Continuous calculation actually recomputes after an edit (the debounce deadline is armed only by edits, never re-armed idle); pinned by a smoke regression test
+
+## Editor
+
+- [ ] **EDIT-11**: Esc on a stale tab reverts the charges to the last calculated state
+- [ ] **EDIT-12**: Edit > Undo (Ctrl+Z) / Redo (Ctrl+Y) steps through charge and method changes per tab
+- [ ] **EDIT-13**: Double-click empty canvas adds a charge in one go; single click selects it for editing (interaction contract, pinned)
+
+## Grid
+
+- [ ] **GRID-01**: A grid can be set active (snapping) independently of visibility
+- [ ] **GRID-02**: A grid can be shown or hidden independently
+- [ ] **GRID-03**: The grid is Cartesian or polar
+- [ ] **GRID-04**: The grid origin is definable for both grid types; snapping applies to drag, double-click add and typed positions; grid settings persist in the session

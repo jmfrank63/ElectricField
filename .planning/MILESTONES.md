@@ -10,6 +10,19 @@
 
 ---
 
+## v2.3 v2.3 (Shipped: 2026-10-11)
+
+**Phases completed:** 1 phase, 2 plans
+
+**Key accomplishments:**
+
+- The window title shows the collection; configurations can be removed from a collection (chooser right-click + confirmation); the File menu shows New Configuration... / New Collection....
+- Continuous calculation fixed (the GUI had re-armed the debounce every frame) and pinned by a smoke regression through the real canvas input path.
+- Esc reverts uncalculated edits to the last calculated state; per-tab Undo/Redo (Ctrl+Z / Ctrl+Y) over charges and method.
+- Snap grid: independently active and visible, Cartesian or polar, definable origin and spacing, persisted per tab in the session; snapping covers drag, double-click add and typed positions.
+- Verified: 113 unit tests + full headless smoke (incl. the continuous-calculation regression), CI green on windows-x64, linux-x64, macos-arm64 and tsan-linux.
+
+---
 ## v2.2 v2.2 (Shipped: 2026-10-11)
 
 **Phases completed:** 1 phase, 2 plans

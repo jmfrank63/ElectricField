@@ -32,9 +32,10 @@ std::string overlayText(std::size_t linesReceived, int expectedLines) {
   return "Computing... " + std::to_string(n) + " / " + std::to_string(m) + " lines";
 }
 
-std::string windowTitle(const Tab* active) {
-  if (!active) return "Electric Field";
-  return "Electric Field \xE2\x80\x94 " + active->title;
+std::string windowTitle(const Tab* active, const std::string& collection) {
+  if (collection.empty()) return active ? "Electric Field \xE2\x80\x94 " + active->title : std::string("Electric Field");
+  if (!active) return "Electric Field \xE2\x80\x94 " + collection;
+  return "Electric Field \xE2\x80\x94 " + collection + " \xE2\x80\x94 " + active->title;
 }
 
 std::string versionLine(std::string_view semver, std::string_view hash) {

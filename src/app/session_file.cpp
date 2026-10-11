@@ -40,6 +40,13 @@ std::string serializeSession(const std::vector<SavedTab>& tabs, const std::strin
     os << "preset = " << (t.preset == kNoPreset ? std::string("none") : std::to_string(t.preset)) << '\n';
     os << "method = " << (t.method.empty() ? std::string("euler") : t.method) << '\n';
     if (t.autoRecalc) os << "autocalc = true\n";
+    char gx[32], gy[32], gs[32], ga[32];
+    std::snprintf(gx, sizeof(gx), "%.10g", t.grid.origin.X);
+    std::snprintf(gy, sizeof(gy), "%.10g", t.grid.origin.Y);
+    std::snprintf(gs, sizeof(gs), "%.10g", t.grid.spacing);
+    std::snprintf(ga, sizeof(ga), "%.10g", t.grid.angleStepDeg);
+    os << "grid = " << (t.grid.active ? 1 : 0) << ',' << (t.grid.visible ? 1 : 0) << ',' << (t.grid.polar ? 1 : 0) << ',' << gx << ','
+       << gy << ',' << gs << ',' << ga << '\n';
     for (const ef::PresetCharge& c : t.charges) {
       char x[32], y[32];
       std::snprintf(x, sizeof(x), "%.10g", c.x);
@@ -86,6 +93,21 @@ ParsedSession parseSession(const std::string& text) {
       if (!value.empty()) r.collection = value;  // v2.2: which collection the tabs belong to
     } else if (key == "autocalc") {
       if (inTab && ini::toLower(value) == "true") cur.autoRecalc = true;
+    } else if (key == "grid") {
+      if (!inTab) continue;
+      const std::vector<std::string> gp = ini::splitCsv(value);
+      int a = 0, vis = 0, pol = 0;
+      double ox = 0, oy = 0, sp = 0, ang = 0;
+      if (gp.size() >= 6 && ini::parseIntBounded(gp[0], 0, 1, a) && ini::parseIntBounded(gp[1], 0, 1, vis) &&
+          ini::parseIntBounded(gp[2], 0, 1, pol) && ini::parseDouble(gp[3], ox) && ini::parseDouble(gp[4], oy) &&
+          ini::parseDouble(gp[5], sp)) {
+        cur.grid.active = a != 0;
+        cur.grid.visible = vis != 0;
+        cur.grid.polar = pol != 0;
+        cur.grid.origin = ef::Vec2{ox, oy};
+        cur.grid.spacing = sp;
+        if (gp.size() >= 7 && ini::parseDouble(gp[6], ang)) cur.grid.angleStepDeg = ang;
+      }
     } else if (key == "preset") {
       if (!inTab) continue;
       if (ini::toLower(value) == "none")

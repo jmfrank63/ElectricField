@@ -9,7 +9,7 @@
 namespace {
 
 efapp::SavedTab sample() {
-  return {"Dipole 1", 0, "euler", false, {{1, -2.0, 0.0}, {-1, 2.0, 0.0}}};
+  return {"Dipole 1", 0, "euler", false, {}, {{1, -2.0, 0.0}, {-1, 2.0, 0.0}}};
 }
 
 }  // namespace
@@ -17,8 +17,8 @@ efapp::SavedTab sample() {
 TEST_CASE("serialize -> parse round-trips titles, sources, methods and charges (SES-01/02)") {
   const std::vector<efapp::SavedTab> tabs = {
       sample(),
-      {"My Field", efapp::kNoPreset, "adaptive-dormand-prince", false, {{2, 0.5, -0.25}}},
-      {"Empty Configuration 1", efapp::kNoPreset, "", false, {{1, 0.0, 0.0}}},
+      {"My Field", efapp::kNoPreset, "adaptive-dormand-prince", false, {}, {{2, 0.5, -0.25}}},
+      {"Empty Configuration 1", efapp::kNoPreset, "", false, {}, {{1, 0.0, 0.0}}},
   };
   const efapp::ParsedSession r = efapp::parseSession(efapp::serializeSession(tabs));
   CHECK(r.skippedTabs == 0);

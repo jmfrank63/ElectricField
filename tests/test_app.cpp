@@ -159,10 +159,11 @@ TEST_CASE("overlay text clamps n to m") {
 }
 
 TEST_CASE("window title, version line, shortcut labels, failure text") {
-  CHECK(windowTitle(nullptr) == "Electric Field");
+  CHECK(windowTitle(nullptr, "Original") == "Electric Field \xE2\x80\x94 Original");
+  CHECK(windowTitle(nullptr, "") == "Electric Field");
   Tab t;
   t.title = "Dipole 1";
-  CHECK(windowTitle(&t) == "Electric Field \xE2\x80\x94 Dipole 1");
+  CHECK(windowTitle(&t, "Original") == "Electric Field \xE2\x80\x94 Original \xE2\x80\x94 Dipole 1");
   CHECK(versionLine("0.1.0", "3880738") == "Version 0.1.0 (3880738)");
   CHECK(versionLine("0.1.0", "") == "Version 0.1.0 (unknown)");
   CHECK(shortcutLabel("N", false) == "Ctrl+N");
@@ -485,7 +486,7 @@ TEST_CASE("rename: exact trimmed title, empty refused, nothing else changes (v2.
   CHECK(ws.rename(s, "  My Field  "));
   CHECK(ws.find(s)->title == "My Field");
   CHECK(ws.find(s)->stale == false);  // renaming is not an edit of the charges
-  CHECK(efapp::windowTitle(ws.find(s)) == "Electric Field \xE2\x80\x94 My Field");
+  CHECK(efapp::windowTitle(ws.find(s), "My Collection") == "Electric Field \xE2\x80\x94 My Collection \xE2\x80\x94 My Field");
 }
 
 TEST_CASE("openRestored: exact title, restored params, counters never duplicate (v2.1 SES-01)") {

@@ -60,9 +60,11 @@ void drawBusyOverlay(ImDrawList* dl, ImVec2 canvasMin, ImVec2 canvasMax, const e
   dl->PopClipRect();
 }
 
-// Continuous calculation (v2.2 CALC-03): re-arms the debounced recompute deadline after an edit.
+// Continuous calculation (v2.2 CALC-03, v2.3 CALC-04): the editor mutators mark pendingRecalcAt = -2 on
+// every edit; this converts the marker into a real deadline exactly once. Idle frames can never re-arm it,
+// which is what broke continuous calculation in v2.2 (a stale tab kept sliding its own deadline).
 void armAutoRecalc(efapp::Tab& t) {
-  if (t.autoRecalc && t.stale) t.pendingRecalcAt = ImGui::GetTime() + efapp::kAutoRecalcDelay;
+  if (t.autoRecalc && t.stale && t.pendingRecalcAt == -2) t.pendingRecalcAt = ImGui::GetTime() + efapp::kAutoRecalcDelay;
 }
 
 // v2.2 zoom/pan interaction state (UI thread only).
@@ -90,6 +92,44 @@ void viewControls(efapp::Tab& t, const ef::View& view, const ef::Vec2& mouseWorl
   }
 }
 
+// v2.3 GRID-02: draws the grid behind the scene. Cartesian: straight lines every `spacing`; polar:
+// circles every `spacing` (radial step) and rays every `angleStepDeg`, both around the grid origin.
+void drawGrid(ImDrawList* dl, const efapp::GridSettings& g, const ef::View& view, ImVec2 p) {
+  if (!(g.spacing > 0.0)) return;
+  const double ppu = view.pixelsPerUnit;
+  const ImU32 col = IM_COL32(170, 170, 170, 130);
+  if (!g.polar) {
+    const double wx0 = view.centre.X - (view.widthPx / 2.0) / ppu, wx1 = view.centre.X + (view.widthPx / 2.0) / ppu;
+    const double wy0 = view.centre.Y - (view.heightPx / 2.0) / ppu, wy1 = view.centre.Y + (view.heightPx / 2.0) / ppu;
+    const long nx0 = (long)std::ceil((wx0 - g.origin.X) / g.spacing), nx1 = (long)std::floor((wx1 - g.origin.X) / g.spacing);
+    const long ny0 = (long)std::ceil((wy0 - g.origin.Y) / g.spacing), ny1 = (long)std::floor((wy1 - g.origin.Y) / g.spacing);
+    if (nx1 - nx0 > 2000 || ny1 - ny0 > 2000) return;  // a pathological spacing must not stall the frame
+    for (long i = nx0; i <= nx1; ++i) {
+      const float sx = static_cast<float>(p.x + view.widthPx / 2.0 + (g.origin.X + i * g.spacing - view.centre.X) * ppu);
+      dl->AddLine(ImVec2(sx, p.y), ImVec2(sx, p.y + view.heightPx), col);
+    }
+    for (long j = ny0; j <= ny1; ++j) {
+      const float sy = static_cast<float>(p.y + view.heightPx / 2.0 - (g.origin.Y + j * g.spacing - view.centre.Y) * ppu);
+      dl->AddLine(ImVec2(p.x, sy), ImVec2(p.x + view.widthPx, sy), col);
+    }
+  } else {
+    const ef::Vec2 c = efapp::canvasFromWorld(view, p.x, p.y, g.origin);
+    const ImVec2 oc(static_cast<float>(c.X), static_cast<float>(c.Y));
+    const double farX = std::max(std::abs(static_cast<double>(p.x) - c.X), std::abs(static_cast<double>(p.x + view.widthPx) - c.X));
+    const double farY = std::max(std::abs(static_cast<double>(p.y) - c.Y), std::abs(static_cast<double>(p.y + view.heightPx) - c.Y));
+    const double maxR = std::sqrt(farX * farX + farY * farY) / ppu;
+    const long nMax = static_cast<long>(maxR / g.spacing) + 1;
+    if (nMax > 2000) return;
+    for (long i = 1; i <= nMax; ++i) dl->AddCircle(oc, static_cast<float>(i * g.spacing * ppu), col, 0, 1.f);
+    const int rays = static_cast<int>(std::round(360.0 / std::clamp(g.angleStepDeg, 1.0, 180.0)));
+    const double stepRad = g.angleStepDeg * 3.1415926535897932346 / 180.0;
+    for (int a = 0; a < rays; ++a) {
+      const double ang = a * stepRad;
+      dl->AddLine(oc, ImVec2(oc.x + static_cast<float>(std::cos(ang) * maxR * ppu * 1.5), oc.y - static_cast<float>(std::sin(ang) * maxR * ppu * 1.5)), col);
+    }
+  }
+}
+
 void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   ImVec2 avail = ImGui::GetContentRegionAvail();
   avail.x = std::max(1.f, avail.x);
@@ -105,6 +145,7 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   view.pixelsPerUnit *= t.zoom;  // v2.2 zoom
   view.centre = t.centre;        // v2.2 pan
   const ef::DrawStyle style = efapp::scaledStyle(env.drawStyle, env.k);  // user draw options (Phase 4), scaled for HiDPI
+  if (t.grid.visible) drawGrid(dl, t.grid, view, p);  // v2.3 GRID-02: the grid is drawn behind the scene
   {
     efrender::ImGuiPainter painter(dl, p);
     ef::renderScene(painter, t.scene, style, view);
@@ -115,33 +156,41 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   // Charge editor (v2, EDIT-01..04): all mutations go through efapp::editor, nothing recomputes implicitly.
   const bool canEdit = t.session == nullptr;
   const ImGuiIO& io = ImGui::GetIO();
-  const ef::Vec2 mouseWorld = efapp::worldFromCanvas(view, p.x, p.y, io.MousePos.x, io.MousePos.y);
+  const ef::Vec2 mouseWorld = efapp::editor::snapPoint(t.grid, efapp::worldFromCanvas(view, p.x, p.y, io.MousePos.x, io.MousePos.y));
   if (canEdit && hovered) {
-    if (ImGui::IsMouseDoubleClicked(0)) {
-      if (efapp::editor::hitCharge(t.field, mouseWorld, kEditorHitRadius) < 0) efapp::editor::addCharge(t, mouseWorld, 1);
-    } else if (ImGui::IsMouseClicked(0)) {
+    if (ImGui::IsMouseDoubleClicked(0)) {  // EDIT-13: double-click empty canvas adds a charge in one go
+      if (efapp::editor::hitCharge(t.field, mouseWorld, kEditorHitRadius) < 0) {
+        efapp::editor::addCharge(t, mouseWorld, 1);
+        armAutoRecalc(t);
+      }
+    } else if (ImGui::IsMouseClicked(0)) {  // single click selects the charge for editing
       t.selected = efapp::editor::hitCharge(t.field, mouseWorld, kEditorHitRadius);
     }
   }
   // A drag that started on the canvas keeps moving the charge even past the edge until the button is released.
   if (canEdit && t.selected >= 0 && ImGui::IsMouseDragging(0) && (hovered || ui.canvasDrag)) {
-    efapp::editor::moveCharge(t, static_cast<std::size_t>(t.selected), mouseWorld);
+    if (efapp::editor::moveCharge(t, static_cast<std::size_t>(t.selected), mouseWorld)) armAutoRecalc(t);
     ui.canvasDrag = ImGui::IsMouseDown(0);
   } else {
     ui.canvasDrag = false;
   }
   if (canEdit && t.selected >= 0 && (hovered || ImGui::IsItemFocused())) {
-    const double step = ImGui::IsKeyDown(ImGuiMod_Shift) ? 0.5 : 0.1;  // EDIT-02
+    const double step = ImGui::IsKeyDown(ImGuiMod_Shift) ? efapp::editor::arrowStep(t.grid) * 5.0 : efapp::editor::arrowStep(t.grid);  // EDIT-02 + v2.3 GRID-01
     ef::Vec2 d{0, 0};
     if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow, true)) d.X -= step;
     if (ImGui::IsKeyPressed(ImGuiKey_RightArrow, true)) d.X += step;
     if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, true)) d.Y += step;
     if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, true)) d.Y -= step;
-    if (d.X != 0 || d.Y != 0) efapp::editor::stepSelected(t, d);
+    if (d.X != 0 || d.Y != 0) {
+      efapp::editor::stepSelected(t, d);
+      armAutoRecalc(t);
+    }
     if (ImGui::IsKeyPressed(ImGuiKey_Delete)) efapp::editor::removeSelected(t);  // EDIT-04: keeps the last charge
   }
-  // EDIT-05/CALC-03: continuous calculation re-arms the (debounced) recompute deadline after every edit.
-  armAutoRecalc(t);
+  // v2.3 EDIT-11: Esc reverts the uncalculated changes to the last calculated state.
+  if (canEdit && t.stale && (hovered || ImGui::IsItemFocused()) && ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+    efapp::editor::revertToComputed(t);
+  }
   // v2.2 zoom/pan: wheel + right-drag + (unselected) arrow keys. View-only: never stale, works while computing.
   viewControls(t, view, mouseWorld, hovered);
 
@@ -294,6 +343,11 @@ void chooserModal(UiState& ui, const UiEnv& env) {
       } else if (ImGui::IsItemFocused()) {
         ui.chooserSel = static_cast<int>(i);  // selection follows keyboard focus (Up/Down)
       }
+      // v2.3 COL-05: right-click a configuration to remove it from the collection (with confirmation).
+      if (isCfg && ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
+        ui.removeConfigName = ui.userConfigs[i].name;
+        ui.removeConfigOpen = true;
+      }
       if (ui.chooserSel == static_cast<int>(i)) ImGui::SetItemDefaultFocus();
     }
     ImGui::PopStyleVar();
@@ -321,6 +375,41 @@ void chooserModal(UiState& ui, const UiEnv& env) {
     ImGui::CloseCurrentPopup();
   }
   ImGui::EndPopup();
+}
+
+// v2.3 COL-05: confirmation for removing a configuration from the current collection. The App consumes
+// removeConfigApply (erases + rewrites the collection file); open tabs are unaffected.
+void removeConfigModal(UiState& ui, const UiEnv& env) {
+  const ImGuiViewport* vp = ImGui::GetMainViewport();
+  if (ui.removeConfigOpen) {
+    ImGui::OpenPopup("Remove configuration?##removecfg");
+    ui.removeConfigOpen = false;
+  }
+  if (ui.removeConfigName.empty()) return;  // nothing pending
+  ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.f * env.k, 16.f * env.k));
+  const bool open = ImGui::BeginPopupModal("Remove configuration?##removecfg", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
+  ImGui::PopStyleVar();
+  if (open) {
+    ImGui::Text("Remove '%s' from this collection?", ui.removeConfigName.c_str());
+    ImGui::TextDisabled("Tabs that are already open are not affected.");
+    ImGui::Dummy(ImVec2(0.f, 8.f * env.k));
+    const ImGuiStyle& st = ImGui::GetStyle();
+    const float w1 = ImGui::CalcTextSize("Remove").x + 2 * st.FramePadding.x;
+    const float w2 = ImGui::CalcTextSize("Cancel").x + 2 * st.FramePadding.x;
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - (w1 + 8.f * env.k + w2));
+    if (ImGui::Button("Remove")) {
+      ui.removeConfigApply = ui.removeConfigName;
+      ui.removeConfigName.clear();
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::SetItemDefaultFocus();
+    ImGui::SameLine(0.f, 8.f * env.k);
+    if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) ui.removeConfigName.clear();
+    ImGui::EndPopup();
+  } else {
+    ui.removeConfigName.clear();  // dismissed (Esc): nothing pending
+  }
 }
 
 // File > New Collection (v2.2 COL-02): a name is all it takes - the collection file is created empty and
@@ -617,7 +706,23 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   ImGui::BeginChild("##editor", ImVec2(kEditorPanelWidth * env.k, 0.f), ImGuiChildFlags_None);
   const bool canEdit = t.session == nullptr;
   ImGui::TextUnformatted("Charge editor");
+  // v2.3 GRID-01..04: the grid section stays interactive even while a computation runs.
+  ImGui::TextUnformatted("Grid");
+  ImGui::Checkbox("Active (snapping)", &t.grid.active);
+  ImGui::Checkbox("Visible", &t.grid.visible);
+  if (ImGui::RadioButton("Cartesian", !t.grid.polar)) t.grid.polar = false;
+  ImGui::SameLine();
+  if (ImGui::RadioButton("Polar", t.grid.polar)) t.grid.polar = true;
+  ImGui::InputDouble("Origin X##grid", &t.grid.origin.X, 0.0, 0.0, "%.3f");
+  ImGui::InputDouble("Origin Y##grid", &t.grid.origin.Y, 0.0, 0.0, "%.3f");
+  ImGui::InputDouble("Spacing##grid", &t.grid.spacing, 0.0, 0.0, "%.3f");
+  t.grid.spacing = std::max(0.05, std::min(100.0, t.grid.spacing));
+  if (t.grid.polar) {
+    ImGui::InputDouble("Angle step##grid", &t.grid.angleStepDeg, 0.0, 0.0, "%.1f");
+    t.grid.angleStepDeg = std::max(1.0, std::min(180.0, t.grid.angleStepDeg));
+  }
   ImGui::Separator();
+
   ImGui::BeginDisabled(!canEdit);
 
   // TAB-01: the name field renames the active tab live; the buffer re-syncs when the active tab changes.
@@ -746,14 +851,14 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
       if (ImGui::Selectable(label.c_str(), static_cast<int>(i) == mIdx) && static_cast<int>(i) != mIdx) {
         t.params.method = ef::kMethods[i].method;  // CALC-02: applies at the next Calculate
         t.stale = true;
-        armAutoRecalc(t);  // v2.2 CALC-03: a method change is a canvas change
+        t.pendingRecalcAt = -2;  // v2.2 CALC-03: a method change is a canvas change
       }
       if (static_cast<int>(i) == mIdx) ImGui::SetItemDefaultFocus();
     }
     ImGui::EndCombo();
   }
   if (ImGui::Checkbox("Continuous calculation", &t.autoRecalc)) {  // v2.2 CALC-03
-    t.pendingRecalcAt = (t.autoRecalc && t.stale) ? ImGui::GetTime() + efapp::kAutoRecalcDelay : -1.0;
+    t.pendingRecalcAt = (t.autoRecalc && t.stale) ? -2 : -1.0;  // -2 = arm at the next frame boundary
   }
   if (ImGui::Button("Calculate (F5)", ImVec2(-FLT_MIN, 0.f))) ui.calculateActive = true;
 
@@ -821,7 +926,8 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
   ui.failedShown = false;
   ui.overlayMin = ui.overlayMax = ImVec2(0, 0);
   const bool modalOpen = ui.chooserVisible || ui.aboutVisible || ui.optionsVisible || ui.saveAsVisible || ui.newCollectionVisible ||
-                         ui.leaveConfirmVisible || ui.openChooser || ui.openAbout || ui.openOptions || ui.openSaveAs || ui.newCollectionOpen;
+                         ui.leaveConfirmVisible || ui.openChooser || ui.openAbout || ui.openOptions || ui.openSaveAs || ui.newCollectionOpen ||
+                         !ui.removeConfigName.empty();
   const bool hasTabs = !ws.tabs().empty();
 
   // Shortcuts (UI-SPEC "Keyboard"): ignored while a modal is open.
@@ -830,25 +936,20 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
     if (hasTabs && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_W)) ui.closeSerial = ui.activeSerial;
     if (hasTabs && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S)) ui.openSaveAs = true;
     if (hasTabs && ImGui::Shortcut(ImGuiKey_F5)) ui.calculateActive = true;  // v2 CALC-01
+    if (hasTabs && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Z)) ui.undoRequest = true;  // v2.3 EDIT-12
+    if (hasTabs && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Y)) ui.redoRequest = true;
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Q)) ui.requestQuit = true;
   }
 
   if (ImGui::BeginMenuBar()) {
     if (ImGui::BeginMenu("File")) {
-      if (ImGui::BeginMenu("New")) {
-        const auto& presets = ef::presets();
-        for (std::size_t i = 0; i < presets.size(); ++i) {
-          const std::string name(presets[i].displayName);
-          if (ImGui::MenuItem(name.c_str())) ui.openPresetNow = static_cast<int>(i);
-        }
-        ImGui::EndMenu();
-      }
-      if (ImGui::MenuItem("New...", efapp::shortcutLabel("N", env.mac).c_str())) ui.openChooser = true;
+      // v2.3 MENU-01: New Configuration... (the chooser = the current collection) and New Collection...
+      if (ImGui::MenuItem("New Configuration...", efapp::shortcutLabel("N", env.mac).c_str())) ui.openChooser = true;
+      if (ImGui::MenuItem("New Collection...")) ui.newCollectionOpen = true;
       ImGui::Separator();
       if (ImGui::MenuItem("Close Tab", efapp::shortcutLabel("W", env.mac).c_str(), false, hasTabs)) ui.closeSerial = ui.activeSerial;
       if (ImGui::MenuItem("Save As...", efapp::shortcutLabel("S", env.mac).c_str(), false, hasTabs)) ui.openSaveAs = true;
       if (ImGui::MenuItem("Calculate All")) ui.calculateAll = true;  // v2.2 COL-03
-      if (ImGui::MenuItem("New Collection...")) ui.newCollectionOpen = true;  // v2.2 COL-02
       ImGui::Separator();
       // EXP-01/02 (D-06): export replaces MFC's printing. Only a finished tab has a complete scene, so a busy or
       // failed tab greys the submenu out.
@@ -860,6 +961,14 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
       }
       ImGui::Separator();
       if (ImGui::MenuItem("Exit", efapp::shortcutLabel("Q", env.mac).c_str())) ui.requestQuit = true;
+      ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Edit")) {  // v2.3 EDIT-12
+      const efapp::Tab* at = ws.find(ui.activeSerial);
+      const bool canUndo = at != nullptr && at->session == nullptr && !at->undo.empty();
+      const bool canRedo = at != nullptr && at->session == nullptr && !at->redo.empty();
+      if (ImGui::MenuItem("Undo", efapp::shortcutLabel("Z", env.mac).c_str(), false, canUndo)) ui.undoRequest = true;
+      if (ImGui::MenuItem("Redo", efapp::shortcutLabel("Y", env.mac).c_str(), false, canRedo)) ui.redoRequest = true;
       ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("View")) {
@@ -908,6 +1017,14 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
     ws.closeAll();
     for (const efapp::UserConfig& c : ui.userConfigs) ws.openUser(c.name, c.charges);
     ui.calculateAll = false;
+  }
+  if (ui.undoRequest || ui.redoRequest) {  // v2.3 EDIT-12
+    if (efapp::Tab* t = ws.find(ui.activeSerial)) {
+      if (ui.undoRequest) efapp::editor::undo(*t);
+      if (ui.redoRequest) efapp::editor::redo(*t);
+      armAutoRecalc(*t);
+    }
+    ui.undoRequest = ui.redoRequest = false;
   }
   if (ui.calculateActive) {  // v2 CALC-01: explicit recalculation of the active tab
     ws.calculate(ui.activeSerial);
@@ -960,10 +1077,11 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
   saveAsModal(ws, ui, env);
   newCollectionModal(ui, env);
   leaveConfirmModal(ui, env);
+  removeConfigModal(ui, env);
 
   ImGui::End();
 
-  ui.wantedTitle = efapp::windowTitle(ws.find(ui.activeSerial));
+  ui.wantedTitle = efapp::windowTitle(ws.find(ui.activeSerial), ui.currentCollection);  // v2.3 TITLE-01
 }
 
 }  // namespace efgui

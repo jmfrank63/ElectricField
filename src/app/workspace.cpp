@@ -62,6 +62,7 @@ unsigned Workspace::spawn(std::size_t presetIndex, const unsigned number, const 
   t->title = title;
   t->field = std::move(field);
   t->params = defaults_;
+  t->computed = t->field;  // v2.3 EDIT-11: the state the first computation runs with
   t->expectedLines = ef::expectedLineCount(t->field, t->params);
   t->scene = ef::buildScene(t->field, ef::FieldResult{});  // charges only: drawn from the first frame
   try {
@@ -85,6 +86,7 @@ bool Workspace::calculate(const unsigned serial) {
   if (!t || t->session) return false;  // unknown serial or still computing (v2 D-03)
   t->expectedLines = ef::expectedLineCount(t->field, t->params);
   t->scene = ef::buildScene(t->field, ef::FieldResult{});  // parity: a fresh computation starts charges-only
+  t->computed = t->field;  // v2.3 EDIT-11: the charges this computation runs with (Esc reverts here)
   t->linesReceived = 0;
   t->state = TabState::Computing;
   t->stale = false;
@@ -124,7 +126,7 @@ bool Workspace::rename(const unsigned serial, const std::string& name) {
 }
 
 unsigned Workspace::openRestored(const std::string& title, const std::size_t presetIndex, const ef::ComputeParams& params,
-                                 const std::vector<ef::PresetCharge>& charges, const bool autoRecalc) {
+                                 const std::vector<ef::PresetCharge>& charges, const bool autoRecalc, const GridSettings& grid) {
   ef::ChargeSystem field;
   field.charges.reserve(charges.size());
   for (const ef::PresetCharge& c : charges) field.charges.push_back(ef::Charge{c.charge, ef::Vec2{c.x, c.y}});
@@ -133,6 +135,8 @@ unsigned Workspace::openRestored(const std::string& title, const std::size_t pre
   t->params = params;
   t->selected = -1;
   t->autoRecalc = autoRecalc;
+  t->grid = grid;
+  t->computed = t->field;  // v2.3 EDIT-11
   // Bump the matching counter past the restored number so a later open never duplicates this title (SES-01).
   const std::size_t sp = t->title.rfind(' ');
   if (sp != std::string::npos && sp + 1 < t->title.size()) {

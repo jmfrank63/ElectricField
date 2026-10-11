@@ -16,8 +16,9 @@ char busyGlyph(double seconds);
 std::string tabLabel(const Tab& t, double seconds);
 // "Computing... <n> / <m> lines"; n is clamped to m (n may exceed m: sink lines are counted by poll() but not by expectedLineCount).
 std::string overlayText(std::size_t linesReceived, int expectedLines);
-// "Electric Field" or "Electric Field \xE2\x80\x94 <title>" (UTF-8 em dash, OS-rendered title).
-std::string windowTitle(const Tab* active);
+// "Electric Field - <collection>" or "Electric Field - <collection> - <tab>" (v2.3 TITLE-01; UTF-8 em dash,
+// OS-rendered title).
+std::string windowTitle(const Tab* active, const std::string& collection);
 // "Version <semver> (<hash>)", "(unknown)" when the hash is empty.
 std::string versionLine(std::string_view semver, std::string_view hash);
 // "Ctrl+N" / "Cmd+N" for the menu shortcut column (ImGui::GetKeyChordName always prints "Ctrl+" even on macOS).

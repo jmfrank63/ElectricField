@@ -133,3 +133,15 @@ old MFC/Win32/GDI code.
 - Cross-platform port: Johannes Maria Frank (https://github.com/jmfrank63/ElectricField)
 
 Licensed under the GNU General Public License v3.0 - see [LICENSE](LICENSE).
+
+## Editor details (v2.3)
+
+- **Collections in the title**: the window title shows the collection you are working in, plus the active
+  tab.
+- **Removing configurations**: right-click a configuration in the New chooser to remove it from the
+  collection (with confirmation; open tabs are not affected).
+- **Esc reverts**: while a tab shows the *edited* marker, Esc restores the charges of the last
+  calculation. **Edit > Undo (Ctrl+Z) / Redo (Ctrl+Y)** steps through charge and method changes.
+- **Grid**: the panel's Grid section enables snapping and/or drawing independently, switches between
+  Cartesian and polar grids, and lets you place the grid origin and set the spacing. With snapping on,
+  dragged, added and typed positions land on the grid.

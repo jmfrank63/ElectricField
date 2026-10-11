@@ -294,6 +294,19 @@ void App::frame() {
     for (const efapp::UserConfig& c : userConfigs_) ws_.openUser(c.name, c.charges);
     pacer_.notifyActivity();
   }
+  if (!ui_.removeConfigApply.empty()) {  // v2.3 COL-05
+    for (std::size_t i = 0; i < userConfigs_.size(); ++i)
+      if (userConfigs_[i].name == ui_.removeConfigApply) {
+        userConfigs_.erase(userConfigs_.begin() + static_cast<std::ptrdiff_t>(i));
+        break;
+      }
+    ui_.removeConfigApply.clear();
+    ui_.userConfigs = userConfigs_;
+    if (!collectionsDir_.empty()) {
+      std::string err;
+      if (!efapp::saveConfigs(collectionFile(currentCollection_), userConfigs_, err)) std::fprintf(stderr, "configurations: %s\n", err.c_str());
+    }
+  }
   if (ui_.openConfigFolder) {  // v2.1 SES-03
     ui_.openConfigFolder = false;
     if (!configDir_.empty()) {
@@ -672,6 +685,39 @@ bool App::smokeExtras(std::string& report) {
   ws_.rename(es, "Renamed");
   frames(2);
   if (ws_.find(es)->title != "Renamed") return fail("editor: rename did not set the title");
+  if (ui_.wantedTitle != "Electric Field \xE2\x80\x94 Original \xE2\x80\x94 Renamed") return fail("editor: the title does not show the collection");
+
+  // v2.3 CALC-04 regression: with continuous calculation on, a canvas edit recomputes on its own (the
+  // debounce deadline must not be re-armed by idle frames).
+  ws_.find(es)->autoRecalc = true;
+  eio.AddMousePosEvent(cx + 60.f, cy);
+  frames(2);
+  eio.AddMouseButtonEvent(0, true);
+  frames(1);
+  eio.AddMouseButtonEvent(0, false);
+  frames(2);
+  if (ws_.find(es)->selected != 0) return fail("editor: re-selecting the charge failed");
+  eio.AddMouseButtonEvent(0, true);
+  frames(1);
+  eio.AddMousePosEvent(cx + 90.f, cy);
+  frames(2);
+  eio.AddMouseButtonEvent(0, false);
+  frames(1);
+  for (int i = 0; i < 60; ++i) {  // let time pass: the debounce fires, then the recompute runs
+    frames(1);
+    if (ws_.find(es)->stale == false && ws_.find(es)->state == efapp::TabState::Done) break;
+  }
+  if (!pumpUntilDone(es, 60000)) return fail("editor: continuous calculation did not finish");
+  {
+    const efapp::Tab* dt = ws_.find(es);
+    if (!dt) return fail("editor: the tab vanished");
+    if (dt->stale || dt->state != efapp::TabState::Done)
+      return fail("editor: continuous calculation did not recompute (stale=" + std::to_string(dt->stale) + " state=" +
+                  std::to_string(static_cast<int>(dt->state)) + " auto=" + std::to_string(dt->autoRecalc) + " pending=" +
+                  std::to_string(dt->pendingRecalcAt) + " t=" + std::to_string(ImGui::GetTime()) + " pos.X=" +
+                  std::to_string(dt->field.charges[0].position.X) + ")");
+  }
+  ws_.find(es)->autoRecalc = false;
   ui_.closeSerial = es;
   frames(2);
 

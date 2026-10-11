@@ -36,6 +36,37 @@ TEST_CASE("serialize -> parse round-trips titles, sources, methods and charges (
   CHECK(r.value[2].preset == efapp::kNoPreset);
 }
 
+TEST_CASE("grid settings round-trip with the intersections flag (v2.3 GRID, v2.5 GRID-06)") {
+  std::vector<efapp::SavedTab> tabs;
+  efapp::SavedTab t = sample();
+  t.grid.active = true;
+  t.grid.visible = false;
+  t.grid.polar = false;
+  t.grid.intersectionsOnly = true;
+  t.grid.origin = {1.25, -2.0};
+  t.grid.spacing = 0.75;
+  t.grid.angleStepDeg = 12.5;
+  tabs.push_back(t);
+  const efapp::ParsedSession r = efapp::parseSession(efapp::serializeSession(tabs));
+  REQUIRE(r.value.size() == 1);
+  CHECK(r.value[0].grid.active);
+  CHECK_FALSE(r.value[0].grid.visible);
+  CHECK(r.value[0].grid.intersectionsOnly);
+  CHECK(r.value[0].grid.origin.X == doctest::Approx(1.25));
+  CHECK(r.value[0].grid.origin.Y == doctest::Approx(-2.0));
+  CHECK(r.value[0].grid.spacing == doctest::Approx(0.75));
+  CHECK(r.value[0].grid.angleStepDeg == doctest::Approx(12.5));
+
+  // A pre-v2.5 session (7 fields, no intersections flag) parses: the flag falls back to false.
+  const std::string legacy = "[tab \"Dipole 1\"]\npreset = 0\ngrid = 1,1,0,0,0,0.5,15\ncharge = 1, -2, 0\n";
+  const efapp::ParsedSession g = efapp::parseSession(legacy);
+  REQUIRE(g.value.size() == 1);
+  CHECK(g.value[0].grid.active);
+  CHECK_FALSE(g.value[0].grid.intersectionsOnly);
+  CHECK(g.value[0].grid.spacing == doctest::Approx(0.5));
+  CHECK(g.value[0].grid.angleStepDeg == doctest::Approx(15.0));
+}
+
 TEST_CASE("invalid content is skipped and counted; foreign sections ignored (SES-01)") {
   efapp::ParsedSession r = efapp::parseSession("[tab \"No charges\"]\n");
   CHECK(r.value.empty());

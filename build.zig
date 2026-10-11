@@ -26,6 +26,7 @@ const core_sources = [_][]const u8{
     "ef/session.cpp",
     "ef/scene.cpp",
     "ef/svg.cpp",
+    "ef/pdf.cpp",
 };
 
 const app_sources = [_][]const u8{

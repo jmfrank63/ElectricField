@@ -276,25 +276,31 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 
-# Milestone v2.5 Requirements (added 2026-10-12)
+# Milestone v2.5 Requirements (added 2026-10-12, revised after the file-picker pivot)
 
 ## Collections flow
 
-- [ ] **OPEN-01**: File > Open Collection... (Ctrl+O) opens a collection chooser; starting with no restored tabs shows the collection chooser first, and after opening an empty collection the configuration chooser follows; configurations are never auto-opened
+- [ ] **OPEN-01**: A collection is a document FILE holding named configurations (the Collections\ folder is its default home); File > Open Collection... (Ctrl+O) opens any such file through the native file picker, File > Save Collection As... / New Collection... save to a chosen path; the app starts with no collection open and auto-opens nothing; after a UI-initiated switch to an empty workspace the configuration chooser follows
+- [ ] **CFG-04**: File > Open Configuration... / Save Configuration / Save Configuration As... are grouped in the File menu; Save Configuration writes the active tab's charges back to the configuration it came from; without a collection open the configuration entries are greyed out
 
 ## Grid style
 
 - [ ] **GRID-05**: Grid lines are light green
-- [ ] **GRID-06**: An intersections-only mode shows just the lattice points (Cartesian and polar) in a distinctly different colour; panel + API + session persistence
+- [ ] **GRID-06**: An intersections-only mode shows just the lattice points (Cartesian and polar) in a distinctly different colour; an Intersections checkbox sits above the Cartesian/Polar controls in the panel; API + session persistence
 
 ## Charge size
 
 - [ ] **SIZE-01**: Charge size is a draw option (2-120 px, dot to very large, default 25) in View > Options and via options.set charge-size; persisted in options.ini; physics hit radius unchanged
 
+## Export
+
+- [ ] **EXP-03**: File > Export Configuration adds PDF to the PNG/SVG export; File > Export Collection... renders every configuration of the collection into one PDF (one page per configuration, names as bookmarks); both exports are also callable by path via the command API
+
 ## Traceability (v2.5)
 
 | Requirement | Status |
 |-------------|--------|
-| OPEN-01 | Pending |
-| GRID-05..07 | Pending |
+| OPEN-01, CFG-04 | Pending |
+| GRID-05..06 | Pending |
 | SIZE-01 | Pending |
+| EXP-03 | Pending |

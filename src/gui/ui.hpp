@@ -39,11 +39,10 @@ struct UiState {
   std::string leaveButton;       // "Quit anyway" / "Switch anyway"
   int leaveDecision = 0;         // 1 = leave anyway (consumed by App::frame)
   bool undoRequest = false, redoRequest = false;  // v2.3 EDIT-12 (Edit menu / Ctrl+Z, Ctrl+Y)
-  bool saveCollectionRequest = false;      // File > Save Collection (Ctrl+S, v2.4 COL-06)
-  bool closeCollectionRequest = false;     // File > Close Collection (v2.4 COL-08)
-  std::string saveCollectionAsApply;       // name from the Save Collection As modal (v2.4 COL-07)
-  bool saveCollectionAsOpen = false, saveCollectionAsVisible = false;
-  char saveCollectionAsBuf[128] = "";
+  bool openChooserAfterSwitch = false;  // after a UI-initiated switch to an empty workspace, show the chooser
+  bool saveCollectionRequest = false;       // File > Save Collection (Ctrl+S, v2.4 COL-06)
+  bool saveConfigurationRequest = false;    // File > Save Configuration (v2.5 CFG-04; needs a source configuration)
+  bool closeCollectionRequest = false;      // File > Close Collection (v2.4 COL-08; v2.5: no collection open after)
   bool renameOpen = false, renameVisible = false;  // tab rename modal (v2.4 TAB-03)
   unsigned renameSerial = 0;
   char renameBuf[128] = "";
@@ -52,19 +51,18 @@ struct UiState {
   bool removeConfigOpen = false; // the confirm popup was requested this frame
   std::string removeConfigApply; // confirmed removal; consumed by App::frame
   bool openConfigFolder = false; // Help > Open Configuration Folder (v2.1 SES-03)
-  // v2.2 collections: the App owns the master list; ui_ mirrors names for the switcher and chooser
+  // v2.2 collections: the App owns the master list; ui_ mirrors names for the switcher.
   std::vector<std::string> collections;
-  std::string currentCollection;
+  std::string currentCollection;    // "" = no collection open (v2.5 OPEN-01); the App mirrors it every frame
   std::string switchToCollection;   // set by the switcher; consumed by App::frame
-  std::string newCollectionApply;   // validated name from the New Collection modal; consumed by App::frame
-  bool newCollectionOpen = false, newCollectionVisible = false;
-  char newCollectionBuf[128] = "";
   // v2.1 editor panel: Add-charge section and the per-tab rename buffer
   int addValue = 1;
   double addX = 0.0, addY = 0.0;
   char tabNameBuf[128] = "";
   unsigned tabNameBufSerial = 0;
-  int exportRequest = 0;     // File > Export: 1 = PNG..., 2 = SVG... (consumed by App::frame, D-06)
+  int exportRequest = 0;     // File > Export / dialog kinds (consumed by App::frame): 1 = PNG, 2 = SVG, 3 = PDF
+                             // (the active tab) and 10 = Open Collection..., 11 = Save Collection As...,
+                             // 12 = New Collection..., 13 = Export Collection (v2.5 OPEN-01/EXP-03)
   unsigned closeSerial = 0;  // request to close a tab (0 = none)
   // state carried between frames
   bool chooserVisible = false, aboutVisible = false, optionsVisible = false;  // a modal was drawn last frame

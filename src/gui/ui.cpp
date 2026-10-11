@@ -385,49 +385,6 @@ void removeConfigModal(UiState& ui, const UiEnv& env) {
   }
 }
 
-// File > New Collection (v2.2 COL-02): a name is all it takes - the collection file is created empty and
-// becomes current (the App consumes newCollectionApply).
-void newCollectionModal(UiState& ui, const UiEnv& env) {
-  const ImGuiViewport* vp = ImGui::GetMainViewport();
-  if (ui.newCollectionOpen) {
-    ImGui::OpenPopup("New Collection##newcol");
-    ui.newCollectionOpen = false;
-    ui.newCollectionBuf[0] = '\0';
-  }
-  ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-  ImGui::SetNextWindowSizeConstraints(ImVec2(360.f * env.k, 0.f), ImVec2(520.f * env.k, FLT_MAX));
-  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.f * env.k, 16.f * env.k));
-  const bool open = ImGui::BeginPopupModal("New Collection##newcol", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
-  ImGui::PopStyleVar();
-  ui.newCollectionVisible = open;
-  if (!open) return;
-  if (ui.closePopups) { ImGui::CloseCurrentPopup(); ImGui::EndPopup(); return; }
-
-  ImGui::TextUnformatted("Name of the new collection:");
-  ImGui::Dummy(ImVec2(0.f, 4.f * env.k));
-  ImGui::InputText("##colname", ui.newCollectionBuf, sizeof(ui.newCollectionBuf));
-  ImGui::Dummy(ImVec2(0.f, 8.f * env.k));
-
-  const ImGuiStyle& st = ImGui::GetStyle();
-  const float w1 = ImGui::CalcTextSize("Create").x + 2 * st.FramePadding.x;
-  const float w2 = ImGui::CalcTextSize("Cancel").x + 2 * st.FramePadding.x;
-  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - (w1 + 8.f * env.k + w2));
-  bool close = false;
-  if (ImGui::Button("Create")) {
-    const std::string name = efapp::ini::trim(std::string(ui.newCollectionBuf));
-    if (!name.empty()) {
-      ui.newCollectionApply = name;
-      close = true;
-    }
-  }
-  ImGui::SetItemDefaultFocus();
-  ImGui::SameLine(0.f, 8.f * env.k);
-  if (ImGui::Button("Cancel")) close = true;
-  if (ImGui::IsKeyPressed(ImGuiKey_Escape)) close = true;
-  if (close) ImGui::CloseCurrentPopup();
-  ImGui::EndPopup();
-}
-
 // v2.2: the unsaved-changes prompt shown before quitting or switching collections. The App owns the
 // pending action; the modal only reports the answer through leaveDecision.
 void leaveConfirmModal(UiState& ui, const UiEnv& env) {
@@ -593,9 +550,10 @@ void optionsModal(UiState& ui, const UiEnv& env) {
       ImGui::ColorEdit3("Negative charge", e.negative);
       ImGui::ColorEdit3("Field lines", e.electric);
       ImGui::ColorEdit3("Equipotentials", e.potential);
+      ImGui::InputDouble("Charge size", &e.chargeSize, 0.0, 0.0, "%.0f");  // v2.5 SIZE-01: dot to very large
       ImGui::InputInt("Field line thickness", &e.electricThickness);
       ImGui::InputInt("Equipotential thickness", &e.potentialThickness);
-      ImGui::TextDisabled("1 - 64");
+      ImGui::TextDisabled("Charge size 2 - 120, thicknesses 1 - 64");
       ImGui::EndTabItem();
     }
     ImGui::EndTabBar();
@@ -685,6 +643,8 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   ImGui::TextUnformatted("Grid");
   ImGui::Checkbox("Active (snapping)", &t.grid.active);
   ImGui::Checkbox("Visible", &t.grid.visible);
+  ImGui::Checkbox("Intersections", &t.grid.intersectionsOnly);  // v2.5 GRID-06, above the geometry
+  if (ImGui::IsItemHovered()) ImGui::SetTooltip("Show only the grid intersections (no grid lines)");
   if (ImGui::RadioButton("Cartesian", !t.grid.polar)) t.grid.polar = false;
   ImGui::SameLine();
   if (ImGui::RadioButton("Polar", t.grid.polar)) t.grid.polar = true;
@@ -848,52 +808,6 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   ImGui::EndChild();
 }
 
-// v2.4 COL-07: Save Collection As - the current collection's configurations under a new name; the tabs
-// stay open and belong to the new collection (App consumes saveCollectionAsApply).
-void saveCollectionAsModal(UiState& ui, const UiEnv& env) {
-  const ImGuiViewport* vp = ImGui::GetMainViewport();
-  if (ui.saveCollectionAsOpen) {
-    ImGui::OpenPopup("Save Collection As##savecol");
-    ui.saveCollectionAsOpen = false;
-    ui.saveCollectionAsBuf[0] = '\0';
-  }
-  ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.f * env.k, 16.f * env.k));
-  const bool open = ImGui::BeginPopupModal("Save Collection As##savecol", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
-  ImGui::PopStyleVar();
-  ui.saveCollectionAsVisible = open;
-  if (!open) return;
-  if (ui.closePopups) {
-    ImGui::CloseCurrentPopup();
-    ImGui::EndPopup();
-    return;
-  }
-
-  ImGui::TextUnformatted("Save the current collection's configurations under a new name:");
-  ImGui::Dummy(ImVec2(0.f, 4.f * env.k));
-  ImGui::InputText("##colname", ui.saveCollectionAsBuf, sizeof(ui.saveCollectionAsBuf));
-  ImGui::Dummy(ImVec2(0.f, 8.f * env.k));
-
-  const ImGuiStyle& st = ImGui::GetStyle();
-  const float w1 = ImGui::CalcTextSize("Save").x + 2 * st.FramePadding.x;
-  const float w2 = ImGui::CalcTextSize("Cancel").x + 2 * st.FramePadding.x;
-  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - (w1 + 8.f * env.k + w2));
-  bool close = false;
-  if (ImGui::Button("Save")) {
-    const std::string name = efapp::ini::trim(std::string(ui.saveCollectionAsBuf));
-    if (!name.empty()) {
-      ui.saveCollectionAsApply = name;
-      close = true;
-    }
-  }
-  ImGui::SetItemDefaultFocus();
-  ImGui::SameLine(0.f, 8.f * env.k);
-  if (ImGui::Button("Cancel")) close = true;
-  if (ImGui::IsKeyPressed(ImGuiKey_Escape)) close = true;
-  if (close) ImGui::CloseCurrentPopup();
-  ImGui::EndPopup();
-}
-
 // v2.4 TAB-03: rename a tab (from the tab context menu; the panel's name field does the same by typing).
 void renameModal(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
   const ImGuiViewport* vp = ImGui::GetMainViewport();
@@ -987,17 +901,20 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
 
   ui.failedShown = false;
   ui.overlayMin = ui.overlayMax = ImVec2(0, 0);
-  const bool modalOpen = ui.chooserVisible || ui.aboutVisible || ui.optionsVisible || ui.saveAsVisible || ui.newCollectionVisible ||
-                         ui.leaveConfirmVisible || ui.saveCollectionAsVisible || ui.renameVisible || ui.openChooser || ui.openAbout ||
-                         ui.openOptions || ui.openSaveAs || ui.newCollectionOpen || ui.saveCollectionAsOpen || ui.renameOpen ||
-                         !ui.removeConfigName.empty();
+  const bool modalOpen = ui.chooserVisible || ui.aboutVisible || ui.optionsVisible || ui.saveAsVisible ||
+                         ui.leaveConfirmVisible || ui.renameVisible ||
+                         ui.openChooser || ui.openAbout || ui.openOptions || ui.openSaveAs ||
+                         ui.renameOpen || !ui.removeConfigName.empty();
   const bool hasTabs = !ws.tabs().empty();
 
-  // Shortcuts (UI-SPEC "Keyboard"): ignored while a modal is open.
+  // Shortcuts (UI-SPEC "Keyboard"): ignored while a modal is open; configuration shortcuts need a
+  // collection open (v2.5 CFG-04, matching the greyed menu entries).
   if (!modalOpen) {
-    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_N)) ui.openChooser = true;
-    if (hasTabs && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_W)) ui.closeSerial = ui.activeSerial;
-    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S)) ui.saveCollectionRequest = true;  // v2.4 COL-06 (no tabs needed)
+    const bool collectionOpen = !ui.currentCollection.empty();
+    if (collectionOpen && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_N)) ui.openChooser = true;
+    if (collectionOpen && hasTabs && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_W)) ui.closeSerial = ui.activeSerial;
+    if (collectionOpen && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S)) ui.saveCollectionRequest = true;  // v2.4 COL-06
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O)) ui.exportRequest = 10;  // v2.5 OPEN-01: Open Collection...
     if (hasTabs && ImGui::Shortcut(ImGuiKey_F5)) ui.calculateActive = true;  // v2 CALC-01
     if (hasTabs && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Z)) ui.undoRequest = true;  // v2.3 EDIT-12
     if (hasTabs && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Y)) ui.redoRequest = true;
@@ -1006,28 +923,35 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
 
   if (ImGui::BeginMenuBar()) {
     if (ImGui::BeginMenu("File")) {
-      // v2.3 MENU-01: New Configuration... (the chooser = the current collection) and New Collection...
-      if (ImGui::MenuItem("New Configuration...", efapp::shortcutLabel("N", env.mac).c_str())) ui.openChooser = true;
-      if (ImGui::MenuItem("New Collection...")) ui.newCollectionOpen = true;
-      ImGui::Separator();
-      // v2.4 COL-06..08 / TAB-02..04: the collection-centric File menu; per-configuration saving moved to
-      // "Save Configuration As..." (also in the tab context menu).
-      if (ImGui::MenuItem("Close Tab", efapp::shortcutLabel("W", env.mac).c_str(), false, hasTabs)) ui.closeSerial = ui.activeSerial;
-      if (ImGui::MenuItem("Close Collection")) ui.closeCollectionRequest = true;
-      ImGui::Separator();
-      if (ImGui::MenuItem("Save Collection", efapp::shortcutLabel("S", env.mac).c_str())) ui.saveCollectionRequest = true;
-      if (ImGui::MenuItem("Save Collection As...")) ui.saveCollectionAsOpen = true;
-      if (ImGui::MenuItem("Save Configuration As...", nullptr, false, hasTabs)) ui.openSaveAs = true;
-      if (ImGui::MenuItem("Calculate All")) ui.calculateAll = true;  // v2.2 COL-03
-      ImGui::Separator();
-      // EXP-01/02 (D-06): export replaces MFC's printing. Only a finished tab has a complete scene, so a busy or
-      // failed tab greys the submenu out.
+      // v2.5 CFG-04 (grouped by document kind): the CONFIGURATION entries first - every one of them
+      // needs a collection open (a collection is the document holding the configurations).
+      const bool collectionOpen = !ui.currentCollection.empty();
       const efapp::Tab* active = ws.find(ui.activeSerial);
-      if (ImGui::BeginMenu("Export", active != nullptr && active->state == efapp::TabState::Done)) {
+      const bool canSaveConfig = active != nullptr && collectionOpen && !active->sourceConfig.empty();
+      if (ImGui::MenuItem("New Configuration...", efapp::shortcutLabel("N", env.mac).c_str(), false, collectionOpen)) ui.openChooser = true;
+      if (ImGui::MenuItem("Open Configuration...", nullptr, false, collectionOpen)) ui.openChooser = true;
+      if (ImGui::MenuItem("Save Configuration", nullptr, false, canSaveConfig)) ui.saveConfigurationRequest = true;
+      if (ImGui::MenuItem("Save Configuration As...", nullptr, false, collectionOpen && hasTabs)) ui.openSaveAs = true;
+      if (ImGui::MenuItem("Close Tab", efapp::shortcutLabel("W", env.mac).c_str(), false, collectionOpen && hasTabs)) ui.closeSerial = ui.activeSerial;
+      ImGui::Separator();
+      // v2.5 OPEN-01: the COLLECTION is itself a document file - opened from anywhere through the
+      // native file dialogs, saved where the user chooses.
+      if (ImGui::MenuItem("Open Collection...", efapp::shortcutLabel("O", env.mac).c_str())) ui.exportRequest = 10;
+      if (ImGui::MenuItem("New Collection...", nullptr, false, true)) ui.exportRequest = 12;
+      if (ImGui::MenuItem("Save Collection", efapp::shortcutLabel("S", env.mac).c_str(), false, collectionOpen)) ui.saveCollectionRequest = true;
+      if (ImGui::MenuItem("Save Collection As...", nullptr, false, collectionOpen)) ui.exportRequest = 11;
+      if (ImGui::MenuItem("Close Collection", nullptr, false, collectionOpen)) ui.closeCollectionRequest = true;
+      if (ImGui::MenuItem("Calculate All", nullptr, false, collectionOpen && !ui.userConfigs.empty())) ui.calculateAll = true;  // v2.2 COL-03
+      ImGui::Separator();
+      // EXP-01/02/03 (v2.5 EXP-03): export replaces MFC's printing. Only a finished tab has a complete
+      // scene; Export Collection renders every configuration of the collection into PDF pages.
+      if (ImGui::BeginMenu("Export Configuration", collectionOpen && active != nullptr && active->state == efapp::TabState::Done)) {
         if (ImGui::MenuItem("PNG...", nullptr, false, active != nullptr && active->state == efapp::TabState::Done)) ui.exportRequest = 1;
         if (ImGui::MenuItem("SVG...", nullptr, false, active != nullptr && active->state == efapp::TabState::Done)) ui.exportRequest = 2;
+        if (ImGui::MenuItem("PDF...", nullptr, false, active != nullptr && active->state == efapp::TabState::Done)) ui.exportRequest = 3;
         ImGui::EndMenu();
       }
+      if (ImGui::MenuItem("Export Collection...", nullptr, false, collectionOpen && !ui.userConfigs.empty())) ui.exportRequest = 13;
       ImGui::Separator();
       if (ImGui::MenuItem("Exit", efapp::shortcutLabel("Q", env.mac).c_str())) ui.requestQuit = true;
       ImGui::EndMenu();
@@ -1051,14 +975,14 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
     }
     // v2.2 COL-02/03: collection switcher + Calculate All, right side of the menu bar.
     ImGui::SetNextItemWidth(180.f * env.k);
-    const std::string cur = ui.currentCollection.empty() ? std::string("Original") : ui.currentCollection;
+    const std::string cur = ui.currentCollection.empty() ? std::string("(no collection)") : ui.currentCollection;
     if (ImGui::BeginCombo("##collection", cur.c_str())) {
       for (const std::string& name : ui.collections) {
         if (ImGui::Selectable(name.c_str(), name == cur)) ui.switchToCollection = name;
         if (name == cur) ImGui::SetItemDefaultFocus();
       }
       ImGui::Separator();
-      if (ImGui::Selectable("New Collection...")) ui.newCollectionOpen = true;
+      if (ImGui::Selectable("New Collection...")) ui.exportRequest = 12;  // v2.5: the native save dialog
       ImGui::EndCombo();
     }
     ImGui::SameLine(0.f, 8.f * env.k);
@@ -1161,10 +1085,8 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
   aboutModal(ui, env);
   optionsModal(ui, env);
   saveAsModal(ws, ui, env);
-  newCollectionModal(ui, env);
   leaveConfirmModal(ui, env);
   removeConfigModal(ui, env);
-  saveCollectionAsModal(ui, env);
   renameModal(ws, ui, env);
 
   ImGui::End();

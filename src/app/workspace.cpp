@@ -37,29 +37,35 @@ SessionFactory defaultSessionFactory() {
 unsigned Workspace::open(std::size_t presetIndex) {
   const ef::Preset& p = ef::presets().at(presetIndex);
   const unsigned number = ++counters_[presetIndex];
-  return spawn(presetIndex, number, std::string(p.displayName) + " " + std::to_string(number), ef::makeSystem(p));
+  return spawn(presetIndex, number, std::string(p.displayName) + " " + std::to_string(number), ef::makeSystem(p), std::string(p.displayName));
 }
 
 unsigned Workspace::openUser(const std::string& name, const std::vector<ef::PresetCharge>& charges) {
+  return openUser(name, charges, std::string());
+}
+
+unsigned Workspace::openUser(const std::string& name, const std::vector<ef::PresetCharge>& charges, const std::string& source) {
   const std::string trimmed = trim(name);
   ef::ChargeSystem field;
   field.charges.reserve(charges.size());
   for (const ef::PresetCharge& c : charges) field.charges.push_back(ef::Charge{c.charge, ef::Vec2{c.x, c.y}});
   const unsigned number = ++userCounters_[trimmed];
-  return spawn(kNoPreset, number, trimmed + " " + std::to_string(number), std::move(field));
+  return spawn(kNoPreset, number, trimmed + " " + std::to_string(number), std::move(field), source.empty() ? trimmed : source);
 }
 
 unsigned Workspace::openEmpty() {
   // One +1 charge at the origin: computable from the first frame, and the Phase 2 editor's starting point.
-  return openUser("Empty Configuration", {ef::PresetCharge{1, 0.0, 0.0}});
+  // source "" (v2.5 CFG-04): a fresh empty tab is not a saved configuration until Save Configuration As.
+  return openUser("Empty Configuration", {ef::PresetCharge{1, 0.0, 0.0}}, "");
 }
 
-unsigned Workspace::spawn(std::size_t presetIndex, const unsigned number, const std::string& title, ef::ChargeSystem&& field) {
+unsigned Workspace::spawn(const std::size_t presetIndex, const unsigned number, const std::string& title, ef::ChargeSystem&& field, const std::string& sourceConfig) {
   auto t = std::make_unique<Tab>();
   t->serial = nextSerial_++;
   t->preset = presetIndex;
   t->number = number;
   t->title = title;
+  t->sourceConfig = sourceConfig;
   t->field = std::move(field);
   t->params = defaults_;
   t->computed = t->field;  // v2.3 EDIT-11: the state the first computation runs with
@@ -136,6 +142,9 @@ unsigned Workspace::openRestored(const std::string& title, const std::size_t pre
   t->selected = -1;
   t->autoRecalc = autoRecalc;
   t->grid = grid;
+  // v2.5 CFG-04: a restored tab keeps its configuration identity (a built-in preset's name, or a user
+  // configuration's the title's base name - the same convention mergeDirtyTabsInto established).
+  t->sourceConfig = presetIndex != kNoPreset ? std::string(ef::presets()[presetIndex].displayName) : baseTitle(t->title);
   t->computed = t->field;  // v2.3 EDIT-11
   // Bump the matching counter past the restored number so a later open never duplicates this title (SES-01).
   const std::size_t sp = t->title.rfind(' ');

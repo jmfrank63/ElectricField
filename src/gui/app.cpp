@@ -19,6 +19,7 @@
 #include "app/editor.hpp"
 #include "ef/presets.hpp"
 #include "ef/svg.hpp"
+#include "ef/pdf.hpp"
 #include "ef_build_info.h"
 #include "ef_git_hash.h"
 #include "gui/icon.hpp"
@@ -47,6 +48,17 @@ std::string writeTextFile(const std::string& path, const std::string& text) {
   SDL_IOStream* io = SDL_IOFromFile(path.c_str(), "w");
   if (!io) return std::string("SDL_IOFromFile failed: ") + SDL_GetError();
   const bool written = SDL_WriteIO(io, text.data(), text.size()) == text.size();
+  const bool closed = SDL_CloseIO(io);
+  if (!written || !closed) return "Could not write " + path;
+  return {};
+}
+
+// Binary byte-exact writes ("wb": the PDF's object offsets and stream lengths must survive newline
+// handling untouched, which the text mode above must not be trusted with).
+std::string writeBinaryFile(const std::string& path, const std::string& data) {
+  SDL_IOStream* io = SDL_IOFromFile(path.c_str(), "wb");
+  if (!io) return std::string("SDL_IOFromFile failed: ") + SDL_GetError();
+  const bool written = SDL_WriteIO(io, data.data(), data.size()) == data.size();
   const bool closed = SDL_CloseIO(io);
   if (!written || !closed) return "Could not write " + path;
   return {};
@@ -161,15 +173,18 @@ bool App::init(const AppOptions& opt, std::string& step, std::string& message) {
       // COL-09 (v2.4): session.ini is the pointer; the tabs live in Sessions/<Collection>.ini. A legacy
       // session.ini that still carries tabs migrates once into Sessions/<its collection>.ini.
       const efapp::SavedSession legacy = efapp::loadSessionFull(sessionPath_);
-      std::string startCollection = legacy.collection;
       if (!legacy.tabs.empty()) {
         std::string migErr;
         if (efapp::saveSession(sessionsDir_ / (legacy.collection + ".ini"), legacy.tabs, legacy.collection, migErr))
           efapp::saveSession(sessionPath_, {}, legacy.collection, migErr);  // now a pure pointer
       }
-      // The pointer names the collection; fall back to Original when the file is gone.
-      currentCollection_ = std::filesystem::exists(collectionFile(startCollection)) ? startCollection : std::string("Original");
-      enterCollection(currentCollection_, true);
+      // v2.5 OPEN-01: the app starts with no collection open - a collection is a document file that
+      // the user opens explicitly (File > Open Collection..., Ctrl+O; any path). The seeded
+      // Collections\ folder is the picker's starting point, and sessions stay keyed by file stem.
+      currentCollection_.clear();
+      currentCollectionPath_.clear();
+      userConfigs_.clear();
+      ui_.userConfigs.clear();
       refreshCollections();
     }
   }
@@ -264,17 +279,19 @@ void App::frame() {
   }
   if (ui_.saveCollectionRequest) {  // v2.4 COL-06
     ui_.saveCollectionRequest = false;
-    const std::string err = saveCollection();
-    if (!err.empty()) std::fprintf(stderr, "collection: %s\n", err.c_str());
+    std::string err = saveCollection();
+    if (err.rfind("error: ", 0) == 0) err = err.substr(7);
+    if (!err.empty()) exportFailed(err);
   }
-  if (ui_.closeCollectionRequest) {  // v2.4 COL-08
+  if (ui_.saveConfigurationRequest) {  // v2.5 CFG-04
+    ui_.saveConfigurationRequest = false;
+    std::string err = saveConfiguration();
+    if (err.rfind("error: ", 0) == 0) err = err.substr(7);
+    if (!err.empty()) exportFailed(err);
+  }
+  if (ui_.closeCollectionRequest) {  // v2.4 COL-08 (v2.5: leaves no collection open)
     ui_.closeCollectionRequest = false;
     const std::string err = closeCollection();
-    if (!err.empty()) std::fprintf(stderr, "collection: %s\n", err.c_str());
-  }
-  if (!ui_.saveCollectionAsApply.empty()) {  // v2.4 COL-07
-    const std::string err = saveCollectionAs(ui_.saveCollectionAsApply);
-    ui_.saveCollectionAsApply.clear();
     if (!err.empty()) std::fprintf(stderr, "collection: %s\n", err.c_str());
   }
   // v2.2 COL-02/03: collection switching (gated by the unsaved-changes prompt) and Calculate All.
@@ -285,6 +302,15 @@ void App::frame() {
         switchCollection(pendingCollection_);
         pendingCollection_.clear();
         leaveConfirmed_ = false;
+        if (ui_.openChooserAfterSwitch && ws_.tabs().empty()) ui_.openChooser = true;  // v2.5: then a configuration
+        ui_.openChooserAfterSwitch = false;
+      } else if (!pendingCollectionFile_.empty()) {
+        const std::filesystem::path file = pendingCollectionFile_;
+        pendingCollectionFile_.clear();
+        leaveConfirmed_ = false;
+        switchCollectionAt(file);
+        if (ui_.openChooserAfterSwitch && ws_.tabs().empty()) ui_.openChooser = true;  // v2.5: then a configuration
+        ui_.openChooserAfterSwitch = false;
       } else {
         quit_ = true;  // the next iterate() leaves the loop and the session is saved
         ui_.closePopups = true;  // the prompt closes with the answer (v2.4 BUG-02; the app may still render a frame)
@@ -292,6 +318,7 @@ void App::frame() {
     } else {
       leaveConfirmed_ = false;
       pendingCollection_.clear();
+      pendingCollectionFile_.clear();
     }
     ui_.leaveDecision = 0;
   }
@@ -305,21 +332,10 @@ void App::frame() {
     } else {
       switchCollection(ui_.switchToCollection);
       leaveConfirmed_ = false;
+      if (ui_.openChooserAfterSwitch && ws_.tabs().empty()) ui_.openChooser = true;  // v2.5: then a configuration
+      ui_.openChooserAfterSwitch = false;
     }
     ui_.switchToCollection.clear();
-  }
-  if (!ui_.newCollectionApply.empty()) {
-    if (ws_.anyDirty() && !leaveConfirmed_) {
-      pendingCollection_ = ui_.newCollectionApply;
-      ui_.leaveText = "Some tabs have changes that are not saved to a collection.";
-      ui_.leaveButton = "Switch anyway";
-      ui_.openLeaveConfirm = true;
-      leaveConfirmed_ = true;
-    } else {
-      createCollection(ui_.newCollectionApply);
-      leaveConfirmed_ = false;
-    }
-    ui_.newCollectionApply.clear();
   }
   if (ui_.calculateAll) {  // v2.2 COL-03: open every configuration of the current collection in tabs
     ui_.calculateAll = false;
@@ -404,7 +420,8 @@ bool App::iterate() {
 }
 
 int App::runInteractive() {
-  ui_.openChooser = ws_.tabs().empty();  // D-03: the chooser at startup - unless the session restored tabs (v2.1)
+  // v2.5 OPEN-01: the app starts with no collection open (a collection is a document: File >
+  // Open Collection..., Ctrl+O); the configuration menu entries grey out until one is open.
   pacer_.notifyActivity(efapp::FramePacer::kModalFadeFrames);
   while (iterate()) {
   }
@@ -893,23 +910,44 @@ int App::runScreenshot() {
 // Consumed every frame after drawUi: a menu request opens the native save dialog; a path chosen in an
 // earlier frame is exported here — on the UI thread, between frames (renderPng's ImGui-context rule).
 void App::exportStep() {
+  // The five dialog kinds share this machinery; exportFormat_ says which dialog was started (and
+  // therefore what to do with the chosen path below):
+  //   1 PNG | 2 SVG | 3 PDF: the active tab           (GUI export, the on-screen canvas view)
+  //   10 Open Collection...: a collection FILE        (v2.5: any path; the chooser list is gone)
+  //   11 Save Collection As... / 12 New Collection...: a collection FILE
+  //   13 Export Collection: one PDF, one page per configuration
   if (ui_.exportRequest != 0) {
     exportFormat_ = ui_.exportRequest;
     exportSerial_ = ui_.activeSerial;
-    const SDL_DialogFileFilter filters[] = {{"PNG image", "png"}, {"SVG image", "svg"}};
-    SDL_ShowSaveFileDialog(
-        [](void* userdata, const char* const* filelist, int) {
-          auto* self = static_cast<App*>(userdata);
-          std::string path, error;
-          if (filelist == nullptr)
-            error = SDL_GetError();  // the dialog itself failed (e.g. no portal/zenity on Linux)
-          else if (filelist[0] != nullptr)
-            path = filelist[0];  // an empty list is the user cancelling
-          std::lock_guard<std::mutex> lock(self->exportMutex_);
-          self->pendingExportPath_ = std::move(path);
-          self->pendingExportError_ = std::move(error);
-        },
-        this, window_, filters, 2, nullptr);
+    // The callback may run on any thread: everything crosses through the mutex fields below.
+    const SDL_DialogFileCallback callback = [](void* userdata, const char* const* filelist, int) {
+      auto* self = static_cast<App*>(userdata);
+      std::string path, error;
+      if (filelist == nullptr)
+        error = SDL_GetError();  // the dialog itself failed (e.g. no portal/zenity on Linux)
+      else if (filelist[0] != nullptr)
+        path = filelist[0];  // an empty list is the user cancelling
+      std::lock_guard<std::mutex> lock(self->exportMutex_);
+      self->pendingExportPath_ = std::move(path);
+      self->pendingExportError_ = std::move(error);
+    };
+    if (exportFormat_ >= 1 && exportFormat_ <= 3) {
+      const SDL_DialogFileFilter filters[] = {{"PNG image", "png"}, {"SVG image", "svg"}, {"PDF document", "pdf"}};
+      SDL_ShowSaveFileDialog(callback, this, window_, filters, 3, nullptr);
+    } else if (exportFormat_ == 10) {
+      const SDL_DialogFileFilter filters[] = {{"Collection files", "ini"}, {"All files", "*"}};
+      SDL_ShowOpenFileDialog(callback, this, window_, filters, 2, collectionsDir_.string().c_str(), false);
+    } else if (exportFormat_ == 13) {  // Export Collection: the whole collection as one PDF
+      const std::filesystem::path def =
+          collectionsDir_ / (currentCollection_.empty() ? std::string("collection") : currentCollection_ + ".pdf");
+      const SDL_DialogFileFilter filters[] = {{"PDF document", "pdf"}};
+      SDL_ShowSaveFileDialog(callback, this, window_, filters, 1, def.string().c_str());
+    } else {  // 11 Save Collection As... / 12 New Collection...: a collection FILE (.ini)
+      const std::filesystem::path def =
+          exportFormat_ == 12 ? collectionsDir_ / "New Collection.ini" : currentCollectionPath_;
+      const SDL_DialogFileFilter filters[] = {{"Collection files", "ini"}};
+      SDL_ShowSaveFileDialog(callback, this, window_, filters, 1, def.string().c_str());
+    }
     ui_.exportRequest = 0;
     pacer_.notifyActivity();  // an OS dialog sits on top: keep the loop rendering
   }
@@ -923,7 +961,48 @@ void App::exportStep() {
     pendingExportError_.clear();
   }
   if (!error.empty()) exportFailed("The file dialog failed: " + error + ".");
-  if (!path.empty()) runExport(path);
+  if (path.empty()) return;
+
+  switch (exportFormat_) {
+    case 1:
+    case 2:
+    case 3:
+      runExport(path);
+      break;
+    case 10: {  // v2.5: open the chosen file (the current collection is switched away, prompt first)
+      if (ws_.anyDirty() && !leaveConfirmed_) {
+        pendingCollectionFile_ = std::filesystem::u8path(path);
+        ui_.openChooserAfterSwitch = true;  // then a configuration (honoured once the switch happens)
+        ui_.leaveText = "Some tabs have changes that are not saved to a collection.";
+        ui_.leaveButton = "Switch anyway";
+        ui_.openLeaveConfirm = true;
+        leaveConfirmed_ = true;  // the prompt is up; do not re-fire every frame
+      } else {
+        switchCollectionAt(std::filesystem::u8path(path));
+        if (ws_.tabs().empty()) ui_.openChooser = true;  // then a configuration (v2.5 OPEN-01 flow)
+      }
+      break;
+    }
+    case 11: {
+      std::string e = saveCollectionAsFile(std::filesystem::u8path(path));
+      if (e.rfind("error: ", 0) == 0) e = e.substr(7);
+      if (!e.empty()) exportFailed(e);
+      break;
+    }
+    case 12: {  // v2.5: a new collection is an empty file at the chosen path
+      createCollectionAt(std::filesystem::u8path(path));
+      if (ws_.tabs().empty()) ui_.openChooser = true;  // then a configuration (v2.5 OPEN-01 flow)
+      break;
+    }
+    case 13: {
+      std::string e = exportCollectionTo(path);
+      if (e.rfind("error: ", 0) == 0) e = e.substr(7);
+      if (!e.empty()) exportFailed(e);
+      break;
+    }
+    default:
+      break;
+  }
 }
 
 // The export equals the tab: the cached scene, the current draw options and exactly the on-screen canvas view.
@@ -938,9 +1017,73 @@ void App::runExport(const std::string& path) {
   std::string err;
   if (exportFormat_ == 1)
     err = efrender::renderPng(t->scene, style, view, path.c_str());
+  else if (exportFormat_ == 3)
+    err = writeBinaryFile(path, ef::renderPdf(t->scene, style, view));  // v2.5 EXP-03
   else
     err = writeTextFile(path, ef::renderSvg(t->scene, style, view));
   if (!err.empty()) exportFailed(err);
+}
+
+// --- v2.5 EXP-03: deterministic exports through the command API / script runner --------------------------
+
+namespace {
+
+// A view that fits a charge arrangement into a fixed canvas, centred on the charges: bounded, so the
+// same collection produces the same pages anywhere (the script exports must be deterministic).
+ef::View fittedView(const std::vector<ef::SceneCharge>& charges, int widthPx, int heightPx) {
+  double minX = 0, maxX = 0, minY = 0, maxY = 0;
+  bool any = false;
+  for (const ef::SceneCharge& c : charges) {
+    if (!any) {
+      minX = maxX = c.position.X;
+      minY = maxY = c.position.Y;
+      any = true;
+    } else {
+      minX = std::min(minX, c.position.X);
+      maxX = std::max(maxX, c.position.X);
+      minY = std::min(minY, c.position.Y);
+      maxY = std::max(maxY, c.position.Y);
+    }
+  }
+  const double spanX = std::max(maxX - minX, 3.0);  // a single charge keeps a sensible minimum span
+  const double spanY = std::max(maxY - minY, 3.0);
+  const double margin = 64.0;                       // device px
+  const double ppu = std::clamp(std::min((widthPx - 2 * margin) / spanX, (heightPx - 2 * margin) / spanY), 5.0, 100.0);
+  ef::View view{widthPx, heightPx, ppu};
+  view.centre = ef::Vec2{(minX + maxX) / 2.0, (minY + maxY) / 2.0};
+  return view;
+}
+
+}  // namespace
+
+std::string App::exportConfigurationTo(const std::string& path) {
+  const efapp::Tab* t = ws_.find(ui_.activeSerial);
+  if (!t) return "error: no active tab";
+  if (t->state != efapp::TabState::Done) return "error: the active configuration is still computing";
+  const ef::DrawStyle style = options_.draw;
+  return writeBinaryFile(path, ef::renderPdf(t->scene, style, fittedView(t->scene.charges, 1024, 768)));
+}
+
+// One PDF with one page per configuration (the whole collection, EXP-03). Each page is computed
+// synchronously with the current options - a script/quick action, not the frame loop.
+std::string App::exportCollectionTo(const std::string& path) {
+  if (currentCollectionPath_.empty()) return "error: no collection open";
+  if (userConfigs_.empty()) return "error: the collection has no configurations";
+  const ef::DrawStyle style = options_.draw;
+  ef::PdfPainter painter;
+  for (const efapp::UserConfig& c : userConfigs_) {
+    ef::ChargeSystem field;
+    field.charges.reserve(c.charges.size());
+    for (const ef::PresetCharge& ch : c.charges) field.charges.push_back(ef::Charge{ch.charge, ef::Vec2{ch.x, ch.y}});
+    ef::ComputeSession session(field, options_.compute);
+    if (session.wait().failed) return "error: the computation of '" + c.name + "' failed";
+    ef::FieldResult result;
+    if (!session.takeResult(result)) return "error: no result for '" + c.name + "'";
+    const ef::FieldScene scene = ef::buildScene(field, result);
+    ef::renderScene(painter, scene, style, fittedView(scene.charges, 1024, 768));  // one renderScene = one page
+    painter.setTitle(c.name);  // the page rendered above (renderScene owns begin/end)
+  }
+  return writeBinaryFile(path, painter.build());
 }
 
 void App::exportFailed(const std::string& what) {
@@ -977,21 +1120,29 @@ void App::refreshCollections() {
       std::swap(collections_[0], collections_[i]);
       break;
     }
-  if (std::find(collections_.begin(), collections_.end(), currentCollection_) == collections_.end()) collections_.push_back(currentCollection_);
+  if (!currentCollection_.empty() && std::find(collections_.begin(), collections_.end(), currentCollection_) == collections_.end())
+    collections_.push_back(currentCollection_);
 }
 
 void App::writeSessionPointer() {
-  if (sessionPath_.empty()) return;
+  if (sessionPath_.empty() || currentCollection_.empty()) return;
   std::string err;
   if (!efapp::saveSession(sessionPath_, {}, currentCollection_, err)) std::fprintf(stderr, "session: %s\n", err.c_str());
 }
 
 void App::enterCollection(const std::string& name, const bool restoreTabs) {
-  currentCollection_ = name;
-  userConfigs_ = efapp::loadConfigs(collectionFile(name));
+  enterCollectionAt(collectionFile(name), restoreTabs);
+}
+
+// v2.5 OPEN-01: the path-based core. `file` may live anywhere; the collection's display name and the
+// session key are the file's stem.
+void App::enterCollectionAt(const std::filesystem::path& file, const bool restoreTabs) {
+  currentCollection_ = file.stem().string();
+  currentCollectionPath_ = file;
+  userConfigs_ = efapp::loadConfigs(file);
   ui_.userConfigs = userConfigs_;
   if (restoreTabs) {
-    const efapp::SavedSession ses = efapp::loadSessionFull(sessionsDir_ / (name + ".ini"));
+    const efapp::SavedSession ses = efapp::loadSessionFull(sessionsDir_ / (currentCollection_ + ".ini"));
     for (const efapp::SavedTab& s : ses.tabs) {
       ef::ComputeParams params = options_.compute;
       if (const std::optional<ef::Method> m = ef::methodFromName(s.method)) params.method = *m;
@@ -1005,19 +1156,27 @@ void App::enterCollection(const std::string& name, const bool restoreTabs) {
 }
 
 void App::switchCollection(const std::string& name) {
-  if (name == currentCollection_) return;
+  switchCollectionAt(collectionFile(name));
+}
+
+void App::switchCollectionAt(const std::filesystem::path& file) {
+  if (file == currentCollectionPath_) return;
   saveSessionNow();  // the tabs of the collection being left -> Sessions/<old>.ini
   ws_.closeAll();
-  enterCollection(name, true);  // the target's tabs come back
+  enterCollectionAt(file, true);  // the target's tabs come back
   refreshCollections();
 }
 
 void App::createCollection(const std::string& name) {
+  createCollectionAt(collectionFile(name));
+}
+
+void App::createCollectionAt(const std::filesystem::path& file) {
   std::string err;
-  efapp::saveConfigs(collectionFile(name), {}, err);  // empty collection
+  efapp::saveConfigs(file, {}, err);  // empty collection
   saveSessionNow();  // the tabs of the collection being left
   ws_.closeAll();    // a new collection starts with no tabs and no configurations
-  enterCollection(name, false);
+  enterCollectionAt(file, false);
   refreshCollections();
 }
 
@@ -1059,45 +1218,58 @@ void App::mergeDirtyTabsInto(std::vector<efapp::UserConfig>& configs) {
 }
 
 std::string App::saveCollection() {
+  if (currentCollectionPath_.empty()) return "error: no collection open";
   mergeDirtyTabsInto(userConfigs_);
   std::string err;
-  if (!efapp::saveConfigs(collectionFile(currentCollection_), userConfigs_, err)) return "error: " + err;
+  if (!efapp::saveConfigs(currentCollectionPath_, userConfigs_, err)) return "error: " + err;
   return {};
 }
 
+// API-compatible form: a bare name resolves to Collections\<name>.ini (v2.5: anything else is a path).
 std::string App::saveCollectionAs(const std::string& name) {
   const std::string trimmed = efapp::ini::trim(name);
   if (trimmed.empty()) return "error: the collection name is empty";
+  return saveCollectionAsFile(collectionFile(trimmed));
+}
+
+// v2.5 OPEN-01: Save Collection As with a path chosen in the native save dialog (or given by the API).
+// The tabs stay open and belong to the new file now.
+std::string App::saveCollectionAsFile(const std::filesystem::path& file) {
+  if (currentCollectionPath_.empty()) return "error: no collection open";
   mergeDirtyTabsInto(userConfigs_);
   std::string err;
-  if (!efapp::saveConfigs(collectionFile(trimmed), userConfigs_, err)) return "error: " + err;
-  currentCollection_ = trimmed;  // the tabs stay open; they belong to the new collection now
+  if (!efapp::saveConfigs(file, userConfigs_, err)) return "error: " + err;
+  currentCollection_ = file.stem().string();  // the tabs stay open; they belong to the new file now
+  currentCollectionPath_ = file;
   refreshCollections();
   saveSessionNow();    // Sessions/<new>.ini = the open tabs
   writeSessionPointer();
   return {};
 }
 
+// v2.5: Close Collection leaves NO collection open (the configuration menu entries grey out until
+// File > Open Collection... picks one). The closing collection's tabs stay in its session file.
 std::string App::closeCollection() {
+  if (currentCollectionPath_.empty()) return "error: no collection open";
   const std::string err = saveCollection();
   saveSessionNow();  // the closing collection keeps its tabs for the next open
   ws_.closeAll();
-  if (currentCollection_ != "Original") {
-    enterCollection("Original", true);  // Original's tabs come back
-    refreshCollections();
-  } else {
-    saveSessionNow();  // closing Original: an empty session tags Original
-  }
+  currentCollection_.clear();
+  currentCollectionPath_.clear();
+  userConfigs_.clear();
+  ui_.userConfigs.clear();
+  refreshCollections();
   pacer_.notifyActivity();
   return err;
 }
 
 std::string App::removeConfiguration(const std::string& name) {
+  if (currentCollectionPath_.empty()) return "error: no collection open";
   const int at = efapp::findUserConfig(userConfigs_, name);
   if (at < 0) return "error: no configuration named '" + name + "'";
   userConfigs_.erase(userConfigs_.begin() + static_cast<std::ptrdiff_t>(at));
   std::string err;
-  if (!efapp::saveConfigs(collectionFile(currentCollection_), userConfigs_, err)) return "error: " + err;
+  if (!efapp::saveConfigs(currentCollectionPath_, userConfigs_, err)) return "error: " + err;
   ui_.userConfigs = userConfigs_;
   return {};
 }
@@ -1105,6 +1277,7 @@ std::string App::removeConfiguration(const std::string& name) {
 std::string App::saveConfigurationAs(const std::string& name) {
   const efapp::Tab* t = ws_.find(ui_.activeSerial);
   if (!t) return "error: no active tab";
+  if (currentCollectionPath_.empty()) return "error: no collection open";
   std::vector<std::string> reserved;
   for (const ef::Preset& p : ef::presets()) reserved.emplace_back(p.displayName);
   efapp::UserConfig candidate;
@@ -1113,10 +1286,34 @@ std::string App::saveConfigurationAs(const std::string& name) {
   for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::PresetCharge{c.charge, c.position.X, c.position.Y});
   if (efapp::upsertUserConfig(userConfigs_, candidate, reserved) != efapp::UpsertResult::OK) return "error: invalid or reserved name";
   std::string err;
-  if (!efapp::saveConfigs(collectionFile(currentCollection_), userConfigs_, err)) return "error: " + err;
-  if (efapp::Tab* saved = ws_.find(ui_.activeSerial)) saved->dirty = false;
+  if (!efapp::saveConfigs(currentCollectionPath_, userConfigs_, err)) return "error: " + err;
+  if (efapp::Tab* saved = ws_.find(ui_.activeSerial)) {
+    saved->dirty = false;
+    saved->sourceConfig = efapp::ini::trim(name);  // the tab now belongs to this configuration (v2.5 CFG-04)
+  }
   ui_.userConfigs = userConfigs_;
   refreshCollections();
+  return {};
+}
+
+// v2.5 CFG-04: File > Save Configuration - the active tab's charges go back into the configuration it
+// was opened from (in place, position preserved), inside the currently open collection.
+std::string App::saveConfiguration() {
+  const efapp::Tab* t = ws_.find(ui_.activeSerial);
+  if (!t) return "error: no active tab";
+  if (currentCollectionPath_.empty()) return "error: no collection open";
+  if (t->sourceConfig.empty()) return "error: the active tab is not a saved configuration (use Save Configuration As)";
+  const int at = efapp::findUserConfig(userConfigs_, t->sourceConfig);
+  if (at < 0) return "error: no configuration named '" + t->sourceConfig + "'";
+  efapp::UserConfig c;
+  c.name = t->sourceConfig;
+  c.charges.reserve(t->field.charges.size());
+  for (const ef::Charge& ch : t->field.charges) c.charges.push_back(ef::PresetCharge{ch.charge, ch.position.X, ch.position.Y});
+  userConfigs_[static_cast<std::size_t>(at)] = std::move(c);  // overwrite in place: the order stays
+  std::string err;
+  if (!efapp::saveConfigs(currentCollectionPath_, userConfigs_, err)) return "error: " + err;
+  if (efapp::Tab* saved = ws_.find(ui_.activeSerial)) saved->dirty = false;
+  ui_.userConfigs = userConfigs_;
   return {};
 }
 
@@ -1224,7 +1421,7 @@ std::string App::command(const std::string& line) {
          << " method=" << ef::info(t.params.method).name << " autocalc=" << (t.autoRecalc ? 1 : 0)
          << " stale=" << (t.stale ? 1 : 0) << " dirty=" << (t.dirty ? 1 : 0) << " selected=" << t.selected << " lines=" << t.scene.electric.size()
          << " zoom=" << t.zoom << " centre=" << t.centre.X << "," << t.centre.Y << " grid=" << (t.grid.active ? 1 : 0) << ','
-         << (t.grid.visible ? 1 : 0) << ',' << (t.grid.polar ? 1 : 0) << ',' << t.grid.origin.X << ',' << t.grid.origin.Y << ','
+         << (t.grid.visible ? 1 : 0) << ',' << (t.grid.polar ? 1 : 0) << ',' << (t.grid.intersectionsOnly ? 1 : 0) << ',' << t.grid.origin.X << ',' << t.grid.origin.Y << ','
          << t.grid.spacing << ',' << t.grid.angleStepDeg << " charges=";
       for (std::size_t i = 0; i < t.field.charges.size(); ++i)
         os << (i ? ";" : "") << t.field.charges[i].charge << ',' << t.field.charges[i].position.X << ',' << t.field.charges[i].position.Y;
@@ -1273,20 +1470,34 @@ std::string App::command(const std::string& line) {
     createCollection(name);
     return "ok";
   }
-  if (cmd == "collection.switch") {
+  if (cmd == "collection.switch" || cmd == "collection.open") {  // v2.5 OPEN-01: a bare name resolves to
+    // Collections\<name>.ini; anything containing a separator or ':' is a path (opened from anywhere).
     if (const std::string e = need(1); !e.empty()) return e;
-    const std::string name = efapp::ini::trim(tok[1]);
-    if (std::find(collections_.begin(), collections_.end(), name) == collections_.end()) return "error: no collection named '" + name + "'";
-    switchCollection(name);
+    const std::string arg = efapp::ini::trim(tok[1]);
+    std::filesystem::path file;
+    if (arg.find('/') == std::string::npos && arg.find('\\') == std::string::npos && arg.find(':') == std::string::npos) {
+      if (std::find(collections_.begin(), collections_.end(), arg) != collections_.end() || std::filesystem::exists(collectionFile(arg)))
+        file = collectionFile(arg);
+    } else {
+      file = std::filesystem::u8path(arg);
+      if (file.is_relative() && !opt_.userDir.empty()) file = std::filesystem::u8path(opt_.userDir) / file;
+    }
+    if (file.empty() || !std::filesystem::exists(file)) return "error: no collection '" + arg + "'";
+    switchCollectionAt(file);
     return "ok";
   }
   if (cmd == "collection.save") {
     const std::string err = saveCollection();
     return err.empty() ? "ok" : err;
   }
-  if (cmd == "collection.save-as") {
+  if (cmd == "collection.save-as") {  // v2.5: a bare name (Collections\<name>.ini) or a path
     if (const std::string e = need(1); !e.empty()) return e;
-    return saveCollectionAs(tok[1]);
+    const std::string arg = efapp::ini::trim(tok[1]);
+    if (arg.find('/') == std::string::npos && arg.find('\\') == std::string::npos && arg.find(':') == std::string::npos)
+      return saveCollectionAs(arg);
+    std::filesystem::path file = std::filesystem::u8path(arg);
+    if (file.is_relative() && !opt_.userDir.empty()) file = std::filesystem::u8path(opt_.userDir) / file;
+    return saveCollectionAsFile(file);
   }
   if (cmd == "collection.close") {
     const std::string err = closeCollection();
@@ -1307,9 +1518,20 @@ std::string App::command(const std::string& line) {
     if (const std::string e = need(1); !e.empty()) return e;
     return removeConfiguration(tok[1]);
   }
+  if (cmd == "config.save") {  // v2.5 CFG-04: the active tab's charges -> its source configuration, in place
+    return saveConfiguration();
+  }
   if (cmd == "config.save-as") {
     if (const std::string e = need(1); !e.empty()) return e;
     return saveConfigurationAs(tok[1]);
+  }
+  if (cmd == "export.configuration" || cmd == "export.collection") {  // v2.5 EXP-03: PDF by path
+    if (const std::string e = need(1); !e.empty()) return e;
+    std::filesystem::path file = std::filesystem::u8path(efapp::ini::trim(tok[1]));
+    if (file.is_relative() && !opt_.userDir.empty()) file = std::filesystem::u8path(opt_.userDir) / file;
+    const std::string err =
+        cmd == "export.configuration" ? exportConfigurationTo(file.string()) : exportCollectionTo(file.string());
+    return err.empty() ? "ok" : err;
   }
 
   if (cmd == "tab.new-empty") {
@@ -1431,6 +1653,7 @@ std::string App::command(const std::string& line) {
     if (!t) return e;
     const int at = selectedOrArg(e);
     if (at < 0) return e;
+    t->selected = at;  // stepValue works on the selection; an explicit index selects it (v2.5: after removals)
     long long v = 0;
     if (!parseApiInt(tok[at == t->selected && tok.size() < 3 ? 1 : 2], v)) return "error: invalid value";
     const int delta = static_cast<int>(v) - t->field.charges[static_cast<std::size_t>(at)].charge;
@@ -1488,12 +1711,13 @@ std::string App::command(const std::string& line) {
     if (!t) return e;
     efapp::GridSettings& g = t->grid;
     const std::string what = tok[1];
-    if (what == "active" || what == "visible" || what == "polar") {
+    if (what == "active" || what == "visible" || what == "polar" || what == "intersections") {  // v2.5: intersections-only mode
       bool v = false;
       if (tok.size() < 3 || !apiOnOff(tok[2], v)) return "error: grid.set " + what + " needs on|off";
       if (what == "active") g.active = v;
       if (what == "visible") g.visible = v;
       if (what == "polar") g.polar = v;
+      if (what == "intersections") g.intersectionsOnly = v;
       return "ok";
     }
     if (what == "origin") {
@@ -1544,6 +1768,11 @@ std::string App::command(const std::string& line) {
       const std::optional<ef::Method> m = ef::methodFromName(efapp::ini::toLower(tok[2]));
       if (!m) return "error: unknown method '" + tok[2] + "'";
       c.method = *m;
+    } else if (key == "charge-size") {  // v2.5 SIZE-01: the DRAWN charge radius, 2-120 px (physics unchanged)
+      double v = 0;
+      if (!parseApiDouble(tok[2], v) || v < 2.0 || v > 120.0) return "error: charge-size needs a value in 2..120 px";
+      options_.draw.chargeRadiusPx = static_cast<float>(v);
+      env_.drawStyle = options_.draw;
     } else {
       return "error: unknown option '" + key + "'";
     }
@@ -1564,6 +1793,24 @@ std::string App::command(const std::string& line) {
     if (const std::string e2 = need(1); !e2.empty()) return e2;
     const std::string state = command("app.state");
     if (state.find(tok[1]) == std::string::npos) return "error: app.state does not contain '" + tok[1] + "'";
+    return "ok";
+  }
+  if (cmd == "app.expect-no") {  // script assertion: the state dump must NOT contain the text
+    if (const std::string e2 = need(1); !e2.empty()) return e2;
+    const std::string state = command("app.state");
+    if (state.find(tok[1]) != std::string::npos) return "error: app.state unexpectedly contains '" + tok[1] + "'";
+    return "ok";
+  }
+  if (cmd == "app.expect-error") {  // script assertion: the command starting at tok[2] must fail
+    if (const std::string e2 = need(2); !e2.empty()) return e2;
+    std::string line2;
+    for (std::size_t i = 2; i < tok.size(); ++i) {
+      if (i > 2) line2 += ' ';
+      line2 += tok[i];
+    }
+    const std::string result = command(line2);
+    if (result.rfind("error:", 0) != 0) return "error: expected '" + tok[1] + "' to fail: '" + line2 + "' returned '" + result + "'";
+    if (result.find(tok[1]) == std::string::npos) return "error: '" + line2 + "' failed differently: " + result;
     return "ok";
   }
 
@@ -1640,12 +1887,13 @@ int App::runExportMode() {
   const std::string base = opt_.exportDir + "/dipole";
   std::string err = efrender::renderPng(t->scene, style, view, (base + ".png").c_str());
   if (err.empty()) err = writeTextFile(base + ".svg", ef::renderSvg(t->scene, style, view));
+  if (err.empty()) err = writeBinaryFile(base + ".pdf", ef::renderPdf(t->scene, style, view));  // v2.5 EXP-03
   if (!err.empty()) {
     std::fprintf(stderr, "export: %s\n", err.c_str());
     return 1;
   }
-  std::printf("export ok png=%s.png svg=%s.svg scene lines=%zu equipotentials=%zu\n", base.c_str(), base.c_str(),
-              t->scene.electric.size(), t->scene.potential.size());
+  std::printf("export ok png=%s.png svg=%s.svg pdf=%s.pdf scene lines=%zu equipotentials=%zu\n", base.c_str(), base.c_str(),
+              base.c_str(), t->scene.electric.size(), t->scene.potential.size());
   ws_.closeAll();
   shutdown();
   return 0;

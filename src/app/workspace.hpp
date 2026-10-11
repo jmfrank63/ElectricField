@@ -46,6 +46,7 @@ struct Tab {
   std::size_t preset = 0;    // index into ef::presets(); kNoPreset for user configurations
   unsigned number = 0;       // per-preset (or per-name) counter, starts at 1, never reused after a close
   std::string title;         // "<Display Name> <N>"
+  std::string sourceConfig;  // v2.5 CFG-04: the configuration this tab came from ("" = unsaved); Save Configuration saves in place
   ef::ChargeSystem field;
   ef::ComputeParams params;
   TabState state = TabState::Computing;
@@ -87,8 +88,10 @@ class Workspace {
   // Opens a tab and starts its session. Never throws for a session that cannot start: that yields a Failed tab.
   unsigned open(std::size_t presetIndex);
   // Opens a tab from arbitrary charges (a user configuration, v2 Phase 1). The name is trimmed; the title is
-  // "<name> <N>" with a per-name counter that is never reused after a close.
+  // "<name> <N>" with a per-name counter that is never reused after a close. The 3-arg form stores the
+  // configuration the tab came from (v2.5 CFG-04); openEmpty passes "" (an unsaved tab has no source).
   unsigned openUser(const std::string& name, const std::vector<ef::PresetCharge>& charges);
+  unsigned openUser(const std::string& name, const std::vector<ef::PresetCharge>& charges, const std::string& source);
   // The "Empty Configuration" entry: a single +1 charge at the origin, immediately computable — the Phase 2
   // editor's starting point.
   unsigned openEmpty();
@@ -124,8 +127,9 @@ class Workspace {
 
  private:
   void poll(Tab& t);
-  // Shared tail of open/openUser/openEmpty: builds the tab, starts the session (Failed tab on error), pushes it.
-  unsigned spawn(std::size_t presetIndex, unsigned number, const std::string& title, ef::ChargeSystem&& field);
+  // The common body of open/openUser/openEmpty: builds the tab, starts the session (Failed tab on error), pushes it.
+  unsigned spawn(std::size_t presetIndex, unsigned number, const std::string& title, ef::ChargeSystem&& field,
+                 const std::string& sourceConfig = std::string());
 
   ef::ComputeParams defaults_;
   SessionFactory factory_;

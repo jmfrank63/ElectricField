@@ -111,6 +111,8 @@ std::string validate(const Options& o) {
     return "The field line thickness must be between " + std::to_string(kThicknessMin) + " and " + std::to_string(kThicknessMax) + ".";
   if (o.draw.potentialThickness < static_cast<float>(kThicknessMin) || o.draw.potentialThickness > static_cast<float>(kThicknessMax))
     return "The equipotential thickness must be between " + std::to_string(kThicknessMin) + " and " + std::to_string(kThicknessMax) + ".";
+  if (o.draw.chargeRadiusPx < static_cast<float>(kChargeSizeMin) || o.draw.chargeRadiusPx > static_cast<float>(kChargeSizeMax))  // v2.5 SIZE-01
+    return "The charge size must be between " + std::to_string(kChargeSizeMin) + " and " + std::to_string(kChargeSizeMax) + " px.";
   return {};
 }
 
@@ -130,6 +132,7 @@ std::string serialize(const Options& o) {
   os << "potentialLineColor = " << colorHex(o.draw.potentialLine) << '\n';
   os << "electricLineThickness = " << static_cast<long long>(o.draw.electricThickness) << '\n';
   os << "potentialLineThickness = " << static_cast<long long>(o.draw.potentialThickness) << '\n';
+  os << "chargeSize = " << static_cast<long long>(o.draw.chargeRadiusPx) << '\n';  // v2.5 SIZE-01
   return os.str();
 }
 
@@ -197,6 +200,12 @@ ParsedOptions parse(const std::string& text) {
         r.value.draw.potentialThickness = static_cast<float>(v);
       else
         r.rejectedKeys.push_back(key);
+    } else if (key == "chargeSize") {  // v2.5 SIZE-01
+      unsigned long long v = 0;
+      if (parseUll(value, v) && v >= kChargeSizeMin && v <= kChargeSizeMax)
+        r.value.draw.chargeRadiusPx = static_cast<float>(v);
+      else
+        r.rejectedKeys.push_back(key);
     }
     // Unknown keys are ignored (D-03).
   }
@@ -229,6 +238,7 @@ void OptionsEdit::reset(const Options& current) {
   threads = static_cast<int>(current.compute.numThreads);
   electricThickness = static_cast<int>(current.draw.electricThickness);
   potentialThickness = static_cast<int>(current.draw.potentialThickness);
+  chargeSize = static_cast<double>(current.draw.chargeRadiusPx);  // v2.5 SIZE-01
   interval = current.compute.potentialInterval;
   methodIndex = static_cast<int>(current.compute.method);  // enum order == kMethods order (method.hpp)
   positive[0] = channel(current.draw.positiveCharge.r);
@@ -256,6 +266,7 @@ bool OptionsEdit::validate() {
   o.compute.calculateEquipotentials = equipotentials;
   o.draw.electricThickness = static_cast<float>(electricThickness);
   o.draw.potentialThickness = static_cast<float>(potentialThickness);
+  o.draw.chargeRadiusPx = static_cast<float>(chargeSize);  // v2.5 SIZE-01
   error = efapp::validate(o);  // qualified: the member hides the free function
   return error.empty();
 }
@@ -273,6 +284,7 @@ Options OptionsEdit::apply() const {
   o.draw.potentialLine = ef::Color{toByte(potential[0]), toByte(potential[1]), toByte(potential[2]), 255};
   o.draw.electricThickness = static_cast<float>(electricThickness);
   o.draw.potentialThickness = static_cast<float>(potentialThickness);
+  o.draw.chargeRadiusPx = static_cast<float>(chargeSize);  // v2.5 SIZE-01
   return o;
 }
 

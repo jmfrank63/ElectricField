@@ -96,7 +96,8 @@ void renderScene(Painter& painter, const FieldScene& scene, const DrawStyle& sty
 // never stall the frame.
 void drawGrid(Painter& painter, const GridSettings& g, const View& view) {
   if (!g.visible || !(g.spacing > 0.0)) return;
-  const Color gridColor{200, 200, 200, 255};
+  const Color gridColor{120, 210, 120, 255};        // v2.5 GRID-05: light green
+  const Color dotColor{217, 119, 6, 255};           // v2.5 GRID-06: lattice points in a distinct colour (orange)
   const double ppu = view.pixelsPerUnit > 0 ? view.pixelsPerUnit : 1.0;
   const double cx = view.widthPx / 2.0 - view.centre.X * ppu;
   const double cy = view.heightPx / 2.0 + view.centre.Y * ppu;
@@ -110,6 +111,14 @@ void drawGrid(Painter& painter, const GridSettings& g, const View& view) {
     const long ny0 = static_cast<long>(std::ceil((wy0 - g.origin.Y) / g.spacing));
     const long ny1 = static_cast<long>(std::floor((wy1 - g.origin.Y) / g.spacing));
     if (nx1 - nx0 > 2000 || ny1 - ny0 > 2000) return;
+    if (g.intersectionsOnly) {  // v2.5 GRID-06: only the lattice points, in the distinct colour
+      if (double((nx1 - nx0 + 1)) * double(ny1 - ny0 + 1) > 20000.0) return;
+      const float dotR = std::max(2.0f, static_cast<float>(0.03 * g.spacing * ppu));
+      for (long i = nx0; i <= nx1; ++i)
+        for (long j = ny0; j <= ny1; ++j)
+          painter.fillCircle(toScreen(g.origin.X + static_cast<double>(i) * g.spacing, g.origin.Y + static_cast<double>(j) * g.spacing), dotR, dotColor);
+      return;
+    }
     for (long i = nx0; i <= nx1; ++i) {
       const double wx = g.origin.X + static_cast<double>(i) * g.spacing;
       const PointF a = toScreen(wx, wy0), b = toScreen(wx, wy1);
@@ -128,6 +137,19 @@ void drawGrid(Painter& painter, const GridSettings& g, const View& view) {
     const double farY = std::max(std::abs(cy - view.heightPx), std::abs(cy));
     const double maxR = std::sqrt(farX * farX + farY * farY) / ppu;
     const long nMax = static_cast<long>(maxR / g.spacing) + 1;
+    const int rays = static_cast<int>(std::round(360.0 / std::clamp(g.angleStepDeg, 1.0, 180.0)));
+    const double stepRad = g.angleStepDeg * 3.1415926535897932346 / 180.0;
+    if (g.intersectionsOnly) {  // v2.5 GRID-06: the ring x ray lattice points, distinct colour
+      if (nMax > 200 || double(rays) * double(std::min(nMax, 200L)) > 20000.0) return;
+      const float dotR = std::max(2.0f, static_cast<float>(0.03 * g.spacing * ppu));
+      for (long i = 1; i <= nMax; ++i)
+        for (int j = 0; j < rays; ++j) {
+          const double ang = static_cast<double>(j) * stepRad;
+          const double r = static_cast<double>(i) * g.spacing;
+          painter.fillCircle(toScreen(g.origin.X + r * std::cos(ang), g.origin.Y + r * std::sin(ang)), dotR, dotColor);
+        }
+      return;
+    }
     if (nMax > 2000) return;
     for (long i = 1; i <= nMax; ++i) {  // circle as a dense polyline through the Painter contract
       const std::size_t N = 96;
@@ -140,8 +162,6 @@ void drawGrid(Painter& painter, const GridSettings& g, const View& view) {
       }
       painter.strokePath(pts.data(), pts.size(), 0, false, gridColor, 1.f);
     }
-    const int rays = static_cast<int>(std::round(360.0 / std::clamp(g.angleStepDeg, 1.0, 180.0)));
-    const double stepRad = g.angleStepDeg * 3.1415926535897932346 / 180.0;
     for (int a = 0; a < rays; ++a) {
       const double ang = static_cast<double>(a) * stepRad;
       const double r = maxR * 1.5;

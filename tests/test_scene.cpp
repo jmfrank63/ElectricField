@@ -9,6 +9,7 @@
 #include "ef/scene.hpp"
 #include "ef/session.hpp"
 #include "ef/svg.hpp"
+#include "ef/pdf.hpp"
 #include "test_params.hpp"
 
 using namespace ef;
@@ -119,6 +120,88 @@ TEST_CASE("SVG: well-formed document with paths, circles, y flip and colours") {
   CHECK(svg.compare(svg.size() - 7, 7, "</svg>\n") == 0);
 }
 
+TEST_CASE("PDF: well-formed one-page document with a y-down transform, path operators and an exact xref") {
+  FieldScene scene;
+  scene.electric.push_back(line({{0, 0}, {0.1, 0.1}, {0.2, 0.2}, {0.3, 0.3}, {0.4, 0.4}}));
+  scene.charges = {{Vec2(0, 0), +1}};
+  const std::string pdf = renderPdf(scene, DrawStyle{}, View{200, 100, 100.});
+  CHECK(pdf.rfind("%PDF-1.4", 0) == 0);
+  CHECK(pdf.find("<< /Type /Catalog /Pages 2 0 R >>") != std::string::npos);
+  CHECK(pdf.find("/Type /Pages /Kids [4 0 R] /Count 1") != std::string::npos);  // content 3, page 4
+  CHECK(pdf.find("/MediaBox [0 0 200 100]") != std::string::npos);
+  CHECK(pdf.find("1 0 0 -1 0 100 cm") != std::string::npos);   // the page-wide y-down transform
+  CHECK(pdf.find("0 0 200 100 re f") != std::string::npos);    // the background rect
+  CHECK(pdf.find("100 50 m") != std::string::npos);            // the path starts at the charge-free point y-down
+  CHECK(pdf.find(" c\n") != std::string::npos);                // the cubic segment
+  CHECK(pdf.find("S Q\n") != std::string::npos);
+  CHECK(pdf.find("h f Q\n") != std::string::npos);             // the charge circle completes and fills
+  CHECK(pdf.find("/Length ") != std::string::npos);
+  CHECK(pdf.compare(pdf.size() - 6, 6, "%%EOF\n") == 0);
+  CHECK(pdf.find("nan") == std::string::npos);
+  CHECK(pdf.find("inf") == std::string::npos);
+
+  // startxref points at the xref keyword, and the entry for object 1 points back at "1 0 obj".
+  const std::size_t startxrefAt = pdf.find("startxref\n") + std::string("startxref\n").size();
+  const std::size_t xrefAt = static_cast<std::size_t>(std::stoll(pdf.substr(startxrefAt)));
+  REQUIRE(pdf.compare(xrefAt, 5, "xref\n") == 0);
+  const std::size_t obj1 = pdf.find("\n1 0 obj\n");
+  REQUIRE(obj1 != std::string::npos);
+  const std::string entry1 = pdf.substr(pdf.find("0000000000 65535 f \n") + std::string("0000000000 65535 f \n").size(), 20);
+  CHECK(std::stoll(entry1) == obj1 + 1);  // the recorded offset is the object's start byte
+  // The content stream length counts its own bytes exactly.
+  const std::size_t lenAt = pdf.find("<< /Length ") + std::string("<< /Length ").size();
+  const std::size_t len = static_cast<std::size_t>(std::stoll(pdf.substr(lenAt)));
+  const std::size_t streamAt = pdf.find("stream\n") + std::string("stream\n").size();
+  const std::size_t endStreamAt = pdf.find("\nendstream\n", streamAt);
+  CHECK(endStreamAt - streamAt == len);
+}
+
+TEST_CASE("PDF: multi-page collection with outline bookmarks in page order") {
+  FieldScene a, b;
+  a.charges = {{Vec2(0, 0), +1}};
+  b.charges = {{Vec2(-1, 0), -1}, {Vec2(1, 0), -1}};
+  ef::PdfPainter p;
+  renderScene(p, a, DrawStyle{}, View{1024, 768, 100.});
+  p.setTitle("Dipole");
+  renderScene(p, b, DrawStyle{}, View{1024, 768, 100.});
+  p.setTitle("My \"Field\" (x)");
+  const std::string pdf = p.build();
+  CHECK(pdf.find("/Type /Catalog /Pages 2 0 R /Outlines 3 0 R") != std::string::npos);
+  CHECK(pdf.find("/Type /Pages /Kids [4 0 R 6 0 R] /Count 2") != std::string::npos);
+  CHECK(pdf.find("/Type /Outlines /First 8 0 R /Last 9 0 R /Count 2") != std::string::npos);
+  CHECK(pdf.find("/Title (Dipole) /Parent 3 0 R /Dest [4 0 R /Fit] /Next 9 0 R") != std::string::npos);
+  CHECK(pdf.find("/Title (My \"Field\" \\(x\\))") != std::string::npos);  // quotes stay, ( ) \ escape
+  CHECK(pdf.find("/Prev 8 0 R") != std::string::npos);
+  // every object's xref entry points back at its "obj" line (offset == the object's start byte)
+  const std::size_t xrefAt = static_cast<std::size_t>(std::stoll(pdf.substr(pdf.find("startxref\n") + 10)));
+  REQUIRE(pdf.compare(xrefAt, 5, "xref\n") == 0);
+  for (int obj = 1; obj <= 9; ++obj) {
+    const std::string marker = "\n" + std::to_string(obj) + " 0 obj\n";
+    const std::size_t at = pdf.find(marker);
+    REQUIRE(at != std::string::npos);
+    const std::size_t tableAt = pdf.find("0000000000 65535 f \n") + std::string("0000000000 65535 f \n").size();
+    const std::string entry = pdf.substr(tableAt + static_cast<std::size_t>(obj - 1) * 20, 10);
+    CHECK(std::stoll(entry) == at + 1);
+  }
+}
+
+TEST_CASE("every preset renders to a finite PDF (headless end to end, default options)") {
+  for (const auto& pr : presets()) {
+    CAPTURE(pr.slug);
+    const ComputeParams p = lightParams();
+    const ChargeSystem field = makeSystem(pr);
+    ComputeSession s(field, p);
+    s.wait();
+    FieldResult r;
+    REQUIRE(s.takeResult(r));
+    const std::string pdf = renderPdf(buildScene(field, r), DrawStyle{}, View{});
+    CHECK(pdf.size() > 500);
+    CHECK(pdf.find("nan") == std::string::npos);
+    CHECK(pdf.find("inf") == std::string::npos);
+    CHECK(pdf.compare(pdf.size() - 6, 6, "%%EOF\n") == 0);
+  }
+}
+
 TEST_CASE("every preset renders to a finite SVG (headless end to end, default options)") {
   for (const auto& pr : presets()) {
     CAPTURE(pr.slug);
@@ -167,7 +250,7 @@ TEST_CASE("renderScene draws the grid between background and scene (v2.4 BUG-01)
   CHECK(r.strokes.size() >= 4);
   bool gridColorSeen = false;
   for (const auto& s : r.strokes)
-    if (s.color.r == 200 && s.color.g == 200 && s.color.b == 200) gridColorSeen = true;
+    if (s.color.r == 120 && s.color.g == 210 && s.color.b == 120) gridColorSeen = true;  // v2.5 GRID-05: light green
   CHECK(gridColorSeen);
   // The charge is still drawn on top.
   CHECK(r.circles.size() == 1);
@@ -178,12 +261,35 @@ TEST_CASE("renderScene draws the grid between background and scene (v2.4 BUG-01)
   renderScene(r2, scene, DrawStyle{}, View{200, 200, 100.});
   bool gridInOracle = false;
   for (const auto& s : r2.strokes)
-    if (s.color.r == 200 && s.color.g == 200 && s.color.b == 200) gridInOracle = true;
+    if (s.color.r == 120 && s.color.g == 210 && s.color.b == 120) gridInOracle = true;
   CHECK_FALSE(gridInOracle);
+
+  // v2.5 GRID-06: intersections-only mode draws dots (distinct colour) and NO lines.
+  Recorder r4;
+  ef::GridSettings d = g;
+  d.visible = true;
+  d.intersectionsOnly = true;
+  renderScene(r4, scene, DrawStyle{}, View{200, 200, 100.}, &d);
+  CHECK(r4.strokes.empty());
+  // lattice dots: 3x3 = 9 dots (orange) PLUS the charge circle (blue) - tell them apart by colour.
+  CHECK(r4.circles.size() >= 9);
+  long dots = 0;
+  for (const auto& c : r4.circles)
+    if (c.color.r == 217 && c.color.g == 119 && c.color.b == 6) ++dots;
+  CHECK(dots == 9);
+  bool anyDotOffLattice = false;
+  for (const auto& c : r4.circles) {
+    if (c.color.r == 217) {
+      const bool onLattice = (std::abs(c.c.x - std::round(c.c.x / 100.0) * 100.0) < 0.01) && (std::abs(c.c.y - std::round(c.c.y / 100.0) * 100.0) < 0.01);
+      if (!onLattice) anyDotOffLattice = true;
+    }
+  }
+  CHECK_FALSE(anyDotOffLattice);
 
   // visible=false draws nothing even when passed.
   Recorder r3;
   g.visible = false;
   renderScene(r3, scene, DrawStyle{}, View{200, 200, 100.}, &g);
   CHECK(r3.strokes.empty());
+  CHECK(r3.circles.size() == 1);  // only the charge, no grid
 }

@@ -45,7 +45,7 @@ std::string serializeSession(const std::vector<SavedTab>& tabs, const std::strin
     std::snprintf(gy, sizeof(gy), "%.10g", t.grid.origin.Y);
     std::snprintf(gs, sizeof(gs), "%.10g", t.grid.spacing);
     std::snprintf(ga, sizeof(ga), "%.10g", t.grid.angleStepDeg);
-    os << "grid = " << (t.grid.active ? 1 : 0) << ',' << (t.grid.visible ? 1 : 0) << ',' << (t.grid.polar ? 1 : 0) << ',' << gx << ','
+    os << "grid = " << (t.grid.active ? 1 : 0) << ',' << (t.grid.visible ? 1 : 0) << ',' << (t.grid.polar ? 1 : 0) << ',' << (t.grid.intersectionsOnly ? 1 : 0) << ',' << gx << ','
        << gy << ',' << gs << ',' << ga << '\n';
     for (const ef::PresetCharge& c : t.charges) {
       char x[32], y[32];
@@ -98,15 +98,18 @@ ParsedSession parseSession(const std::string& text) {
       const std::vector<std::string> gp = ini::splitCsv(value);
       int a = 0, vis = 0, pol = 0;
       double ox = 0, oy = 0, sp = 0, ang = 0;
-      if (gp.size() >= 6 && ini::parseIntBounded(gp[0], 0, 1, a) && ini::parseIntBounded(gp[1], 0, 1, vis) &&
-          ini::parseIntBounded(gp[2], 0, 1, pol) && ini::parseDouble(gp[3], ox) && ini::parseDouble(gp[4], oy) &&
-          ini::parseDouble(gp[5], sp)) {
+      // Pre-v2.5 lines: a,v,p,ox,oy,sp,ang (7 fields); v2.5+ lines add the intersections flag (8).
+      const std::size_t geoShift = gp.size() >= 8 ? 1u : 0u;
+      if (gp.size() >= 7 && ini::parseIntBounded(gp[0], 0, 1, a) && ini::parseIntBounded(gp[1], 0, 1, vis) &&
+          ini::parseIntBounded(gp[2], 0, 1, pol) && ini::parseDouble(gp[3 + geoShift], ox) && ini::parseDouble(gp[4 + geoShift], oy) &&
+          ini::parseDouble(gp[5 + geoShift], sp)) {
         cur.grid.active = a != 0;
         cur.grid.visible = vis != 0;
         cur.grid.polar = pol != 0;
         cur.grid.origin = ef::Vec2{ox, oy};
         cur.grid.spacing = sp;
-        if (gp.size() >= 7 && ini::parseDouble(gp[6], ang)) cur.grid.angleStepDeg = ang;
+        if (gp.size() >= 7 + geoShift && ini::parseDouble(gp[6 + geoShift], ang)) cur.grid.angleStepDeg = ang;
+        if (gp.size() >= 8 && gp[3] == "1") cur.grid.intersectionsOnly = true;
       }
     } else if (key == "preset") {
       if (!inTab) continue;

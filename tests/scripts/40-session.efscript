@@ -1,4 +1,5 @@
 # 40-session: open tabs + edits, then quit (paired with 41 in the same user dir)
+collection.open Original
 tab.new-empty
 app.wait-done
 charge.move 0 2 0

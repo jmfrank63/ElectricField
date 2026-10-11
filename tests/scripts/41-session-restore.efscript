@@ -1,4 +1,6 @@
-# 41-session-restore: the same user dir as 40 - both tabs must come back with their edits (v2.4 COL-09)
+# 41-session-restore: the same user dir as 40 - the collection comes back as a document (v2.5), then
+# both tabs restore with their edits (v2.4 COL-09)
+collection.open Original
 app.expect tabs=2
 app.expect "title=My Dipole"
 app.expect "title=Empty Configuration 1"

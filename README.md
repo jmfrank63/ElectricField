@@ -32,10 +32,20 @@ preserved in history and on the `v1.0` tag.
 - Field lines per unit charge, equipotentials with an adjustable potential interval, a thread count and
   all draw colours/thicknesses in **View > Options...**; the settings persist between runs and draw
   changes repaint the open tabs immediately.
-- **Collections**: organise your configurations into named collections (one file per collection under
-  `Collections\` in the per-user config directory). The **Original** collection holds the built-in
-  arrangements; **File > New Collection...** starts an empty one; the menu-bar switcher changes between
-  them; **File > Save As... (Ctrl+S)** stores the current tab's charges into the current collection.
+- **Collections**: organise your configurations into collections. A collection is a single file that
+  holds named configurations - **File > Open Collection... (Ctrl+O)** opens one with the native file
+  picker (from anywhere), **File > New Collection...** creates one through the save dialog, and
+  **File > Save Collection / Save Collection As...** write it back (Ctrl+S or a chosen path). The
+  **Original** collection (under `Collections\` in the per-user config directory) holds the built-in
+  arrangements. The collection you have open appears in the menu bar's switcher; the configuration
+  menu entries (New/Open/Save Configuration...) are greyed out until a collection is open - the flow
+  is always *open a collection, then work with its configurations*. Nothing is auto-opened at startup.
+- **Save Configuration**: a tab opened from a configuration (or saved with **Save Configuration
+  As...**) can write its current charges back into that configuration with **File > Save
+  Configuration**; the file on disk updates immediately.
+- **Charge size**: the drawn radius of the charges scales from a dot to very large (2-120 px) - set
+  it in **View > Options** (Draw tab) or with `options.set charge-size`. This is a drawing option
+  only; the physics never depends on it.
 - **Charge editor**: click a charge to select it, drag it with the mouse, nudge it with the arrow keys
   (Shift = bigger steps) or type exact numbers into the editor panel's value/x/y fields with their arrow
   buttons (press and hold to repeat; **+/-** flips the sign). The **New charge** section creates a charge
@@ -47,12 +57,17 @@ preserved in history and on the `v1.0` tag.
 - **Zoom and pan**: the mouse wheel zooms at the cursor, the panel's Zoom - / Zoom + / Reset view buttons
   are always at hand, right-drag pans, and the arrow keys pan whenever no charge is selected.
 - **Your workspace comes back**: the open tabs - including each tab's calculation method, continuous
-  calculation and any charge edits - are stored in `session.ini` when you quit and restored on the next
-  start. If tabs have changes that are not saved to a collection, a prompt asks before quitting or
-  switching collections. **Help > Open Configuration Folder** shows where `options.ini`,
-  `configurations.ini`, `session.ini` and `Collections\` live.
-- Export of the current configuration view to **PNG** and **SVG** (File > Export), matching what is on
-  screen.
+  calculation, grid settings and any charge edits - are stored per collection when you quit
+  (`Sessions\<Collection>.ini`) and restored when you open the collection again. If tabs have changes
+  that are not saved to a collection, a prompt asks before quitting, switching or closing collections.
+  **Help > Open Configuration Folder** shows where `options.ini`, `configurations.ini`,
+  `session.ini`, `Collections\` and `Sessions\` live.
+
+- Export of the current configuration view to **PNG**, **SVG** and **PDF** (File > Export
+  Configuration), matching what is on screen - plus **File > Export Collection...**, which renders
+  every configuration of the collection into one PDF: one page per configuration, with the names as
+  PDF bookmarks.
+
 - Tabs can be closed while they compute; quitting mid-computation is safe. The computation is cancelled
   within a fraction of a second.
 
@@ -76,7 +91,7 @@ only that GUI-free part and fetches no GUI dependency at all.
 ```sh
 ElectricField --smoke                 # headless GUI start-up check (dummy video driver)
 ElectricField --screenshot <slug> <out.png> [--size WxH] [--scale k] [--modal about|chooser]
-ElectricField --export <dir>          # export the Dipole as PNG + SVG (byte-equal to ef-cli's output)
+ElectricField --export <dir>          # export the Dipole as PNG + SVG + PDF (byte-equal to ef-cli's output)
 ef-cli --list                         # the 9 preset slugs
 ef-cli --preset quadrupole --png q.png --svg q.svg
 ef-cli --all --out-dir parity-out --expect tools/parity/expected-counts.csv
@@ -100,6 +115,7 @@ ElectricField --script scenario.efscript --user-dir sandbox --out results.txt
 
 ```text
 # scenario.efscript
+collection.new sandbox-collection
 tab.new-empty
 app.wait-done
 charge.move 0 1 0
@@ -126,10 +142,14 @@ Everything lives in the per-user config directory (`SDL_GetPrefPath("ElectricFie
   A missing or invalid file falls back to the defaults per setting.
 - `configurations.ini` - the pre-collections user configurations (kept for reference; imported into the
   Original collection on first run of v2.2 or later).
-- `Collections\<Name>.ini` - one file per collection, sections `[configuration "Name"]` with
-  `charge = value, x, y` lines.
-- `session.ini` - the open tabs of the current collection (title, preset source, per-tab method,
-  continuous-calculation flag, charges), restored on the next start.
+- `Collections\<Name>.ini` (or any path you pick) - a COLLECTION FILE: sections [configuration "Name"]
+  with `charge = value, x, y` lines. The file you have open is the working collection;
+  **File > Save Collection / Save Collection As...** write it. `options.ini` also stores `chargeSize`
+  (v2.5): the drawn charge radius, 2-120 px.
+
+- `session.ini` - a pointer to the last-opened collection; the open tabs of each collection live in
+  `Sessions\<Collection>.ini` (title, preset source, per-tab method, continuous-calculation flag,
+  grid settings, charges) and are restored when that collection is opened.
 
 ## Project layout
 
@@ -167,5 +187,6 @@ Licensed under the GNU General Public License v3.0 - see [LICENSE](LICENSE).
 - **Esc reverts**: while a tab shows the *edited* marker, Esc restores the charges of the last
   calculation. **Edit > Undo (Ctrl+Z) / Redo (Ctrl+Y)** steps through charge and method changes.
 - **Grid**: the panel's Grid section enables snapping and/or drawing independently, switches between
-  Cartesian and polar grids, and lets you place the grid origin and set the spacing. With snapping on,
-  dragged, added and typed positions land on the grid.
+  Cartesian and polar grids and an intersections-only display, and lets you place the grid origin and
+  set the spacing. Grid lines are light green; intersection dots (when shown) are a distinct colour.
+  With snapping on, dragged, added and typed positions land on the grid.

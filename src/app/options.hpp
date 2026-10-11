@@ -34,7 +34,8 @@ inline bool operator==(const Options& a, const Options& b) {
          s.negativeCharge.r == t.negativeCharge.r && s.negativeCharge.g == t.negativeCharge.g && s.negativeCharge.b == t.negativeCharge.b &&
          s.electricLine.r == t.electricLine.r && s.electricLine.g == t.electricLine.g && s.electricLine.b == t.electricLine.b &&
          s.potentialLine.r == t.potentialLine.r && s.potentialLine.g == t.potentialLine.g && s.potentialLine.b == t.potentialLine.b &&
-         s.electricThickness == t.electricThickness && s.potentialThickness == t.potentialThickness;
+         s.electricThickness == t.electricThickness && s.potentialThickness == t.potentialThickness &&
+         s.chargeRadiusPx == t.chargeRadiusPx;  // v2.5 SIZE-01
 }
 
 // MFC ranges (DDV_MinMaxUInt / spin ranges): lines 4-128, threads 1-128, interval 0.01-0.50, thicknesses
@@ -44,6 +45,8 @@ constexpr unsigned kLinesMin = 4, kLinesMax = 128;
 constexpr unsigned kThreadsMin = 1, kThreadsMax = 128;
 constexpr double kIntervalMin = 0.01, kIntervalMax = 0.50;
 constexpr unsigned kThicknessMin = 1, kThicknessMax = 64;
+// v2.5 SIZE-01: the DRAWN charge size, from a dot to very large. Physics (seed/hit radius) is untouched.
+constexpr unsigned kChargeSizeMin = 2, kChargeSizeMax = 120;
 
 // "" when every field is in range, otherwise the first error message (shown in the dialog, D-04).
 std::string validate(const Options& o);
@@ -74,6 +77,7 @@ Options loadOptions(const std::filesystem::path& file);
 // widget values in and reads validation / the applied result out, so the rules are unit-testable.
 struct OptionsEdit {
   int lines = 16, threads = 4, electricThickness = 1, potentialThickness = 1;
+  double chargeSize = 25.0;  // v2.5 SIZE-01: the drawn charge radius, 2-120 px
   double interval = 0.10;
   int methodIndex = 0;  // index into ef::kMethods
   float positive[3] = {0.f, 0.f, 1.f};

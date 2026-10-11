@@ -75,6 +75,8 @@ class App {
   std::filesystem::path optionsPath_; // empty in headless modes (nothing is loaded or persisted there)
   std::vector<efapp::UserConfig> userConfigs_;  // user configurations (v2 CFG-01); master list, mirrored into ui_
   std::filesystem::path configsPath_;           // configurations.ini; empty in headless modes
+  std::filesystem::path configDir_;             // the user config directory (v2.1 SES-03: Help > Open Configuration Folder)
+  std::filesystem::path sessionPath_;           // session.ini (v2.1 SES-01); empty in headless modes
   // Export state (Phase 4). The SDL save-dialog callback may run on any thread (portald/zenity on Linux), so the
   // chosen path crosses into the UI thread behind a mutex and is exported at the next frame boundary.
   std::mutex exportMutex_;

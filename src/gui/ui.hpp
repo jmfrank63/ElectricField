@@ -33,6 +33,12 @@ struct UiState {
   int openUserConfig = -1;   // chooser: index into userConfigs (v2 CFG-02)
   bool openEmpty = false;    // chooser: Empty Configuration (v2 CFG-02)
   bool calculateActive = false;  // F5 / panel button (v2 CALC-01); consumed by drawUi via Workspace::calculate
+  bool openConfigFolder = false; // Help > Open Configuration Folder (v2.1 SES-03)
+  // v2.1 editor panel: Add-charge section and the per-tab rename buffer
+  int addValue = 1;
+  double addX = 0.0, addY = 0.0;
+  char tabNameBuf[128] = "";
+  unsigned tabNameBufSerial = 0;
   int exportRequest = 0;     // File > Export: 1 = PNG..., 2 = SVG... (consumed by App::frame, D-06)
   unsigned closeSerial = 0;  // request to close a tab (0 = none)
   // state carried between frames

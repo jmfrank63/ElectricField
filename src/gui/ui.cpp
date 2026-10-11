@@ -12,6 +12,8 @@
 #include "app/ui_logic.hpp"
 #include "app/configs.hpp"
 #include "app/editor.hpp"
+#include "app/ini_text.hpp"
+#include "app/session_file.hpp"
 #include "ef/presets.hpp"
 #include "render/imgui_painter.hpp"
 
@@ -481,34 +483,79 @@ void optionsModal(UiState& ui, const UiEnv& env) {
 
 // Press-and-hold repeat for the panel's -/+ buttons (v2 EDIT-03): one step on click, then steps every
 // 60 ms after a 300 ms delay, while the button is held.
-bool stepButton(const char* label) {
-  const bool clicked = ImGui::Button(label, ImVec2(22.f, 0.f));
+// Press-and-hold repeat for the panel's stepper buttons (v2 EDIT-03): one step on click, then steps every
+// 60 ms after a 300 ms delay, while the button is held. Draws an arrow triangle over the button (the
+// default ImGui font has no arrow glyphs) - dir: 0 left, 1 up, 2 right, 3 down (v2.1 EDIT-07).
+bool stepArrowButton(const char* id, const int dir) {
+  const bool clicked = ImGui::Button(id, ImVec2(22.f, 0.f));
   static std::unordered_map<ImGuiID, double> s_nextRepeat;
-  const ImGuiID id = ImGui::GetID(label);
+  const ImGuiID iid = ImGui::GetID(id);
   if (ImGui::IsItemActive()) {
     const double now = ImGui::GetTime();
     if (clicked) {
-      s_nextRepeat[id] = now + 0.30;
+      s_nextRepeat[iid] = now + 0.30;
       return true;
     }
-    const auto it = s_nextRepeat.find(id);
+    const auto it = s_nextRepeat.find(iid);
     if (it != s_nextRepeat.end() && now >= it->second) {
       it->second = now + 0.06;
       return true;
     }
   } else {
-    s_nextRepeat.erase(id);
+    s_nextRepeat.erase(iid);
   }
+  const ImVec2 bmin = ImGui::GetItemRectMin(), bmax = ImGui::GetItemRectMax();
+  const ImVec2 c((bmin.x + bmax.x) * 0.5f, (bmin.y + bmax.y) * 0.5f);
+  const float r = (bmax.x - bmin.x) * 0.22f;
+  ImVec2 p1, p2, p3;
+  if (dir == 0) {
+    p1 = ImVec2(c.x - r, c.y);
+    p2 = ImVec2(c.x + r, c.y - r);
+    p3 = ImVec2(c.x + r, c.y + r);
+  } else if (dir == 1) {
+    p1 = ImVec2(c.x, c.y - r);
+    p2 = ImVec2(c.x - r, c.y + r);
+    p3 = ImVec2(c.x + r, c.y + r);
+  } else if (dir == 2) {
+    p1 = ImVec2(c.x + r, c.y);
+    p2 = ImVec2(c.x - r, c.y - r);
+    p3 = ImVec2(c.x - r, c.y + r);
+  } else {
+    p1 = ImVec2(c.x, c.y + r);
+    p2 = ImVec2(c.x - r, c.y - r);
+    p3 = ImVec2(c.x + r, c.y - r);
+  }
+  ImGui::GetWindowDrawList()->AddTriangleFilled(p1, p2, p3, ImGui::GetColorU32(ImGuiCol_Text));
   return clicked;
 }
 
-// The editor panel (v2, D-05): selection fields with up/down buttons, Remove, Method, Calculate, stale hint.
+// The editor panel (v2 D-05, v2.1): tab name, Add-charge section, the selected charge's fields with arrow
+// steppers, Remove, Method, Calculate, stale hint.
 void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   ImGui::BeginChild("##editor", ImVec2(kEditorPanelWidth * env.k, 0.f), ImGuiChildFlags_None);
   const bool canEdit = t.session == nullptr;
   ImGui::TextUnformatted("Charge editor");
   ImGui::Separator();
   ImGui::BeginDisabled(!canEdit);
+
+  // TAB-01: the name field renames the active tab live; the buffer re-syncs when the active tab changes.
+  if (ui.tabNameBufSerial != t.serial) {
+    std::snprintf(ui.tabNameBuf, sizeof(ui.tabNameBuf), "%s", t.title.c_str());
+    ui.tabNameBufSerial = t.serial;
+  }
+  ImGui::SetNextItemWidth(-FLT_MIN);
+  if (ImGui::InputText("##tabname", ui.tabNameBuf, sizeof(ui.tabNameBuf))) {
+    const std::string name = efapp::ini::trim(std::string(ui.tabNameBuf));
+    if (!name.empty()) t.title = name;  // an empty name is ignored (TAB-01)
+  }
+
+  // EDIT-06: add a charge with an explicit value and position, without the canvas.
+  if (ImGui::CollapsingHeader("Add charge")) {
+    ImGui::InputInt("Value##add", &ui.addValue, 0, 0);
+    ImGui::InputDouble("X##add", &ui.addX, 0.0, 0.0, "%.3f");
+    ImGui::InputDouble("Y##add", &ui.addY, 0.0, 0.0, "%.3f");
+    if (ImGui::Button("Add charge", ImVec2(-FLT_MIN, 0.f))) efapp::editor::addCharge(t, ef::Vec2{ui.addX, ui.addY}, ui.addValue);
+  }
 
   const bool have = t.selected >= 0 && static_cast<std::size_t>(t.selected) < t.field.charges.size();
   if (!have) {
@@ -523,9 +570,9 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2 * (22.f + 8.f * env.k));
     if (ImGui::InputInt("##value", &value, 0, 0)) efapp::editor::stepValue(t, value - c.charge);  // realtime per keystroke
     ImGui::SameLine(0.f, 8.f * env.k);
-    if (stepButton("##value-")) efapp::editor::stepValue(t, -1);
+    if (stepArrowButton("##value-", 3)) efapp::editor::stepValue(t, -1);
     ImGui::SameLine(0.f, 4.f * env.k);
-    if (stepButton("##value+")) efapp::editor::stepValue(t, +1);
+    if (stepArrowButton("##value+", 1)) efapp::editor::stepValue(t, +1);
     ImGui::SameLine(0.f, 8.f * env.k);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Value");
@@ -534,9 +581,9 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2 * (22.f + 8.f * env.k));
     if (ImGui::InputDouble("##x", &x, 0.0, 0.0, "%.3f")) efapp::editor::moveCharge(t, at, ef::Vec2{x, c.position.Y});
     ImGui::SameLine(0.f, 8.f * env.k);
-    if (stepButton("##x-")) efapp::editor::stepSelected(t, ef::Vec2{-0.1, 0});
+    if (stepArrowButton("##x-", 0)) efapp::editor::stepSelected(t, ef::Vec2{-0.1, 0});
     ImGui::SameLine(0.f, 4.f * env.k);
-    if (stepButton("##x+")) efapp::editor::stepSelected(t, ef::Vec2{0.1, 0});
+    if (stepArrowButton("##x+", 2)) efapp::editor::stepSelected(t, ef::Vec2{0.1, 0});
     ImGui::SameLine(0.f, 8.f * env.k);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("X");
@@ -545,9 +592,9 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2 * (22.f + 8.f * env.k));
     if (ImGui::InputDouble("##y", &y, 0.0, 0.0, "%.3f")) efapp::editor::moveCharge(t, at, ef::Vec2{c.position.X, y});
     ImGui::SameLine(0.f, 8.f * env.k);
-    if (stepButton("##y-")) efapp::editor::stepSelected(t, ef::Vec2{0, -0.1});
+    if (stepArrowButton("##y-", 3)) efapp::editor::stepSelected(t, ef::Vec2{0, -0.1});
     ImGui::SameLine(0.f, 4.f * env.k);
-    if (stepButton("##y+")) efapp::editor::stepSelected(t, ef::Vec2{0, 0.1});
+    if (stepArrowButton("##y+", 1)) efapp::editor::stepSelected(t, ef::Vec2{0, 0.1});
     ImGui::SameLine(0.f, 8.f * env.k);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Y");
@@ -683,6 +730,7 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
     }
     if (ImGui::BeginMenu("Help")) {
       if (ImGui::MenuItem("About Electric Field...")) ui.openAbout = true;
+      if (ImGui::MenuItem("Open Configuration Folder")) ui.openConfigFolder = true;
       ImGui::EndMenu();
     }
     ImGui::EndMenuBar();

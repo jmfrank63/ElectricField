@@ -7,6 +7,7 @@
 #include <memory>
 #include <stdexcept>
 
+#include "app/session_file.hpp"
 #include "app/ui_logic.hpp"
 #include "ef/presets.hpp"
 #include "ef/svg.hpp"
@@ -104,16 +105,27 @@ bool App::init(const AppOptions& opt, std::string& step, std::string& message) {
   env_.aboutIcon = aboutIcon_;
   env_.semver = EF_VERSION;
   env_.gitHash = EF_GIT_HASH;
-  // User options (Phase 4, D-03) and user configurations (v2 CFG-01) live in the per-user config directory.
-  // Headless modes skip both load and save so CI runs never depend on, or overwrite, user files.
+  // User options (Phase 4, D-03), user configurations (v2 CFG-01) and the open-tab session (v2.1 SES-01)
+  // live in the per-user config directory. Headless modes skip both load and save so CI runs never depend
+  // on, or overwrite, user files.
+  bool restoredTabs = false;
   if (!opt_.headless()) {
     if (char* pref = SDL_GetPrefPath("ElectricField", "ElectricField")) {
       const std::filesystem::path dir = std::filesystem::u8path(pref);  // SDL hands out UTF-8; u8path keeps non-ASCII intact
       SDL_free(pref);
+      configDir_ = dir;
       optionsPath_ = dir / "options.ini";
       options_ = efapp::loadOptions(optionsPath_);
       configsPath_ = dir / "configurations.ini";
       userConfigs_ = efapp::loadConfigs(configsPath_);
+      sessionPath_ = dir / "session.ini";
+  // SES-01: restore the open tabs (exact titles, charges, per-tab method). Unknown method names fall
+  // back to the current default.
+      for (const efapp::SavedTab& s : efapp::loadSession(sessionPath_)) {
+        ef::ComputeParams params = options_.compute;
+        if (const std::optional<ef::Method> m = ef::methodFromName(s.method)) params.method = *m;
+        ws_.openRestored(s.title, s.preset, params, s.charges);
+      }
     }
   }
   env_.options = &options_;
@@ -205,6 +217,15 @@ void App::frame() {
       if (!efapp::saveConfigs(configsPath_, userConfigs_, err)) std::fprintf(stderr, "configurations: %s\n", err.c_str());
     }
   }
+  if (ui_.openConfigFolder) {  // v2.1 SES-03
+    ui_.openConfigFolder = false;
+    if (!configDir_.empty()) {
+      std::string url = "file:///" + configDir_.generic_u8string();
+      for (std::size_t sp = url.find(' '); sp != std::string::npos; sp = url.find(' '))  // spaces must be percent-encoded
+        url.replace(sp, 1, "%20");
+      if (!SDL_OpenURL(url.c_str())) SDL_SetClipboardText(configDir_.u8string().c_str());
+    }
+  }
   ImGui::Render();
   if (ui_.wantedTitle != lastTitle_) {
     SDL_SetWindowTitle(window_, ui_.wantedTitle.c_str());
@@ -257,9 +278,24 @@ bool App::iterate() {
 }
 
 int App::runInteractive() {
-  ui_.openChooser = true;  // D-03: the preset chooser is shown at startup
+  ui_.openChooser = ws_.tabs().empty();  // D-03: the chooser at startup - unless the session restored tabs (v2.1)
   pacer_.notifyActivity(efapp::FramePacer::kModalFadeFrames);
   while (iterate()) {
+  }
+  // SES-01: persist the open tabs (charges + per-tab method) for the next start.
+  if (!sessionPath_.empty()) {
+    std::vector<efapp::SavedTab> saved;
+    for (const auto& tp : ws_.tabs()) {
+      efapp::SavedTab s;
+      s.title = tp->title;
+      s.preset = tp->preset;
+      s.method = std::string(ef::info(tp->params.method).name);
+      s.charges.reserve(tp->field.charges.size());
+      for (const ef::Charge& c : tp->field.charges) s.charges.push_back(ef::PresetCharge{c.charge, c.position.X, c.position.Y});
+      saved.push_back(std::move(s));
+    }
+    std::string err;
+    if (!efapp::saveSession(sessionPath_, saved, err)) std::fprintf(stderr, "session: %s\n", err.c_str());
   }
   return 0;
 }
@@ -526,6 +562,9 @@ bool App::smokeExtras(std::string& report) {
   if (!pumpUntilDone(es, 60000)) return fail("editor: calculate did not finish");
   if (ws_.find(es)->state != efapp::TabState::Done || ws_.find(es)->scene.electric.empty() || ws_.find(es)->stale)
     return fail("editor: calculate did not produce fresh lines");
+  ws_.rename(es, "Renamed");
+  frames(2);
+  if (ws_.find(es)->title != "Renamed") return fail("editor: rename did not set the title");
   ui_.closeSerial = es;
   frames(2);
 

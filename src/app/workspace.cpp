@@ -2,10 +2,12 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <exception>
 #include <stdexcept>
 #include <utility>
 
+#include "app/ui_logic.hpp"
 #include "ef/seeds.hpp"
 
 namespace efapp {
@@ -97,6 +99,42 @@ bool Workspace::calculate(const unsigned serial) {
     t->error = "unknown error while starting the computation";
   }
   return true;
+}
+
+bool Workspace::rename(const unsigned serial, const std::string& name) {
+  Tab* t = find(serial);
+  const std::string trimmed = trim(name);
+  if (!t || trimmed.empty()) return false;  // TAB-01: an empty name is refused
+  t->title = trimmed;
+  return true;
+}
+
+unsigned Workspace::openRestored(const std::string& title, const std::size_t presetIndex, const ef::ComputeParams& params,
+                                 const std::vector<ef::PresetCharge>& charges) {
+  ef::ChargeSystem field;
+  field.charges.reserve(charges.size());
+  for (const ef::PresetCharge& c : charges) field.charges.push_back(ef::Charge{c.charge, ef::Vec2{c.x, c.y}});
+  const unsigned serial = spawn(presetIndex, 0, trim(title), std::move(field));
+  Tab* t = find(serial);
+  t->params = params;
+  t->selected = -1;
+  // Bump the matching counter past the restored number so a later open never duplicates this title (SES-01).
+  const std::size_t sp = t->title.rfind(' ');
+  if (sp != std::string::npos && sp + 1 < t->title.size()) {
+    bool digits = true;
+    for (std::size_t i = sp + 1; i < t->title.size(); ++i)
+      digits = std::isdigit(static_cast<unsigned char>(t->title[i])) != 0 && digits;
+    if (digits) {
+      const int n = std::atoi(t->title.c_str() + sp + 1);
+      if (n > 0) {
+        if (presetIndex != kNoPreset && presetIndex < ef::kPresetCount)
+          counters_[presetIndex] = std::max(counters_[presetIndex], static_cast<unsigned>(n));
+        else
+          userCounters_[baseTitle(t->title)] = std::max(userCounters_[baseTitle(t->title)], static_cast<unsigned>(n));
+      }
+    }
+  }
+  return serial;
 }
 
 bool Workspace::close(unsigned serial) {

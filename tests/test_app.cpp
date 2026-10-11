@@ -475,3 +475,39 @@ TEST_CASE("openUser computes through the real session path like a preset tab (v2
   REQUIRE(ws.find(s)->state == efapp::TabState::Done);
   CHECK(ws.find(s)->scene.electric.size() == 16);  // dipole charges, default options: the parity count
 }
+
+TEST_CASE("rename: exact trimmed title, empty refused, nothing else changes (v2.1 TAB-01)") {
+  efapp::Workspace ws;
+  const unsigned s = ws.open(0);
+  CHECK_FALSE(ws.rename(s, "  "));  // trims to empty: refused
+  CHECK_FALSE(ws.rename(s, ""));
+  CHECK_FALSE(ws.rename(s + 999, "Nope"));  // unknown serial
+  CHECK(ws.rename(s, "  My Field  "));
+  CHECK(ws.find(s)->title == "My Field");
+  CHECK(ws.find(s)->stale == false);  // renaming is not an edit of the charges
+  CHECK(efapp::windowTitle(ws.find(s)) == "Electric Field \xE2\x80\x94 My Field");
+}
+
+TEST_CASE("openRestored: exact title, restored params, counters never duplicate (v2.1 SES-01)") {
+  efapp::Workspace ws(ef::ComputeParams{}, [](const ef::ChargeSystem&, const ef::ComputeParams&) -> std::unique_ptr<efapp::ISession> {
+    throw std::runtime_error("no compute");
+  });
+  ef::ComputeParams p;
+  p.method = ef::Method::RK4;
+  const unsigned s = ws.openRestored("Dipole 1", 0, p, {{1, -2, 0}, {-1, 2, 0}});
+  const efapp::Tab* t = ws.find(s);
+  REQUIRE(t != nullptr);
+  CHECK(t->title == "Dipole 1");
+  CHECK(t->preset == 0);
+  CHECK(t->params.method == ef::Method::RK4);
+  REQUIRE(t->field.charges.size() == 2);
+  // The counter was bumped past the restored number: the next Dipole open is "Dipole 2", not a duplicate.
+  CHECK(ws.open(0) == s + 1);
+  CHECK(ws.find(ws.tabs().back()->serial)->title == "Dipole 2");
+
+  // A restored user/empty tab bumps the per-name counter too.
+  const unsigned u = ws.openRestored("My Field", efapp::kNoPreset, ef::ComputeParams{}, {{1, 0, 0}});
+  CHECK(ws.find(u)->title == "My Field");
+  CHECK(ws.openUser("My Field", {}) == u + 1);
+  CHECK(ws.find(ws.tabs().back()->serial)->title == "My Field 1");
+}

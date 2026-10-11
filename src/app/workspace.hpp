@@ -70,6 +70,12 @@ class Workspace {
   // Charge editor (v2 CALC-01): restarts a Done/Failed tab from its CURRENT charges and params (the same
   // factory and Failed-tab paths as open()). False for unknown serials and tabs that are still computing.
   bool calculate(unsigned serial);
+  // Renames a tab to the exact trimmed name (v2.1 TAB-01). False for unknown serials and empty names.
+  bool rename(unsigned serial, const std::string& name);
+  // Restores a saved session tab (v2.1 SES-01) with its EXACT title and params. Bumps the matching counter
+  // so later opens never duplicate a restored title.
+  unsigned openRestored(const std::string& title, std::size_t presetIndex, const ef::ComputeParams& params,
+                        const std::vector<ef::PresetCharge>& charges);
   // Options dialog (Phase 4): new tabs open with these params; tabs already open keep the params they were opened with.
   void setDefaults(const ef::ComputeParams& p) { defaults_ = p; }
   // Cancels and destroys the session (RAII join) and removes the tab. False if the serial is unknown.

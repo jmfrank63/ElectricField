@@ -9,49 +9,56 @@ A detailed description of the physics is on the computational physics blog: http
 This is the cross-platform port of the original MFC application: the same charge configurations produce
 the same field lines and equipotentials, but the project now builds and runs on Windows, Linux and macOS
 with nothing but [Zig](https://ziglang.org) and its package manager. The original Windows/MFC version is
-preserved on the `master` branch.
+preserved in history and on the `v1.0` tag.
 
 ## Features
 
 - The 9 preset charge configurations of the original app, each opening in its own tab (they can be open side by side and compute in parallel):
 
-| Preset | Charges (+ / −, position x y) |
+| Preset | Charges (+ / -, position x y) |
 |---|---|
-| Dipole | +1 (−2, 0), −1 (2, 0) |
-| Two Equal Charges | +1 (−2, 0), +1 (2, 0) |
-| Two Unequal Charges Same Sign | +1 (−2, 0), +2 (2, 0) |
-| Two Unequal Charges Different Signs | +2 (−2, 0), −1 (2, 0) |
-| Quadrupole | +1 (−1.5, −1.5), −1 (1.5, −1.5), −1 (−1.5, 1.5), +1 (1.5, 1.5) |
-| Four Charges Same Sign | +1 (−3, 0), +1 (−1, 0), +1 (1, 0), +1 (3, 0) |
-| Two Dipoles Same Direction | +1 (−3, 0), −1 (−1, 0), +1 (1, 0), −1 (3, 0) |
-| Two Dipoles Opposed Direction | +1 (−3, 0), −1 (−1, 0), −1 (1, 0), +1 (3, 0) |
-| Parallel Dipoles | +1 (−1.5, −1.5), −1 (1.5, −1.5), +1 (−1.5, 1.5), −1 (1.5, 1.5) |
+| Dipole | +1 (-2, 0), -1 (2, 0) |
+| Two Equal Charges | +1 (-2, 0), +1 (2, 0) |
+| Two Unequal Charges Same Sign | +1 (-2, 0), +2 (2, 0) |
+| Two Unequal Charges Different Signs | +2 (-2, 0), -1 (2, 0) |
+| Quadrupole | +1 (-1.5, -1.5), -1 (1.5, -1.5), -1 (-1.5, 1.5), +1 (1.5, 1.5) |
+| Four Charges Same Sign | +1 (-3, 0), +1 (-1, 0), +1 (1, 0), +1 (3, 0) |
+| Two Dipoles Same Direction | +1 (-3, 0), -1 (-1, 0), +1 (1, 0), -1 (3, 0) |
+| Two Dipoles Opposed Direction | +1 (-3, 0), -1 (-1, 0), -1 (1, 0), +1 (3, 0) |
+| Parallel Dipoles | +1 (-1.5, -1.5), -1 (1.5, -1.5), +1 (-1.5, 1.5), -1 (1.5, 1.5) |
 
 - 11 integration methods: Euler, Midpoint, Ralston, Heun, RK4, RK3/8 and the adaptive Heun-Euler,
   Bogacki-Shampine, Cash-Karp, Fehlberg and Dormand-Prince methods.
 - Field lines per unit charge, equipotentials with an adjustable potential interval, a thread count and
-  all draw colours/thicknesses in **View ▸ Options…**; the settings persist between runs and draw changes
-  repaint the open tabs immediately.
-- **Your own charge configurations**: arrange charges in the tab and store them with **File ▸ Save As…
-  (Ctrl+S)** in `configurations.ini` in the per-user config directory; the New chooser lists them next to
-  the built-ins, plus an "Empty Configuration" starting point.
+  all draw colours/thicknesses in **View > Options...**; the settings persist between runs and draw
+  changes repaint the open tabs immediately.
+- **Collections**: organise your configurations into named collections (one file per collection under
+  `Collections\` in the per-user config directory). The **Original** collection holds the built-in
+  arrangements; **File > New Collection...** starts an empty one; the menu-bar switcher changes between
+  them; **File > Save As... (Ctrl+S)** stores the current tab's charges into the current collection.
 - **Charge editor**: click a charge to select it, drag it with the mouse, nudge it with the arrow keys
-  (Shift = bigger steps) or type exact numbers into the editor panel's value/x/y fields with their
-  arrow buttons (press and hold to repeat). The **Add charge** section creates a charge with any value
-  and position, double-click empty canvas adds one, Delete removes the selected one. Rename the tab by
-  typing over its name at the top of the panel. Charges move in realtime; the drawn lines keep showing
-  the previous calculation (the tab is marked *edited*) until you press **Calculate (F5)** — with a
-  per-tab integration method selector in the panel.
-- **Your workspace comes back**: the open tabs — including each tab's calculation method and any charge
-  edits — are stored in `session.ini` when you quit and restored on the next start. **Help ▸ Open
-  Configuration Folder** shows where `options.ini`, `configurations.ini` and `session.ini` live.
-- Export of the current configuration view to **PNG** and **SVG** (File ▸ Export), matching what is on screen.
+  (Shift = bigger steps) or type exact numbers into the editor panel's value/x/y fields with their arrow
+  buttons (press and hold to repeat; **+/-** flips the sign). The **New charge** section creates a charge
+  with any value and position, double-click empty canvas adds one, Delete removes the selected one.
+  Rename the tab by typing over its name at the top of the panel. Charges move in realtime; the drawn
+  lines keep showing the previous calculation (the tab is marked *edited*) until you press
+  **Calculate (F5)** - with a per-tab integration method selector in the panel and an optional
+  **Continuous calculation** checkbox that recomputes automatically after every edit.
+- **Zoom and pan**: the mouse wheel zooms at the cursor, the panel's Zoom - / Zoom + / Reset view buttons
+  are always at hand, right-drag pans, and the arrow keys pan whenever no charge is selected.
+- **Your workspace comes back**: the open tabs - including each tab's calculation method, continuous
+  calculation and any charge edits - are stored in `session.ini` when you quit and restored on the next
+  start. If tabs have changes that are not saved to a collection, a prompt asks before quitting or
+  switching collections. **Help > Open Configuration Folder** shows where `options.ini`,
+  `configurations.ini`, `session.ini` and `Collections\` live.
+- Export of the current configuration view to **PNG** and **SVG** (File > Export), matching what is on
+  screen.
 - Tabs can be closed while they compute; quitting mid-computation is safe. The computation is cancelled
   within a fraction of a second.
 
 ## Building
 
-You need [Zig 0.17](https://ziglang.org/download/) — no other toolchain, no Visual Studio. SDL3 and Dear
+You need [Zig 0.17](https://ziglang.org/download/) - no other toolchain, no Visual Studio. SDL3 and Dear
 ImGui are fetched automatically on the first build.
 
 ```sh
@@ -81,31 +88,37 @@ equipotentials per preset, and the GUI's export is checked to be byte-identical 
 `docs/baseline/mfc/` images were rendered by the original MFC application and are the visual reference
 for the port.
 
-## Options and configuration file
+## Options and configuration files
 
-Options live in `options.ini` in the per-user configuration directory:
+Everything lives in the per-user config directory (`SDL_GetPrefPath("ElectricField", "ElectricField")`):
 
-- Windows: `%APPDATA%\ElectricField\ElectricField\options.ini`
-- Linux: `$XDG_CONFIG_HOME/ElectricField/ElectricField/options.ini` (usually `~/.config/...`)
-- macOS: `~/Library/Application Support/ElectricField/ElectricField/options.ini`
+- Windows: `%APPDATA%\ElectricField\ElectricField\`
+- Linux: `$XDG_CONFIG_HOME/ElectricField/ElectricField/` (usually `~/.config/...`)
+- macOS: `~/Library/Application Support/ElectricField/ElectricField/`
 
-Colours are stored as `#RRGGBB` and the integration method by name (`euler`, `midpoint`, `ralston`,
-`heun`, `rk4`, `rk3per8`, `adaptive-heun-euler`, `adaptive-bogacki-shampine`, `adaptive-cash-karp`,
-`adaptive-fehlberg`, `adaptive-dormand-prince`). A missing or invalid file falls back to the defaults
-per setting.
+- `options.ini` - computation and draw options; colours as `#RRGGBB`, the integration method by name
+  (`euler`, `midpoint`, `ralston`, `heun`, `rk4`, `rk3per8`, `adaptive-heun-euler`,
+  `adaptive-bogacki-shampine`, `adaptive-cash-karp`, `adaptive-fehlberg`, `adaptive-dormand-prince`).
+  A missing or invalid file falls back to the defaults per setting.
+- `configurations.ini` - the pre-collections user configurations (kept for reference; imported into the
+  Original collection on first run of v2.2 or later).
+- `Collections\<Name>.ini` - one file per collection, sections `[configuration "Name"]` with
+  `charge = value, x, y` lines.
+- `session.ini` - the open tabs of the current collection (title, preset source, per-tab method,
+  continuous-calculation flag, charges), restored on the next start.
 
 ## Project layout
 
-- `src/core/ef/` — the physics and scene core (std-only): field/potential, Runge-Kutta integrators,
+- `src/core/ef/` - the physics and scene core (std-only): field/potential, Runge-Kutta integrators,
   seeds and tracers, compute sessions, scene building, SVG backend.
-- `src/app/` — GUI-free application logic: the tab model over compute sessions, pure UI decisions, the
-  options model with ini persistence.
-- `src/render/` — Dear ImGui painter and the offscreen PNG export shared by the GUI and `ef-cli`.
-- `src/gui/` — the SDL3 + Dear ImGui application (window, menus, tabs, canvas, dialogs).
-- `src/cli/` — `ef-cli`, the headless renderer and CI parity oracle.
-- `tests/`, `tests_gui/` — doctest suites (the GUI-free ones run without any display or GUI dependency).
-- `tools/parity/` — the committed line-count expectations.
-- `assets/` — application icons.
+- `src/app/` - GUI-free application logic: the tab model over compute sessions, pure UI decisions, the
+  options/configuration/session models, the editor rules.
+- `src/render/` - Dear ImGui painter and the offscreen PNG export shared by the GUI and `ef-cli`.
+- `src/gui/` - the SDL3 + Dear ImGui application (window, menus, tabs, canvas, dialogs).
+- `src/cli/` - `ef-cli`, the headless renderer and CI parity oracle.
+- `tests/`, `tests_gui/` - doctest suites (the GUI-free ones run without any display or GUI dependency).
+- `tools/parity/` - the committed line-count expectations.
+- `assets/` - application icons.
 
 ## CI
 
@@ -119,4 +132,4 @@ old MFC/Win32/GDI code.
 - Original application and physics: Adrian Roman (https://compphys.go.ro/electric-field-lines/)
 - Cross-platform port: Johannes Maria Frank (https://github.com/jmfrank63/ElectricField)
 
-Licensed under the GNU General Public License v3.0 — see [LICENSE](LICENSE).
+Licensed under the GNU General Public License v3.0 - see [LICENSE](LICENSE).

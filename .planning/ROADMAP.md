@@ -1,23 +1,23 @@
-# Roadmap — Milestone v2.1: Editor & Session Polish
+# Roadmap — Milestone v2.2: Collections
 
 **Created:** 2026-10-11
 **Status:** Ready for planning
-**Milestone goal:** As a user, I want an explicit add-charge button (with value and position), arrow glyphs on the stepper buttons, tab renaming, and my open tabs — including each tab's calculation method — persisted in a session file that restores on startup.
+**Milestone goal:** As a user, I want to organise my configurations into collections: the Original collection holds everything that exists today, a new collection starts empty so I can build it up, and a Calculate All opens every configuration of the current collection in tabs.
 
 ## Phases
 
-### Phase 1: Editor & Session Polish
-**Goal:** As a user, I want the editor round-trip completed: add charges without the mouse, readable stepper buttons, renamed tabs, and my workspace back after a restart.
+### Phase 1: Collections
+**Goal:** As a user, I want to group my configurations into collections stored as one file per collection, switch between them, and open a whole collection at once.
 **Mode:** mvp
 **Depends on**: —
-**Requirements**: EDIT-06, EDIT-07, TAB-01, SES-01, SES-02, SES-03
+**Requirements**: COL-01, COL-02, COL-03, COL-04, EDIT-08, EDIT-09
 **Success Criteria** (what must be TRUE):
 
-1. The editor panel has an Add-charge section (value, x, y inputs + Add button) that appends and selects the new charge without the canvas
-2. The six stepper buttons render as arrows (left/right for X, up/down for Y and Value)
-3. The active tab can be renamed from the editor panel; the window title follows; an empty name is refused
-4. Open tabs (title, source, charges) persist in `session.ini` in the user config directory and restore on startup; each tab's calculation method is part of that file; counters never produce duplicate titles after a restore
-5. Help > Open Configuration Folder reveals the folder holding options.ini / configurations.ini / session.ini; CI stays green on all three OSes plus TSan; smoke covers rename and the session round-trip
+1. Collections live as one human-readable file per collection under `Collections\` in the user config directory; on first run the Original collection is seeded with the 9 built-in presets plus any legacy user configurations from configurations.ini (which is then left untouched)
+2. The menu bar shows the current collection with a switcher; File > New Collection… creates and switches to an empty collection (no tabs, no configurations); switching saves the current session and closes its tabs
+3. Calculate All (menu-bar button and File menu) closes the open tabs and opens every configuration of the current collection in tabs, each computing as usual
+4. The session file records the current collection and restores it (with its tabs) on startup; Save As stores into the current collection file; CI stays green on all three OSes plus TSan; smoke stays green
+5. The New-charge entry is always visible in the panel; a switch-sign button flips the selected charge's value and marks the tab stale
 
 **Plans**: TBD
 
@@ -25,9 +25,9 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Editor & Session Polish | 2/2 | Complete | 2026-10-11 |
+| 1. Collections | 2/2 | Complete | 2026-10-11 |
 
 ## Notes
 
-- Owner instruction for this milestone: GSD auto-mode, recommended answers everywhere (the UAT gate is auto-accepted and recorded as such).
-- Session persistence saves on graceful quit and restores at startup (interactive modes only; headless never reads or writes it).
+- Owner instruction: GSD auto-mode, always take the recommended answer (UAT gate auto-accepted and recorded).
+- Design choices (recommended): one .ini file per collection under `Collections\` (not a folder per collection), reusing the configurations grammar; per-configuration method stays a per-TAB property (session), not a collection property; File > New keeps the 9 built-ins as quick access while the chooser shows the current collection.

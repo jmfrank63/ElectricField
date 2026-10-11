@@ -192,3 +192,27 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SES-01 | Pending |
 | SES-02 | Pending |
 | SES-03 | Pending |
+
+---
+
+# Milestone v2.2 Requirements (added 2026-10-11)
+
+## Collections
+
+- [ ] **COL-01**: Collections live as one human-readable file per collection under Collections\ in the user config directory; on first run the Original collection is seeded with the 9 built-in presets plus any legacy user configurations from configurations.ini (left untouched)
+- [ ] **COL-02**: The menu bar shows the current collection with a switcher; File > New Collection creates and switches to an empty collection; switching saves the current session and closes its tabs
+- [ ] **COL-03**: Calculate All closes the open tabs and opens every configuration of the current collection in tabs, each computing as usual
+- [ ] **COL-04**: The session file records the current collection and restores it (with its tabs) on startup; Save As stores into the current collection file
+
+## Editor refinement
+
+- [ ] **EDIT-08**: The New-charge entry (value, x, y and Add) is always visible in the editor panel, not hidden behind a collapsed header
+- [ ] **EDIT-09**: A switch-sign button flips the selected charge's value between positive and negative (and marks the tab stale)
+
+## Traceability (v2.2)
+
+| Requirement | Status |
+|-------------|--------|
+| COL-01..04 | Complete |
+| EDIT-08 | Complete |
+| EDIT-09 | Complete |

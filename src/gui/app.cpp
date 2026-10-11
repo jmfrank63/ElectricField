@@ -995,7 +995,8 @@ void App::enterCollection(const std::string& name, const bool restoreTabs) {
     for (const efapp::SavedTab& s : ses.tabs) {
       ef::ComputeParams params = options_.compute;
       if (const std::optional<ef::Method> m = ef::methodFromName(s.method)) params.method = *m;
-      ws_.openRestored(s.title, s.preset, params, s.charges, s.autoRecalc, s.grid);
+      const unsigned serial = ws_.openRestored(s.title, s.preset, params, s.charges, s.autoRecalc, s.grid);
+      ui_.activeSerial = ui_.selectSerial = serial;  // the newest restored tab is active (TAB/commands resolve "active")
     }
     pacer_.notifyActivity();
   }

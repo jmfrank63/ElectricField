@@ -1,5 +1,20 @@
 # Milestones
 
+## v2.5 Collections Flow, Grid/Size Options & PDF Export (Shipped: 2026-10-12)
+
+**Phases completed:** 1 phase, 1 plan
+
+**Key accomplishments:**
+
+- Collections are document files: File > Open Collection... (Ctrl+O) opens any collection file through the native file picker, New Collection... / Save Collection As... save to a chosen path, Close Collection leaves nothing open; the app starts empty and auto-opens nothing; sessions stay keyed by file stem and restore when the file is opened again.
+- Configuration actions grouped in the File menu (New/Open/Save/Save As Configuration) and greyed out while no collection is open; Save Configuration writes the active tab's charges back into the configuration it came from (`config.save`, per-tab source tracking).
+- Grid style: light-green lines; an intersections-only mode (orange lattice dots, Cartesian and polar) as a checkbox above the Cartesian/Polar radios, with `grid.set intersections on|off` and session persistence (8-field grid CSV, backward-compatible).
+- Charge size (SIZE-01): the drawn radius is a real option, 2-120 px, in View > Options and `options.set charge-size`, persisted in options.ini; physics unchanged.
+- PDF export (EXP-03): a font-free vector PDF backend of the core Painter; Export Configuration gains PDF (canvas view), Export Collection... renders every configuration into one multi-page PDF with bookmarks; `export.configuration` / `export.collection` commands; `--export` CI mode writes dipole.pdf.
+- Verified: 119 + 4 unit tests, smoke, 5 script tests (rewritten for the empty start with `app.expect-no` / `app.expect-error`), path-form open probes, and CI green on windows-x64, linux-x64, macos-arm64 and tsan-linux.
+
+---
+
 ## v2.4 Automation API and UX Repairs (Shipped: 2026-10-11)
 
 **Phases completed:** 1 phase, 2 plans
@@ -57,6 +72,7 @@
 ---
 
 ## v1.0 v1.0 (Shipped: 2026-10-11)
+
 **Phases completed:** 4 phases, 14 plans
 
 **Key accomplishments:**
@@ -64,4 +80,3 @@
 - The MFC application fully replaced by the cross-platform port: Zig 0.17 build (SDL3 + Dear ImGui), identical physics and visuals, options with persistence, PNG/SVG export, headless CLI + parity oracle, CI on three OSes plus ThreadSanitizer.
 
 ---
-

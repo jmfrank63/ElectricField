@@ -1,0 +1,37 @@
+# 10-editor: the editor core scenarios through the command API (v2.4), CFG-04 save configuration (v2.5)
+collection.open Original
+tab.new-empty
+app.wait-done
+app.expect state=done
+charge.move 0 1 0
+app.expect stale=1
+editor.undo
+app.expect charges=1,0,0
+editor.redo
+app.expect charges=1,1,0
+tab.esc
+app.expect stale=0
+app.expect charges=1,0,0
+charge.add 2 3 0
+app.expect charges=1,0,0;2,3,0
+charge.sign 1
+app.expect -2,3,0
+charge.value 1 -7
+app.expect -7,3,0
+charge.remove 1
+app.expect charges=1,0,0
+# CFG-04: Save Configuration -> the tab's source configuration (in place), then it reopens with the save
+config.save-as MyEditor
+app.expect |MyEditor
+charge.value 0 5
+app.expect charges=5,0,0
+app.expect dirty=1
+config.save
+app.expect dirty=0
+config.open MyEditor
+app.expect charges=5,0,0
+app.wait-done
+# EXP-03: the PDF exports through the API with deterministic fitted views
+export.configuration myeditor.pdf
+export.collection collection.pdf
+app.quit force

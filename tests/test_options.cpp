@@ -109,6 +109,7 @@ TEST_CASE("serialize -> parse round-trips every field (OPT-04)") {
   o.draw.potentialLine = ef::Color{10, 11, 12, 255};
   o.draw.electricThickness = 13.f;
   o.draw.potentialThickness = 14.f;
+  o.draw.chargeRadiusPx = 60.f;  // v2.5 SIZE-01
 
   const efapp::ParsedOptions r = efapp::parse(efapp::serialize(o));
   CHECK(r.rejectedKeys.empty());
@@ -131,6 +132,24 @@ TEST_CASE("serialize -> parse round-trips every field (OPT-04)") {
   CHECK(r.value.draw.potentialLine.b == 12);
   CHECK(r.value.draw.electricThickness == 13.f);
   CHECK(r.value.draw.potentialThickness == 14.f);
+  CHECK(r.value.draw.chargeRadiusPx == 60.f);
+}
+
+TEST_CASE("charge size (v2.5 SIZE-01): dots to very large, validated 2-120, persistable") {
+  efapp::Options o = defaults();
+  o.draw.chargeRadiusPx = 2.f;   // the dot end
+  CHECK(efapp::validate(o).empty());
+  o.draw.chargeRadiusPx = 120.f;  // very large
+  CHECK(efapp::validate(o).empty());
+  o.draw.chargeRadiusPx = 1.f;
+  CHECK_FALSE(efapp::validate(o).empty());
+  o.draw.chargeRadiusPx = 121.f;
+  CHECK_FALSE(efapp::validate(o).empty());
+  o.draw.chargeRadiusPx = 45.f;
+  CHECK(efapp::validate(o).empty());
+  CHECK(efapp::parse("chargeSize = 45\n").value.draw.chargeRadiusPx == 45.f);
+  CHECK(efapp::parse("chargeSize = 121\n").rejectedKeys.size() == 1);  // out of range -> default (25)
+  CHECK(efapp::parse("chargeSize = 121\n").value.draw.chargeRadiusPx == 25.f);
 }
 
 TEST_CASE("comments, blank lines and unknown keys are tolerated") {

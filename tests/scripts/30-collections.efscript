@@ -1,0 +1,40 @@
+# 30-collections: a collection is a document file (v2.5 OPEN-01): nothing is open at startup,
+# open/name or path, save/save-as/close, configuration save and remove (v2.4 COL-06..09, CFG-04)
+app.expect tabs=0
+app.expect configs=
+app.expect-no collection=Original
+app.expect-error "no configuration named" config.open Dipole
+collection.open Original
+app.expect collection=Original
+app.expect configs=Dipole|Two Equal Charges|Two Unequal Charges Same Sign|Two Unequal Charges Different Signs|Quadrupole|Four Charges Same Sign|Two Dipoles Same Direction|Two Dipoles Opposed Direction|Parallel Dipoles
+app.expect tabs=0
+config.open Dipole
+app.wait-done
+app.expect "title=Dipole 1"
+charge.move 0 0.5 0
+app.expect dirty=1
+collection.save
+app.expect dirty=0
+collection.new Test
+app.expect collection=Test
+app.expect tabs=0
+tab.new-empty
+app.wait-done
+config.save-as "My Field"
+app.expect configs=My Field
+collection.close
+app.expect collection=
+app.expect configs=
+app.expect tabs=0
+collection.open Test
+app.expect collection=Test
+app.expect configs=My Field
+app.expect tabs=1
+collection.open Original
+app.expect collection=Original
+app.expect "title=Dipole 1"
+app.expect charges=1,0.5,0
+config.remove Dipole
+app.expect tabs=1
+app.expect configs=
+app.quit force

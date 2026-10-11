@@ -1,0 +1,25 @@
+# 20-grid: snapping, visibility flags, polar, intersections-only, view controls (v2.3 GRID / v2.5 GRID-05/06)
+collection.open Original
+tab.new-empty
+app.wait-done
+grid.set active on
+grid.set spacing 1
+charge.move 0 0.6 0.4
+app.expect charges=1,1,0
+grid.set visible on
+grid.set polar on
+grid.set origin 1 0
+grid.set angle 30
+app.expect grid=1,1,1,0,1,0,1,30
+view.zoom 2
+app.expect zoom=2
+view.pan 50 0
+app.expect centre=-0.25,0
+view.reset
+app.expect centre=0,0
+# v2.5 GRID-06: the intersections-only mode is a switch of its own
+grid.set intersections on
+app.expect grid=1,1,1,1,1,0,1,30
+grid.set intersections off
+app.expect grid=1,1,1,0,1,0,1,30
+app.quit force

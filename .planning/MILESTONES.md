@@ -1,24 +1,82 @@
 # Milestones
 
-## v1.0 v1.0 (Shipped: 2026-10-11)
+## v2.5 Collections Flow, Grid/Size Options & PDF Export (Shipped: 2026-10-12)
 
-**Phases completed:** 4 phases, 14 plans, 26 tasks
+**Phases completed:** 1 phase, 1 plan
 
 **Key accomplishments:**
 
-- Zig 0.17 build graph with hash-pinned SDL3/ImGui/doctest, a std-only efcore with analytic doctests, a headless-smokeable SDL3 + ImGui hello window, MSVC artifacts untracked, and a 3-OS CI workflow definition (not pushed).
-- Nine 1024x768 reference PNGs of the unmodified MFC app (Release|x64, v145, default options) plus a re-runnable PowerShell capture script that drives the app via Win32 messages and PrintWindow, with HKCU options backup/restore.
-- Seed planning and single-line tracing ported from the MFC source so all 11 Runge-Kutta methods produce a dipole field line, plus tolerance-based oracles for vector math, convergence order, adaptive step control and a regex cross-check of the 9 presets against ElectricField/ConfigDocs.cpp.
-- Phase 1 go/no-go gate passed: the pushed head d17dd2f built, tested (Debug+UBSan and ReleaseFast core suites) and ran the headless SDL3+ImGui smoke start-up green on windows-x64, linux-x64 and macos-arm64 on the first CI run, with Zig 0.17.0 installed by mlugg/setup-zig on an empty cache.
-- Cancellable N-thread `ef::ComputeSession` (condition-variable pool, JobKey-ordered deterministic results, verbatim MFC equipotential de-dup, guarded Bezier fit) with a 38-case doctest suite proving 1-vs-7-thread equality and cancel/destroy latency of under 8 ms for all 99 preset x method combinations.
-- ThreadSanitizer build option with lazy SDL3/ImGui dependencies, a fail-not-skip MFC preset oracle, and regression tests (self-copy proven fail-first) pinning every CORE-07 defect and the de-dup boundary, with the whole 52-case suite race-free on Linux.
-- ef-cli renders all 9 presets to SVG and to PNG (ImGui ImDrawList over SDL's offscreen software renderer, no display) through one shared scene/Painter layer, with committed expected counts proven by a tolerance-boundary fail-first test and identical on Windows and Linux.
-- CI renders all 9 presets headlessly on windows, ubuntu and macos-arm64 against the committed count oracle, runs the engine under ThreadSanitizer on Linux, and is green on all four jobs for both pushed heads.
-- GUI-free tab model (Workspace over an ISession seam on ef::ComputeSession), pure UI logic with FramePacer, and the ImGui-context-safe offscreen render path copied from the working prototype, wired through build.zig and covered by 78 core/app doctests plus 4 headless render tests, TSan-clean on Linux.
-- The prototype's SDL3 + Dear ImGui shell (menus, preset chooser, reorderable tabs, busy overlay, About box, HiDPI scaling) is now the real ElectricField exe with the MFC icon and GUI subsystem, a make-time git hash in the About box, and a full UI smoke that passes on Windows and Linux.
-- CI now builds the real Dear ImGui + SDL3 GUI on Windows, Linux and macOS arm64, runs the render-context tests and the full scripted UI smoke there (identical canvas, keyboard and quit results on all three), proves the Windows GUI subsystem, uploads headless screenshots of the real UI, and kept the Phase 2 parity and TSan gates green; the research prototype is removed.
-- Complete
-- Complete
-- Complete
+- Collections are document files: File > Open Collection... (Ctrl+O) opens any collection file through the native file picker, New Collection... / Save Collection As... save to a chosen path, Close Collection leaves nothing open; the app starts empty and auto-opens nothing; sessions stay keyed by file stem and restore when the file is opened again.
+- Configuration actions grouped in the File menu (New/Open/Save/Save As Configuration) and greyed out while no collection is open; Save Configuration writes the active tab's charges back into the configuration it came from (`config.save`, per-tab source tracking).
+- Grid style: light-green lines; an intersections-only mode (orange lattice dots, Cartesian and polar) as a checkbox above the Cartesian/Polar radios, with `grid.set intersections on|off` and session persistence (8-field grid CSV, backward-compatible).
+- Charge size (SIZE-01): the drawn radius is a real option, 2-120 px, in View > Options and `options.set charge-size`, persisted in options.ini; physics unchanged.
+- PDF export (EXP-03): a font-free vector PDF backend of the core Painter; Export Configuration gains PDF (canvas view), Export Collection... renders every configuration into one multi-page PDF with bookmarks; `export.configuration` / `export.collection` commands; `--export` CI mode writes dipole.pdf.
+- Verified: 119 + 4 unit tests, smoke, 5 script tests (rewritten for the empty start with `app.expect-no` / `app.expect-error`), path-form open probes, and CI green on windows-x64, linux-x64, macos-arm64 and tsan-linux.
+
+---
+
+## v2.4 Automation API and UX Repairs (Shipped: 2026-10-11)
+
+**Phases completed:** 1 phase, 2 plans
+
+**Key accomplishments:**
+
+- The command API: every menu entry and editor/collection operation callable by text command; a headless script runner (`--script/--user-dir/--out/--lenient`) with the `app.state`/`app.expect` oracle; 5 scenario scripts running in CI on all three OSes; docs/api.md.
+- BUG-01 fixed: the grid became a core render pass inside renderScene (bg -> grid -> lines -> charges), so the canvas background can never overwrite it again.
+- BUG-02 fixed: the leave prompt closes after its answer (the ghost modal that locked the UI on New Collection); smoke regression through the real UI path.
+- Collection-centric File menu: Save Collection (Ctrl+S), Save Collection As..., Close Collection, Save Configuration As...; per-collection Sessions files restore on switch and start.
+- Tab context menu: Close / Rename / Save Configuration As / Calculate; restored tabs establish the active tab (CI-caught, fe96c4f).
+- Verified: 114 unit tests + smoke + script suite green; CI run 38150402997 green on windows-x64, linux-x64, macos-arm64 and tsan-linux.
+
+---
+
+## v2.3 v2.3 (Shipped: 2026-10-11)
+
+**Phases completed:** 1 phase, 2 plans
+
+**Key accomplishments:**
+
+- The window title shows the collection; configurations can be removed from a collection (chooser right-click + confirmation); the File menu shows New Configuration... / New Collection....
+- Continuous calculation fixed (the GUI had re-armed the debounce every frame) and pinned by a smoke regression through the real canvas input path.
+- Esc reverts uncalculated edits to the last calculated state; per-tab Undo/Redo (Ctrl+Z / Ctrl+Y) over charges and method.
+- Snap grid: independently active and visible, Cartesian or polar, definable origin and spacing, persisted per tab in the session; snapping covers drag, double-click add and typed positions.
+- Verified: 113 unit tests + full headless smoke (incl. the continuous-calculation regression), CI green on windows-x64, linux-x64, macos-arm64 and tsan-linux.
+
+---
+## v2.2 v2.2 (Shipped: 2026-10-11)
+
+**Phases completed:** 1 phase, 2 plans
+
+**Key accomplishments:**
+
+- Collections: one human-readable file per collection under `Collections\`; the Original collection seeded from the built-ins + legacy configurations; menu-bar switcher; New Collection...; Calculate All opens every configuration of the collection in tabs.
+- The session records the current collection and restores it with its tabs; Save As stores into the current collection; the unsaved-changes prompt guards quitting and switching.
+- Editor refinements: always-visible New charge section (value + position + Add), "+/-" sign-flip button, double-click-add / single-click-edit contract pinned.
+- Zoom and pan: wheel zoom at the cursor, Zoom - / Zoom + / Reset view buttons, right-drag pan, arrow-key pan when nothing is selected (the core View gained a centre, honoured by every backend including SVG/PNG export).
+- Continuous calculation: a per-tab checkbox that recomputes (debounced 0.35 s) after every canvas change; persisted in the session.
+- Verified: 113 unit tests + full headless smoke (incl. wheel zoom), CI green on windows-x64, linux-x64, macos-arm64 and tsan-linux.
+
+---
+
+## v2.1 v2.1 (Shipped: 2026-10-11)
+
+**Phases completed:** 1 phase, 2 plans
+
+**Key accomplishments:**
+
+- Add-charge section in the editor panel (value, x, y + button) and arrow-glyph stepper buttons with press-and-hold repeat.
+- Tab renaming from the editor panel (window title follows, empty names refused).
+- Session persistence: open tabs - including each tab's calculation method and charge edits - stored in `session.ini` on quit and restored on start, with counter bumps preventing duplicate titles; Help > Open Configuration Folder.
+- Verified: 107 unit tests + full headless smoke, CI green on windows-x64, linux-x64, macos-arm64 and tsan-linux.
+
+---
+
+## v1.0 v1.0 (Shipped: 2026-10-11)
+
+**Phases completed:** 4 phases, 14 plans
+
+**Key accomplishments:**
+
+- The MFC application fully replaced by the cross-platform port: Zig 0.17 build (SDL3 + Dear ImGui), identical physics and visuals, options with persistence, PNG/SVG export, headless CLI + parity oracle, CI on three OSes plus ThreadSanitizer.
 
 ---

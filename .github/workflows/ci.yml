@@ -5,7 +5,7 @@ name: CI
 # Phase 3 adds: render-context tests, the Windows GUI-subsystem check, the full GUI smoke and headless GUI screenshots.
 on:
   push:
-    branches: [feature/cross-platform, master] # IN-04: master too, so a merge is built
+    branches: [feature/cross-platform, feature/v2-charge-editor, master] # IN-04: master too, so a merge is built
   pull_request:
   workflow_dispatch:
 
@@ -83,6 +83,21 @@ jobs:
       # Full UI smoke (D-16): scripted session through the real GUI code path on the dummy driver.
       - name: Headless GUI start-up (SDL dummy video driver + software renderer)
         run: zig build smoke -Doptimize=ReleaseFast --summary all
+
+      # API-03 (v2.4): the editor/collection scenarios through the command API, headless and sandboxed.
+      # 41 must run in 40's user dir (it verifies the session restore of 40's quit).
+      - name: Command-API script tests
+        run: |
+          mkdir -p script-out
+          status=0
+          for f in tests/scripts/*.efscript; do
+            name=$(basename "$f" .efscript)
+            dir="script-out/$name"
+            if [ "$name" = "41-session-restore" ]; then dir="script-out/40-session"; fi
+            echo "--- $name"
+            ./zig-out/bin/ElectricField --script "$f" --user-dir "$dir" --out "script-out/$name.log" || status=1
+          done
+          exit $status
 
       # Real-UI screenshots (software renderer): finished Dipole tab, About modal, chooser at --scale 2. Uploaded below.
       - name: Headless GUI screenshots

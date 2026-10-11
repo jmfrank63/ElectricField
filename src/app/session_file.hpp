@@ -1,0 +1,58 @@
+#pragma once
+// The open-tab session file (v2.1, SES-01/02): which tabs are open, with which charges and calculation
+// method, in a human-readable session.ini next to options.ini / configurations.ini. Std-only; the GUI
+// resolves the file location and saves on graceful quit / restores at startup (never in headless modes).
+//
+// Format:
+//   # Electric Field open tabs
+//   [tab "Dipole 1"]
+//   preset = 0          # index into ef::presets(), or "none" for user/empty/custom tabs
+//   method = euler      # a kMethods name; unknown names fall back to the default on restore
+//   charge = 1, -2, 0
+//   charge = -1, 2, 0
+#include <cstddef>
+#include <filesystem>
+#include <string>
+#include <vector>
+
+#include "app/workspace.hpp"  // efapp::kNoPreset
+#include "ef/presets.hpp"     // ef::PresetCharge
+
+namespace efapp {
+
+struct SavedTab {
+  std::string title;
+  std::size_t preset = kNoPreset;  // kNoPreset = "none"
+  std::string method;              // a kMethods persistence name ("" = default)
+  bool autoRecalc = false;         // v2.2 CALC-03: continuous calculation
+  GridSettings grid;               // v2.3 GRID: snap grid settings
+  std::vector<ef::PresetCharge> charges;
+};
+
+// Sections `[tab "Title"]` with `preset`, `method` and `charge` lines (same grammar as the configuration
+// charge lines). A section needs a non-empty title and at least one valid charge, else it is skipped
+// (counted). Unknown keys and foreign sections are ignored. `collection = <name>` (v2.2) selects the
+// collection the tabs belong to; files without it parse as the Original collection.
+std::string serializeSession(const std::vector<SavedTab>& tabs, const std::string& collection = "Original");
+
+struct ParsedSession {
+  std::string collection = "Original";  // v2.2: the collection the tabs belong to
+  std::vector<SavedTab> value;
+  int skippedTabs = 0;
+  int skippedCharges = 0;
+};
+
+ParsedSession parseSession(const std::string& text);
+
+bool saveSession(const std::filesystem::path& file, const std::vector<SavedTab>& tabs, std::string& error);
+bool saveSession(const std::filesystem::path& file, const std::vector<SavedTab>& tabs, const std::string& collection, std::string& error);
+std::vector<SavedTab> loadSession(const std::filesystem::path& file);
+
+// Like loadSession, but also returns the collection tag (v2.2 COL-04).
+struct SavedSession {
+  std::string collection = "Original";
+  std::vector<SavedTab> tabs;
+};
+SavedSession loadSessionFull(const std::filesystem::path& file);
+
+}  // namespace efapp

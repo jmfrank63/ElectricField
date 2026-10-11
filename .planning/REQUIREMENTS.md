@@ -132,3 +132,175 @@ Which phases cover which requirements. Updated during roadmap creation.
 ---
 *Requirements defined: 2026-10-10*
 *Last updated: 2026-10-10 after roadmap creation (traceability filled)*
+
+---
+
+# Milestone v2.0 Requirements (added 2026-10-11)
+
+## User Configuration Files
+
+- [x] **CFG-01**: Named charge configurations (value, x, y per charge) persist in a human-readable configurations.ini in the platform user config directory; invalid entries are skipped safely and never affect the 9 built-in presets
+- [x] **CFG-02**: The preset chooser lists user configurations below the built-ins; File > New > "Empty Configuration" opens an editable empty tab
+- [x] **CFG-03**: Save As (Ctrl+S / File > Save As) stores the current tab's charges under a chosen name; overwriting an existing name asks for confirmation; built-in presets cannot be overwritten
+
+## Charge Editor
+
+- [x] **EDIT-01**: Clicking on or near a charge selects it; dragging with the mouse moves it, with the charge glyph following in realtime
+- [x] **EDIT-02**: The arrow keys nudge the selected charge (Shift = larger step)
+- [x] **EDIT-03**: The editor panel shows the selected charge's value, x and y as input fields with up/down buttons; every change updates the canvas immediately without starting a computation
+- [x] **EDIT-04**: Double-clicking empty canvas adds a charge; Delete removes the selected one; at least one charge must remain
+- [x] **EDIT-05**: A tab edited after its computation is marked stale (drawn lines belong to the pre-edit charges) until it is recalculated
+
+## Explicit Calculation
+
+- [x] **CALC-01**: A Calculate button (F5) recomputes the tab from the current charges, reusing the busy/close/cancel behaviour of the existing sessions
+- [x] **CALC-02**: The editor panel offers a calculation method selector defaulting to the app option; it applies at the next Calculate
+
+## Traceability (v2)
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| CFG-01 | v2 Phase 1 | Complete |
+| CFG-02 | v2 Phase 1 | Complete |
+| CFG-03 | v2 Phase 1 | Complete |
+| EDIT-01..05 | v2 Phase 2 | Complete |
+| CALC-01..02 | v2 Phase 2 | Complete |
+
+---
+
+# Milestone v2.1 Requirements (added 2026-10-11)
+
+## Editor & Session Polish
+
+- [ ] **EDIT-06**: The editor panel has an Add-charge section (value, x, y inputs and an Add button) that appends and selects a charge without needing the canvas
+- [ ] **EDIT-07**: The six stepper buttons render as arrow glyphs (left/right for X, up/down for Y and Value)
+- [ ] **TAB-01**: The active tab can be renamed from the editor panel; the window title follows; an empty name is refused
+
+## Session Persistence
+
+- [ ] **SES-01**: Open tabs (title, source, charges) persist in a session.ini in the user config directory and restore on startup; restored titles never collide with later opens
+- [ ] **SES-02**: Each tab's calculation method is stored in the session file and restored with the tab
+- [ ] **SES-03**: Help > Open Configuration Folder reveals the folder holding options.ini / configurations.ini / session.ini
+
+## Traceability (v2.1)
+
+| Requirement | Status |
+|-------------|--------|
+| EDIT-06 | Pending |
+| EDIT-07 | Pending |
+| TAB-01 | Pending |
+| SES-01 | Pending |
+| SES-02 | Pending |
+| SES-03 | Pending |
+
+---
+
+# Milestone v2.2 Requirements (added 2026-10-11)
+
+## Collections
+
+- [ ] **COL-01**: Collections live as one human-readable file per collection under Collections\ in the user config directory; on first run the Original collection is seeded with the 9 built-in presets plus any legacy user configurations from configurations.ini (left untouched)
+- [ ] **COL-02**: The menu bar shows the current collection with a switcher; File > New Collection creates and switches to an empty collection; switching saves the current session and closes its tabs
+- [ ] **COL-03**: Calculate All closes the open tabs and opens every configuration of the current collection in tabs, each computing as usual
+- [ ] **COL-04**: The session file records the current collection and restores it (with its tabs) on startup; Save As stores into the current collection file
+
+## Editor refinement
+
+- [ ] **EDIT-08**: The New-charge entry (value, x, y and Add) is always visible in the editor panel, not hidden behind a collapsed header
+- [ ] **EDIT-09**: A switch-sign button flips the selected charge's value between positive and negative (and marks the tab stale)
+
+## Traceability (v2.2)
+
+| Requirement | Status |
+|-------------|--------|
+| COL-01..04 | Complete |
+| EDIT-08 | Complete |
+| EDIT-09 | Complete |
+| TITLE-01, COL-05, MENU-01, CALC-04, EDIT-11..13, GRID-01..04 (v2.3) | Complete |
+
+---
+
+# Milestone v2.3 Requirements (added 2026-10-11)
+
+## Title & Menus
+
+- [ ] **TITLE-01**: The window title shows the collection (with the active tab when one is open)
+- [ ] **MENU-01**: The File menu shows New Configuration... (opens the chooser) and New Collection...; the bare New / New... entries are removed
+
+## Collections
+
+- [ ] **COL-05**: Right-clicking a configuration in the chooser offers Remove (with confirmation); it is deleted from the collection file; open tabs are unaffected
+
+## Calculation
+
+- [ ] **CALC-04**: Continuous calculation actually recomputes after an edit (the debounce deadline is armed only by edits, never re-armed idle); pinned by a smoke regression test
+
+## Editor
+
+- [ ] **EDIT-11**: Esc on a stale tab reverts the charges to the last calculated state
+- [ ] **EDIT-12**: Edit > Undo (Ctrl+Z) / Redo (Ctrl+Y) steps through charge and method changes per tab
+- [ ] **EDIT-13**: Double-click empty canvas adds a charge in one go; single click selects it for editing (interaction contract, pinned)
+
+## Grid
+
+- [ ] **GRID-01**: A grid can be set active (snapping) independently of visibility
+- [ ] **GRID-02**: A grid can be shown or hidden independently
+- [ ] **GRID-03**: The grid is Cartesian or polar
+- [ ] **GRID-04**: The grid origin is definable for both grid types; snapping applies to drag, double-click add and typed positions; grid settings persist in the session
+
+---
+
+# Milestone v2.4 Requirements (added 2026-10-11)
+
+## Automation API
+
+- [ ] **API-01**: A command API exposes every menu action and every editor/collection operation (app/tab/config/charge/view/grid/options commands) with a text result per call
+- [ ] **API-02**: A headless script runner executes command files (ElectricField --script <file> [--user-dir <dir>] [--out <file>]); app.state dumps the full UI state as a test oracle
+- [ ] **API-03**: Script tests in CI cover the editor scenarios (open/edit/undo/redo/esc/grid/save/remove/collection flows) on all three OSes
+- [ ] **API-04**: --user-dir redirects all user-file paths (options/configurations/Collections/sessions) so scripts never touch real user data
+
+## Bug fixes
+
+- [ ] **BUG-01**: Grids are visible (BUG: the background fill overwrote them)
+- [ ] **BUG-02**: New Collection works (BUG: the leave-confirm modal stayed open after its answer and locked the UI)
+
+## Tab & Collection UX
+
+- [ ] **TAB-02**: Tabs closable via x button, middle click and Close Tab (verified; tab right-click menu added)
+- [ ] **TAB-03**: Tab rename works (panel name field + tab right-click menu)
+- [ ] **TAB-04**: The tab right-click menu offers Close / Rename / Save Configuration As / Calculate
+- [ ] **COL-06**: Save Collection (Ctrl+S) stores the collection file, merging matching edited tabs
+- [ ] **COL-07**: Save Collection As... saves under a new name and switches, keeping the tabs open
+- [ ] **COL-08**: Close Collection saves and switches to Original
+- [ ] **COL-09**: Each collection's open tabs persist per collection (Sessions/<Name>.ini) and are restored on switch and on start
+
+---
+
+# Milestone v2.5 Requirements (added 2026-10-12, revised after the file-picker pivot)
+
+## Collections flow
+
+- [ ] **OPEN-01**: A collection is a document FILE holding named configurations (the Collections\ folder is its default home); File > Open Collection... (Ctrl+O) opens any such file through the native file picker, File > Save Collection As... / New Collection... save to a chosen path; the app starts with no collection open and auto-opens nothing; after a UI-initiated switch to an empty workspace the configuration chooser follows
+- [ ] **CFG-04**: File > Open Configuration... / Save Configuration / Save Configuration As... are grouped in the File menu; Save Configuration writes the active tab's charges back to the configuration it came from; without a collection open the configuration entries are greyed out
+
+## Grid style
+
+- [ ] **GRID-05**: Grid lines are light green
+- [ ] **GRID-06**: An intersections-only mode shows just the lattice points (Cartesian and polar) in a distinctly different colour; an Intersections checkbox sits above the Cartesian/Polar controls in the panel; API + session persistence
+
+## Charge size
+
+- [ ] **SIZE-01**: Charge size is a draw option (2-120 px, dot to very large, default 25) in View > Options and via options.set charge-size; persisted in options.ini; physics hit radius unchanged
+
+## Export
+
+- [ ] **EXP-03**: File > Export Configuration adds PDF to the PNG/SVG export; File > Export Collection... renders every configuration of the collection into one PDF (one page per configuration, names as bookmarks); both exports are also callable by path via the command API
+
+## Traceability (v2.5)
+
+| Requirement | Status |
+|-------------|--------|
+| OPEN-01, CFG-04 | Pending |
+| GRID-05..06 | Pending |
+| SIZE-01 | Pending |
+| EXP-03 | Pending |

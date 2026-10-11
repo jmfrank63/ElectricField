@@ -1,0 +1,10 @@
+# 41-session-restore: the same user dir as 40 - the collection comes back as a document (v2.5), then
+# both tabs restore with their edits (v2.4 COL-09)
+collection.open Original
+app.expect tabs=2
+app.expect "title=My Dipole"
+app.expect "title=Empty Configuration 1"
+app.expect charges=1,2,0
+tab.close
+app.expect tabs=1
+app.quit force

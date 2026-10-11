@@ -26,18 +26,25 @@ const core_sources = [_][]const u8{
     "ef/session.cpp",
     "ef/scene.cpp",
     "ef/svg.cpp",
+    "ef/pdf.cpp",
 };
 
 const app_sources = [_][]const u8{
     "app/workspace.cpp",
     "app/ui_logic.cpp",
     "app/options.cpp",
+    "app/configs.cpp",
+    "app/editor.cpp",
+    "app/session_file.cpp",
 };
 
 const test_sources = [_][]const u8{
     "test_main.cpp",
     "test_app.cpp",
     "test_options.cpp",
+    "test_configs.cpp",
+    "test_editor.cpp",
+    "test_session_file.cpp",
     "test_vec2.cpp",
     "test_field.cpp",
     "test_rk_order.cpp",

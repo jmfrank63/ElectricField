@@ -2,8 +2,10 @@
 // SDL3 + Dear ImGui application shell (Phase 3): window, renderer, loop, DPI, smoke / screenshot modes.
 #include <SDL3/SDL.h>
 
+#include <filesystem>
 #include <string>
 
+#include "app/options.hpp"
 #include "app/ui_logic.hpp"
 #include "app/workspace.hpp"
 #include "gui/ui.hpp"
@@ -60,6 +62,8 @@ class App {
   ImGuiStyle baseStyle_;
   efapp::Workspace ws_;
   efapp::FramePacer pacer_;
+  efapp::Options options_;            // user options (Phase 4); loaded at startup, saved when the dialog is accepted
+  std::filesystem::path optionsPath_; // empty in headless modes (nothing is loaded or persisted there)
   UiState ui_;
   UiEnv env_;
   std::string lastTitle_;

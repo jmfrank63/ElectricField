@@ -39,6 +39,8 @@ IntSize minimumWindowSize(float k);
 ef::View canvasView(float availW, float availH, float k);
 // The draw style scaled by k (thickness and radius); colours unchanged.
 ef::DrawStyle scaledStyle(float k);
+// Scales the given (user, Phase 4) draw style by k; colours unchanged.
+ef::DrawStyle scaledStyle(const ef::DrawStyle& base, float k);
 
 // UI-SPEC "Main loop (D-12)": idle => block in SDL_WaitEventTimeout(kIdleWaitMs); any session computing => poll + render every frame;
 // at least kSettleFrames rendered frames after every input event or state change (ImGui needs them for hover/focus/popup

@@ -73,7 +73,7 @@ bool App::init(const AppOptions& opt, std::string& step, std::string& message) {
   ImGui::CreateContext();  // first context: becomes current (see png_export.cpp for the rule when one already exists)
   imguiCtx_ = true;
   ImGuiIO& io = ImGui::GetIO();
-  io.IniFilename = nullptr;  // always: window geometry / options persistence belongs to Phase 4
+  io.IniFilename = nullptr;  // always: window geometry stays session-local; user options persist via efapp::saveOptions (Phase 4)
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
   io.Fonts->AddFontDefaultVector();
   baseStyle_ = makeBaseStyle();
@@ -92,6 +92,17 @@ bool App::init(const AppOptions& opt, std::string& step, std::string& message) {
   env_.aboutIcon = aboutIcon_;
   env_.semver = EF_VERSION;
   env_.gitHash = EF_GIT_HASH;
+  // User options (Phase 4, D-03): loaded from the per-user config directory. Headless modes skip both load
+  // and save so CI runs never depend on, or overwrite, the developer's options.ini.
+  if (!opt_.headless()) {
+    if (char* pref = SDL_GetPrefPath("ElectricField", "ElectricField")) {
+      optionsPath_ = std::filesystem::u8path(pref) / "options.ini";  // SDL hands out UTF-8; u8path keeps non-ASCII intact
+      SDL_free(pref);
+      options_ = efapp::loadOptions(optionsPath_);
+    }
+  }
+  env_.options = &options_;
+  env_.drawStyle = options_.draw;
   refreshScale(true);  // also sets the minimum window size
   return true;
 }
@@ -154,6 +165,18 @@ void App::frame() {
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
   drawUi(ws_, ui_, env_);
+  if (ui_.optionsToApply) {  // Options accepted (Phase 4, D-05): draw options re-render every open tab next frame,
+    // computation options reach tabs opened afterwards; persist immediately (MFC parity: saved on Apply, D-03).
+    options_ = *ui_.optionsToApply;
+    ui_.optionsToApply.reset();
+    ws_.setDefaults(options_.compute);
+    env_.drawStyle = options_.draw;
+    pacer_.notifyActivity();
+    if (!optionsPath_.empty()) {
+      std::string err;
+      if (!efapp::saveOptions(optionsPath_, options_, err)) std::fprintf(stderr, "options: %s\n", err.c_str());
+    }
+  }
   ImGui::Render();
   if (ui_.wantedTitle != lastTitle_) {
     SDL_SetWindowTitle(window_, ui_.wantedTitle.c_str());
@@ -177,7 +200,7 @@ void App::frames(int n) {
 
 bool App::iterate() {
   const bool computing = ws_.anyComputing();
-  const bool modalBefore = ui_.chooserVisible || ui_.aboutVisible;
+  const bool modalBefore = ui_.chooserVisible || ui_.aboutVisible || ui_.optionsVisible;
   const unsigned openedBefore = ws_.opened();
   SDL_Event e;
   bool gotEvent = false;
@@ -200,7 +223,7 @@ bool App::iterate() {
   }
   frame();
   if (ws_.opened() != openedBefore || computing != ws_.anyComputing()) pacer_.notifyActivity();  // tab opened / finished: show it
-  if ((ui_.chooserVisible || ui_.aboutVisible) != modalBefore) pacer_.notifyActivity(efapp::FramePacer::kModalFadeFrames);
+  if ((ui_.chooserVisible || ui_.aboutVisible || ui_.optionsVisible) != modalBefore) pacer_.notifyActivity(efapp::FramePacer::kModalFadeFrames);
   if (!vsync_) SDL_Delay(16);
   return !ui_.requestQuit;
 }
@@ -267,7 +290,7 @@ bool App::checkCanvas(unsigned serial, int w, int h, std::string& report) {
   // GUI context (with its initialised backend) is live: this is also the in-process regression check for the context rule.
   std::string err;
   const ef::View view = efapp::canvasView(static_cast<float>(cw), static_cast<float>(ch), k_);
-  SDL_Surface* ref = efrender::renderSurface(t->scene, efapp::scaledStyle(k_), view, err);
+  SDL_Surface* ref = efrender::renderSurface(t->scene, efapp::scaledStyle(options_.draw, k_), view, err);
   if (!ref) {
     SDL_DestroySurface(gui);
     report = err;
@@ -384,6 +407,37 @@ bool App::smokeExtras(std::string& report) {
   frames(2);
   ws_.setFactory(efapp::defaultSessionFactory());
 
+  // Options dialog (Phase 4): it opens, Esc closes it, an accepted apply reaches the app (new draw style,
+  // new tabs pick up the new computation params). Headless runs have no options file, so nothing persists.
+  ui_.openOptions = true;
+  frames(3);
+  if (!ui_.optionsVisible) return fail("Options did not open");
+  chord(0, ImGuiKey_Escape);
+  frames(2);
+  if (ui_.optionsVisible) return fail("Esc did not close Options");
+  {
+    efapp::OptionsEdit e;
+    e.reset(options_);
+    e.lines = 32;
+    e.electricThickness = 4;
+    ui_.optionsToApply = e.apply();
+    frames(2);
+    if (options_.draw.electricThickness != 4.f) return fail("accepted options were not applied");
+  }
+  ui_.openPresetNow = 2;
+  frames(2);
+  if (ws_.tabs().empty() || ws_.tabs().back()->params.linesPerUnitCharge != 32)
+    return fail("a new tab did not pick up the new computation options");
+  ui_.closeSerial = lastSerial();
+  frames(2);
+  {
+    efapp::OptionsEdit e;
+    e.reset(efapp::Options{});  // defaults for the rest of the run
+    ui_.optionsToApply = e.apply();
+    frames(2);
+    if (options_.draw.electricThickness != 1.f) return fail("options were not restored to the defaults");
+  }
+
   // Idle loop: with one finished tab and no input the loop must block (<= ~4 frames/s + the settle frames), not spin.
   SDL_SetWindowSize(window_, 1024, 824);
   SDL_SyncWindow(window_);
@@ -412,7 +466,7 @@ bool App::smokeExtras(std::string& report) {
   if (quitMs > 1000) return fail("closeAll with 3 busy sessions took " + std::to_string(quitMs) + " ms");
   frames(2);
   if (ws_.opened() - openedBase != ws_.closed() - closedBase) return fail("tab leak: opened != closed");
-  report = "keys=ok middle_click=ok failed_tab=ok overlay=ok idle_frames=" + std::to_string(idleFrames) + "/1.3s quit_ms=" + std::to_string(quitMs);
+  report = "keys=ok middle_click=ok failed_tab=ok overlay=ok options=ok idle_frames=" + std::to_string(idleFrames) + "/1.3s quit_ms=" + std::to_string(quitMs);
   return true;
 }
 

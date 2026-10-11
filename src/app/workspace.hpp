@@ -53,6 +53,8 @@ class Workspace {
 
   // Opens a tab and starts its session. Never throws for a session that cannot start: that yields a Failed tab.
   unsigned open(std::size_t presetIndex);
+  // Options dialog (Phase 4): new tabs open with these params; tabs already open keep the params they were opened with.
+  void setDefaults(const ef::ComputeParams& p) { defaults_ = p; }
   // Cancels and destroys the session (RAII join) and removes the tab. False if the serial is unknown.
   bool close(unsigned serial);
   // One poll() per computing tab; Done -> takeResult + buildScene once; Failed -> error text.

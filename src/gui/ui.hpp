@@ -3,8 +3,10 @@
 // Everything decision-like lives in src/app (std-only, unit-tested); this file only maps it onto ImGui widgets.
 #include <SDL3/SDL.h>
 
+#include <optional>
 #include <string>
 
+#include "app/options.hpp"
 #include "app/workspace.hpp"
 #include "imgui.h"
 
@@ -16,16 +18,21 @@ struct UiEnv {
   SDL_Texture* aboutIcon = nullptr;
   const char* semver = "";
   const char* gitHash = "";
+  ef::DrawStyle drawStyle;                  // user draw options (Phase 4), unscaled; the canvas draws scaledStyle(drawStyle, k)
+  const efapp::Options* options = nullptr;  // the current options, owned by App; the dialog resets its edits from here
 };
 
 struct UiState {
   // requests (set by menu / shortcuts / startup, consumed by drawUi)
   bool openChooser = false, openAbout = false, requestQuit = false;
+  bool openOptions = false;  // View > Options...
   int openPresetNow = -1;    // File > New > <preset>
   unsigned closeSerial = 0;  // request to close a tab (0 = none)
   // state carried between frames
-  bool chooserVisible = false, aboutVisible = false;  // a modal was drawn last frame
+  bool chooserVisible = false, aboutVisible = false, optionsVisible = false;  // a modal was drawn last frame
   int chooserSel = 0;
+  efapp::OptionsEdit optionsEdit;                 // working copy behind the Options dialog (D-04)
+  std::optional<efapp::Options> optionsToApply;   // set on OK after validation; consumed by App::frame (D-05)
   unsigned activeSerial = 0;   // selected tab during the last frame
   unsigned selectSerial = 0;   // programmatic selection request (new tab)
   std::string linkNote;        // About: "Could not open a browser..." (cleared when the modal closes)

@@ -65,7 +65,7 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   ImDrawList* dl = ImGui::GetWindowDrawList();
 
   const ef::View view = efapp::canvasView(avail.x, avail.y, env.k);
-  const ef::DrawStyle style = efapp::scaledStyle(env.k);
+  const ef::DrawStyle style = efapp::scaledStyle(env.drawStyle, env.k);  // user draw options (Phase 4), scaled for HiDPI
   {
     efrender::ImGuiPainter painter(dl, p);
     ef::renderScene(painter, t.scene, style, view);
@@ -237,6 +237,83 @@ void chooserModal(UiState& ui, const UiEnv& env) {
   ImGui::EndPopup();
 }
 
+// View > Options (Phase 4, D-04): the Computation / Draw property pages as a tabbed modal. Ranges are
+// validated on OK through efapp::OptionsEdit and never clamped; an invalid input keeps the dialog open.
+void optionsModal(UiState& ui, const UiEnv& env) {
+  const ImGuiViewport* vp = ImGui::GetMainViewport();
+  if (ui.openOptions) {
+    ImGui::OpenPopup("Options##options");
+    ui.openOptions = false;
+    if (env.options) ui.optionsEdit.reset(*env.options);
+  }
+  ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+  ImGui::SetNextWindowSizeConstraints(ImVec2(430.f * env.k, 0.f), ImVec2(560.f * env.k, FLT_MAX));
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.f * env.k, 16.f * env.k));
+  const bool open = ImGui::BeginPopupModal("Options##options", nullptr, ImGuiWindowFlags_NoCollapse);
+  ImGui::PopStyleVar();
+  ui.optionsVisible = open;
+  if (!open) return;
+  efapp::OptionsEdit& e = ui.optionsEdit;
+
+  if (ImGui::BeginTabBar("##optiontabs")) {
+    if (ImGui::BeginTabItem("Computation")) {
+      const int mIdx = e.methodIndex < 0 ? 0 : (e.methodIndex >= static_cast<int>(ef::kMethodCount) ? static_cast<int>(ef::kMethodCount) - 1 : e.methodIndex);
+      const std::string mCurrent(ef::kMethods[static_cast<std::size_t>(mIdx)].display);
+      if (ImGui::BeginCombo("Integration method", mCurrent.c_str())) {
+        for (int i = 0; i < static_cast<int>(ef::kMethodCount); ++i) {
+          const std::string label(ef::kMethods[static_cast<std::size_t>(i)].display);
+          if (ImGui::Selectable(label.c_str(), i == e.methodIndex)) e.methodIndex = i;
+          if (i == e.methodIndex) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+      }
+      ImGui::Checkbox("Calculate equipotentials", &e.equipotentials);
+      ImGui::InputInt("Lines per unit charge", &e.lines);
+      ImGui::InputInt("Threads", &e.threads);
+      float interval = static_cast<float>(e.interval);
+      if (ImGui::SliderFloat("Potential interval", &interval, 0.01f, 0.50f, "%.2f")) e.interval = interval;
+      ImGui::TextDisabled("0.01 - 0.50");
+      ImGui::EndTabItem();
+    }
+    if (ImGui::BeginTabItem("Draw")) {
+      ImGui::ColorEdit3("Positive charge", e.positive);
+      ImGui::ColorEdit3("Negative charge", e.negative);
+      ImGui::ColorEdit3("Field lines", e.electric);
+      ImGui::ColorEdit3("Equipotentials", e.potential);
+      ImGui::InputInt("Field line thickness", &e.electricThickness);
+      ImGui::InputInt("Equipotential thickness", &e.potentialThickness);
+      ImGui::TextDisabled("1 - 64");
+      ImGui::EndTabItem();
+    }
+    ImGui::EndTabBar();
+  }
+
+  if (!e.error.empty()) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.75f, 0.f, 0.f, 1.f));
+    ImGui::TextWrapped("%s", e.error.c_str());
+    ImGui::PopStyleColor();
+  }
+  ImGui::Dummy(ImVec2(0.f, 8.f * env.k));
+
+  const ImGuiStyle& st = ImGui::GetStyle();
+  const float w1 = ImGui::CalcTextSize("OK").x + 2 * st.FramePadding.x;
+  const float w2 = ImGui::CalcTextSize("Cancel").x + 2 * st.FramePadding.x;
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - (w1 + 8.f * env.k + w2));
+  bool close = false;
+  if (ImGui::Button("OK")) {
+    if (e.validate()) {
+      ui.optionsToApply = e.apply();
+      close = true;
+    }  // invalid input: the error is shown and the dialog stays open (D-04)
+  }
+  ImGui::SetItemDefaultFocus();
+  ImGui::SameLine(0.f, 8.f * env.k);
+  if (ImGui::Button("Cancel")) close = true;
+  if (ImGui::IsKeyPressed(ImGuiKey_Escape)) close = true;
+  if (close) ImGui::CloseCurrentPopup();
+  ImGui::EndPopup();
+}
+
 }  // namespace
 
 ImGuiStyle makeBaseStyle() {
@@ -289,7 +366,7 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
 
   ui.failedShown = false;
   ui.overlayMin = ui.overlayMax = ImVec2(0, 0);
-  const bool modalOpen = ui.chooserVisible || ui.aboutVisible || ui.openChooser || ui.openAbout;
+  const bool modalOpen = ui.chooserVisible || ui.aboutVisible || ui.optionsVisible || ui.openChooser || ui.openAbout || ui.openOptions;
   const bool hasTabs = !ws.tabs().empty();
 
   // Shortcuts (UI-SPEC "Keyboard"): ignored while a modal is open.
@@ -314,6 +391,10 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
       if (ImGui::MenuItem("Close Tab", efapp::shortcutLabel("W", env.mac).c_str(), false, hasTabs)) ui.closeSerial = ui.activeSerial;
       ImGui::Separator();
       if (ImGui::MenuItem("Exit", efapp::shortcutLabel("Q", env.mac).c_str())) ui.requestQuit = true;
+      ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("View")) {
+      if (ImGui::MenuItem("Options...")) ui.openOptions = true;
       ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Help")) {
@@ -364,6 +445,7 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
 
   chooserModal(ui, env);
   aboutModal(ui, env);
+  optionsModal(ui, env);
 
   ImGui::End();
 

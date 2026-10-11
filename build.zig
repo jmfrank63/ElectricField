@@ -31,11 +31,13 @@ const core_sources = [_][]const u8{
 const app_sources = [_][]const u8{
     "app/workspace.cpp",
     "app/ui_logic.cpp",
+    "app/options.cpp",
 };
 
 const test_sources = [_][]const u8{
     "test_main.cpp",
     "test_app.cpp",
+    "test_options.cpp",
     "test_vec2.cpp",
     "test_field.cpp",
     "test_rk_order.cpp",

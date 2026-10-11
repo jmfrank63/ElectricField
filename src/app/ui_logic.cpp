@@ -74,13 +74,15 @@ ef::View canvasView(float availW, float availH, float k) {
   return v;
 }
 
-ef::DrawStyle scaledStyle(float k) {
-  ef::DrawStyle s;
+ef::DrawStyle scaledStyle(const ef::DrawStyle& base, float k) {
+  ef::DrawStyle s = base;
   k = clampScale(k);
   s.electricThickness *= k;
   s.potentialThickness *= k;
   s.chargeRadiusPx *= k;
   return s;
 }
+
+ef::DrawStyle scaledStyle(float k) { return scaledStyle(ef::DrawStyle{}, k); }
 
 }  // namespace efapp

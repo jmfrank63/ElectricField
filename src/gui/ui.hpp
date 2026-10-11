@@ -27,6 +27,7 @@ struct UiState {
   bool openChooser = false, openAbout = false, requestQuit = false;
   bool openOptions = false;  // View > Options...
   int openPresetNow = -1;    // File > New > <preset>
+  int exportRequest = 0;     // File > Export: 1 = PNG..., 2 = SVG... (consumed by App::frame, D-06)
   unsigned closeSerial = 0;  // request to close a tab (0 = none)
   // state carried between frames
   bool chooserVisible = false, aboutVisible = false, optionsVisible = false;  // a modal was drawn last frame

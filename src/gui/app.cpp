@@ -9,6 +9,7 @@
 
 #include "app/ui_logic.hpp"
 #include "ef/presets.hpp"
+#include "ef/svg.hpp"
 #include "ef_build_info.h"
 #include "ef_git_hash.h"
 #include "gui/icon.hpp"
@@ -30,6 +31,17 @@ struct EndlessSession final : efapp::ISession {
   ef::SessionStatus poll(ef::PollBatch&) override { return ef::SessionStatus{}; }
   bool takeResult(ef::FieldResult&) override { return false; }
 };
+
+// Text file write through SDL's I/O: the same UTF-8-safe path handling as SDL_SavePNG (D-07), so SVG export
+// behaves like PNG export for non-ASCII destinations.
+std::string writeTextFile(const std::string& path, const std::string& text) {
+  SDL_IOStream* io = SDL_IOFromFile(path.c_str(), "w");
+  if (!io) return std::string("SDL_IOFromFile failed: ") + SDL_GetError();
+  const bool written = SDL_WriteIO(io, text.data(), text.size()) == text.size();
+  const bool closed = SDL_CloseIO(io);
+  if (!written || !closed) return "Could not write " + path;
+  return {};
+}
 }  // namespace
 
 bool App::init(const AppOptions& opt, std::string& step, std::string& message) {
@@ -177,6 +189,7 @@ void App::frame() {
       if (!efapp::saveOptions(optionsPath_, options_, err)) std::fprintf(stderr, "options: %s\n", err.c_str());
     }
   }
+  exportStep();  // EXP-01/02: start the save dialog / run a chosen export on the UI thread between frames
   ImGui::Render();
   if (ui_.wantedTitle != lastTitle_) {
     SDL_SetWindowTitle(window_, ui_.wantedTitle.c_str());
@@ -560,6 +573,103 @@ int App::runScreenshot() {
               ok ? 1 : 0);
   SDL_DestroySurface(px);
   return ok ? 0 : 1;
+}
+
+// --- Export (Phase 4, EXP-01/EXP-02, D-06) ---------------------------------------------------------------
+
+// Consumed every frame after drawUi: a menu request opens the native save dialog; a path chosen in an
+// earlier frame is exported here — on the UI thread, between frames (renderPng's ImGui-context rule).
+void App::exportStep() {
+  if (ui_.exportRequest != 0) {
+    exportFormat_ = ui_.exportRequest;
+    exportSerial_ = ui_.activeSerial;
+    const SDL_DialogFileFilter filters[] = {{"PNG image", "png"}, {"SVG image", "svg"}};
+    SDL_ShowSaveFileDialog(
+        [](void* userdata, const char* const* filelist, int) {
+          auto* self = static_cast<App*>(userdata);
+          std::string path, error;
+          if (filelist == nullptr)
+            error = SDL_GetError();  // the dialog itself failed (e.g. no portal/zenity on Linux)
+          else if (filelist[0] != nullptr)
+            path = filelist[0];  // an empty list is the user cancelling
+          std::lock_guard<std::mutex> lock(self->exportMutex_);
+          self->pendingExportPath_ = std::move(path);
+          self->pendingExportError_ = std::move(error);
+        },
+        this, window_, filters, 2, nullptr);
+    ui_.exportRequest = 0;
+    pacer_.notifyActivity();  // an OS dialog sits on top: keep the loop rendering
+  }
+
+  std::string path, error;
+  {
+    std::lock_guard<std::mutex> lock(exportMutex_);
+    path = std::move(pendingExportPath_);
+    error = std::move(pendingExportError_);
+    pendingExportPath_.clear();
+    pendingExportError_.clear();
+  }
+  if (!error.empty()) exportFailed("The file dialog failed: " + error + ".");
+  if (!path.empty()) runExport(path);
+}
+
+// The export equals the tab: the cached scene, the current draw options and exactly the on-screen canvas view.
+void App::runExport(const std::string& path) {
+  const efapp::Tab* t = ws_.find(exportSerial_);
+  if (!t || t->state != efapp::TabState::Done) {
+    exportFailed("The configuration is not finished.");  // defensive: the menu only enables a finished tab
+    return;
+  }
+  const ef::View view = efapp::canvasView(ui_.canvasMax.x - ui_.canvasMin.x, ui_.canvasMax.y - ui_.canvasMin.y, k_);
+  const ef::DrawStyle style = efapp::scaledStyle(options_.draw, k_);
+  std::string err;
+  if (exportFormat_ == 1)
+    err = efrender::renderPng(t->scene, style, view, path.c_str());
+  else
+    err = writeTextFile(path, ef::renderSvg(t->scene, style, view));
+  if (!err.empty()) exportFailed(err);
+}
+
+void App::exportFailed(const std::string& what) {
+  if (opt_.headless()) {
+    std::fprintf(stderr, "export: %s\n", what.c_str());
+    return;
+  }
+  SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Electric Field", what.c_str(), window_);
+}
+
+// --export <dir>: the export path CI exercises on all three OSes (D-06). Fixed inputs — the Dipole preset with
+// default options and the 1024x768 @ 100 px/unit view — make the PNG and SVG byte-identical to the ef-cli
+// parity oracle for the same preset, which the CI step proves with cmp.
+int App::runExportMode() {
+  std::error_code ec;
+  std::filesystem::create_directories(opt_.exportDir, ec);  // exists / creatable is a precondition of the writes below
+  ui_.openPresetNow = 0;  // dipole
+  frames(1);
+  const unsigned serial = lastSerial();
+  if (!pumpUntilDone(serial, 60000)) {
+    std::fprintf(stderr, "export: the dipole session did not finish\n");
+    return 1;
+  }
+  const efapp::Tab* t = ws_.find(serial);
+  if (!t) {
+    std::fprintf(stderr, "export: the dipole tab disappeared\n");
+    return 1;
+  }
+  const ef::DrawStyle style;              // headless runs load no options file: the defaults are the oracle's style
+  const ef::View view{1024, 768, 100.};
+  const std::string base = opt_.exportDir + "/dipole";
+  std::string err = efrender::renderPng(t->scene, style, view, (base + ".png").c_str());
+  if (err.empty()) err = writeTextFile(base + ".svg", ef::renderSvg(t->scene, style, view));
+  if (!err.empty()) {
+    std::fprintf(stderr, "export: %s\n", err.c_str());
+    return 1;
+  }
+  std::printf("export ok png=%s.png svg=%s.svg scene lines=%zu equipotentials=%zu\n", base.c_str(), base.c_str(),
+              t->scene.electric.size(), t->scene.potential.size());
+  ws_.closeAll();
+  shutdown();
+  return 0;
 }
 
 }  // namespace efgui

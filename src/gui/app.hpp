@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 
 #include <filesystem>
+#include <mutex>
 #include <string>
 
 #include "app/options.hpp"
@@ -16,11 +17,13 @@ namespace efgui {
 struct AppOptions {
   bool smoke = false;
   bool screenshot = false;   // --screenshot <slug> <png> [--size WxH] [--scale k] [--modal about|chooser]
+  bool exportMode = false;   // --export <dir>: headless PNG + SVG export of the finished Dipole (EXP-01/02, CI)
   std::string slug, out;
+  std::string exportDir;
   std::string modal;         // open that modal before the screenshot is taken
   float scaleOverride = 0.f; // headless HiDPI check: forces k
   int width = 0, height = 0;
-  bool headless() const { return smoke || screenshot; }
+  bool headless() const { return smoke || screenshot || exportMode; }
 };
 
 class App {
@@ -36,6 +39,7 @@ class App {
   int runInteractive();
   int runSmoke();
   int runScreenshot();
+  int runExportMode();
   void shutdown();  // idempotent: cancel sessions, then ImGui backends, context, renderer, window, SDL
 
  private:
@@ -49,6 +53,11 @@ class App {
   void chord(ImGuiKeyChord mods, ImGuiKey key);  // inject a key chord through ImGui's input queue, with the frames it needs
   bool checkCanvas(unsigned serial, int w, int h, std::string& report);
   bool smokeExtras(std::string& report);
+  // Export (Phase 4, D-06): menu request -> native save dialog; the chosen path is exported on the UI
+  // thread at a frame boundary (renderPng's ImGui-context rule).
+  void exportStep();
+  void runExport(const std::string& path);
+  void exportFailed(const std::string& what);
 
   AppOptions opt_;
   SDL_Window* window_ = nullptr;
@@ -64,6 +73,13 @@ class App {
   efapp::FramePacer pacer_;
   efapp::Options options_;            // user options (Phase 4); loaded at startup, saved when the dialog is accepted
   std::filesystem::path optionsPath_; // empty in headless modes (nothing is loaded or persisted there)
+  // Export state (Phase 4). The SDL save-dialog callback may run on any thread (portald/zenity on Linux), so the
+  // chosen path crosses into the UI thread behind a mutex and is exported at the next frame boundary.
+  std::mutex exportMutex_;
+  std::string pendingExportPath_;   // guarded by exportMutex_; empty = nothing to do
+  std::string pendingExportError_;  // guarded by exportMutex_; dialog failure text (SDL_GetError read in the callback)
+  int exportFormat_ = 0;            // format of the dialog in flight: 1 = PNG, 2 = SVG
+  unsigned exportSerial_ = 0;       // tab to export once the path arrives
   UiState ui_;
   UiEnv env_;
   std::string lastTitle_;

@@ -2,6 +2,7 @@
 //   ElectricField                      interactive application
 //   ElectricField --smoke              headless start-up + tab lifecycle + UI-surface check (CI)
 //   ElectricField --screenshot <slug> <out.png> [--size WxH] [--scale k] [--modal about|chooser]   headless render of one finished tab
+//   ElectricField --export <dir>       headless PNG + SVG export of the finished Dipole (CI parity check)
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>  // Windows GUI subsystem: must be in the TU that defines main
 
@@ -39,7 +40,8 @@ const char* const kUsage =
     "Usage:\n"
     "  ElectricField                                  interactive application\n"
     "  ElectricField --smoke                          headless start-up check\n"
-    "  ElectricField --screenshot <slug> <out.png> [--size WxH] [--scale k] [--modal about|chooser]\n";
+    "  ElectricField --screenshot <slug> <out.png> [--size WxH] [--scale k] [--modal about|chooser]\n"
+    "  ElectricField --export <dir>                   headless PNG + SVG export of the finished Dipole\n";
 
 // Malformed command line: usage on stderr, exit code 2. The message box (the only channel on the Windows GUI subsystem, which has no
 // console) is shown only for the interactive mode; any invocation that names a headless mode must never block on a modal box.
@@ -54,12 +56,17 @@ int run(int argc, char** argv) {
   efgui::AppOptions opt;
   bool headlessRequested = false;  // even a malformed headless invocation counts: it must not show a message box
   for (int i = 1; i < argc; ++i) {
-    if (std::strcmp(argv[i], "--smoke") == 0 || std::strcmp(argv[i], "--screenshot") == 0) headlessRequested = true;
+    if (std::strcmp(argv[i], "--smoke") == 0 || std::strcmp(argv[i], "--screenshot") == 0 || std::strcmp(argv[i], "--export") == 0)
+      headlessRequested = true;
   }
   for (int i = 1; i < argc; ++i) {
     const std::string a = argv[i];
     if (a == "--smoke") {
       opt.smoke = true;
+    } else if (a == "--export") {
+      if (i + 1 >= argc) return usageError("--export needs <dir>.", headlessRequested);
+      opt.exportMode = true;
+      opt.exportDir = argv[++i];
     } else if (a == "--screenshot") {
       if (i + 2 >= argc) return usageError("--screenshot needs <slug> and <out.png>.", headlessRequested);
       opt.screenshot = true;
@@ -107,6 +114,7 @@ int run(int argc, char** argv) {
   }
   if (opt.smoke) return app.runSmoke();
   if (opt.screenshot) return app.runScreenshot();
+  if (opt.exportMode) return app.runExportMode();
   return app.runInteractive();
 }
 }  // namespace

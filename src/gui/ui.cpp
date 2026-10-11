@@ -390,6 +390,15 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
       ImGui::Separator();
       if (ImGui::MenuItem("Close Tab", efapp::shortcutLabel("W", env.mac).c_str(), false, hasTabs)) ui.closeSerial = ui.activeSerial;
       ImGui::Separator();
+      // EXP-01/02 (D-06): export replaces MFC's printing. Only a finished tab has a complete scene, so a busy or
+      // failed tab greys the submenu out.
+      const efapp::Tab* active = ws.find(ui.activeSerial);
+      if (ImGui::BeginMenu("Export", active != nullptr && active->state == efapp::TabState::Done)) {
+        if (ImGui::MenuItem("PNG...", nullptr, false, active != nullptr && active->state == efapp::TabState::Done)) ui.exportRequest = 1;
+        if (ImGui::MenuItem("SVG...", nullptr, false, active != nullptr && active->state == efapp::TabState::Done)) ui.exportRequest = 2;
+        ImGui::EndMenu();
+      }
+      ImGui::Separator();
       if (ImGui::MenuItem("Exit", efapp::shortcutLabel("Q", env.mac).c_str())) ui.requestQuit = true;
       ImGui::EndMenu();
     }

@@ -89,6 +89,15 @@ jobs:
           mkdir -p parity-out
           ./zig-out/bin/ef-cli --all --out-dir parity-out --expect tools/parity/expected-counts.csv | tee parity-out/summary.txt
 
+      # EXP-01/02: the GUI's own export path (menu -> save dialog -> renderPng/renderSvg between frames) with fixed
+      # inputs must produce exactly the ef-cli oracle's bytes for the same preset, style and view.
+      - name: Headless GUI export equals the ef-cli oracle
+        run: |
+          mkdir -p gui-out/export
+          ./zig-out/bin/ElectricField --export gui-out/export | tee gui-out/export/export.txt
+          cmp gui-out/export/dipole.png parity-out/dipole.png
+          cmp gui-out/export/dipole.svg parity-out/dipole.svg
+
       - name: Upload SVG/PNG parity artifacts
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

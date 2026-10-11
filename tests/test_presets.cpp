@@ -1,16 +1,40 @@
+// The 9 preset charge tables are a committed snapshot of the original MFC ConfigDocs.cpp (the MFC tree was
+// deleted in Phase 4). src/core/ef/presets.cpp must reproduce these values exactly; the QA-05 visual
+// baselines in docs/baseline/mfc/ were rendered by the original app from the same charges.
 #include "doctest/doctest.h"
 
-#include <cstdio>
-#include <cstdlib>
-#include <fstream>
-#include <regex>
-#include <sstream>
-#include <string>
-#include <vector>
+#include <cstddef>
 
 #include "ef/presets.hpp"
 
 using namespace ef;
+
+namespace {
+
+struct Expect {
+  int charge;
+  double x, y;
+};
+
+struct DocExpect {
+  const char* slug;
+  int count;
+  Expect charges[4];
+};
+
+constexpr DocExpect kSnapshot[9] = {
+    {"dipole", 2, {{1, -2.0, 0.0}, {-1, 2.0, 0.0}, {0, 0.0, 0.0}, {0, 0.0, 0.0}}},
+    {"two-equal-charges", 2, {{1, -2.0, 0.0}, {1, 2.0, 0.0}, {0, 0.0, 0.0}, {0, 0.0, 0.0}}},
+    {"two-unequal-charges-same-sign", 2, {{1, -2.0, 0.0}, {2, 2.0, 0.0}, {0, 0.0, 0.0}, {0, 0.0, 0.0}}},
+    {"two-unequal-charges-different-signs", 2, {{2, -2.0, 0.0}, {-1, 2.0, 0.0}, {0, 0.0, 0.0}, {0, 0.0, 0.0}}},
+    {"quadrupole", 4, {{1, -1.5, -1.5}, {-1, 1.5, -1.5}, {-1, -1.5, 1.5}, {1, 1.5, 1.5}}},
+    {"four-charges-same-sign", 4, {{1, -3.0, 0.0}, {1, -1.0, 0.0}, {1, 1.0, 0.0}, {1, 3.0, 0.0}}},
+    {"two-dipoles-same-direction", 4, {{1, -3.0, 0.0}, {-1, -1.0, 0.0}, {1, 1.0, 0.0}, {-1, 3.0, 0.0}}},
+    {"two-dipoles-opposed-direction", 4, {{1, -3.0, 0.0}, {-1, -1.0, 0.0}, {-1, 1.0, 0.0}, {1, 3.0, 0.0}}},
+    {"parallel-dipoles", 4, {{1, -1.5, -1.5}, {-1, 1.5, -1.5}, {1, -1.5, 1.5}, {-1, 1.5, 1.5}}},
+};
+
+}  // namespace
 
 TEST_CASE("nine presets, in the MFC document-template order, with the .rc display names") {
   static_assert(kPresetCount == 9, "");
@@ -20,43 +44,16 @@ TEST_CASE("nine presets, in the MFC document-template order, with the .rc displa
   for (std::size_t i = 0; i < kPresetCount; ++i) CHECK(presets()[i].displayName == names[i]);
 }
 
-TEST_CASE("preset charges equal ElectricField/ConfigDocs.cpp (parsed from the MFC source)") {
-  // The test runs with cwd = repository root (build.zig: run_tests.setCwd). Phase 4 deletes ElectricField/ and this check.
-  std::ifstream in("ElectricField/ConfigDocs.cpp");
-  // D-17 (WR-05): FAIL, never skip: a wrong cwd must not silently remove the oracle. (Phase 4 replaces this by a committed snapshot.)
-  REQUIRE_MESSAGE(in.good(), "ElectricField/ConfigDocs.cpp not readable (cwd must be the repository root)");
-  std::stringstream ss;
-  ss << in.rdbuf();
-  const std::string src = ss.str();
-
-  // split into OnNewDocument bodies and collect (charge, x, y) in push_back order
-  std::vector<std::vector<PresetCharge>> docs;
-  const std::regex token(R"(IMPLEMENT_DYNCREATE\(|charge\.charge\s*=\s*(-?\d+)\s*;|charge\.position\s*=\s*Vector2D<double>\(\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*\)\s*;|push_back\(charge\))");
-  PresetCharge cur{1, 0, 0};
-  for (auto it = std::sregex_iterator(src.begin(), src.end(), token); it != std::sregex_iterator(); ++it) {
-    const std::smatch& m = *it;
-    if (m.str(0).rfind("IMPLEMENT_DYNCREATE", 0) == 0) {
-      docs.emplace_back();
-      cur = PresetCharge{1, 0, 0};  // reset per document: Charge(int value = 1) default, position (0,0)
-    } else if (m[1].matched) {
-      cur.charge = std::stoi(m[1]);
-    } else if (m[2].matched) {
-      cur.x = std::stod(m[2]);
-      cur.y = std::stod(m[3]);
-    } else {
-      REQUIRE(!docs.empty());  // push_back(charge) before the first IMPLEMENT_DYNCREATE would be UB on docs.back()
-      docs.back().push_back(cur);
-    }
-  }
-  // the first IMPLEMENT_DYNCREATE match inside ConfigDocs.cpp is the first document; there are 9
-  REQUIRE(docs.size() == kPresetCount);
+TEST_CASE("preset charges equal the committed snapshot of the MFC ConfigDocs.cpp") {
+  static_assert(kPresetCount == sizeof(kSnapshot) / sizeof(kSnapshot[0]), "");
   for (std::size_t i = 0; i < kPresetCount; ++i) {
     CAPTURE(presets()[i].slug);
-    REQUIRE(static_cast<int>(docs[i].size()) == presets()[i].count);
-    for (std::size_t k = 0; k < docs[i].size(); ++k) {
-      CHECK(docs[i][k].charge == presets()[i].charges[k].charge);
-      CHECK(docs[i][k].x == doctest::Approx(presets()[i].charges[k].x));
-      CHECK(docs[i][k].y == doctest::Approx(presets()[i].charges[k].y));
+    CHECK(presets()[i].slug == kSnapshot[i].slug);
+    REQUIRE(presets()[i].count == kSnapshot[i].count);
+    for (int k = 0; k < kSnapshot[i].count; ++k) {
+      CHECK(presets()[i].charges[static_cast<std::size_t>(k)].charge == kSnapshot[i].charges[static_cast<std::size_t>(k)].charge);
+      CHECK(presets()[i].charges[static_cast<std::size_t>(k)].x == doctest::Approx(kSnapshot[i].charges[static_cast<std::size_t>(k)].x));
+      CHECK(presets()[i].charges[static_cast<std::size_t>(k)].y == doctest::Approx(kSnapshot[i].charges[static_cast<std::size_t>(k)].y));
     }
   }
 }

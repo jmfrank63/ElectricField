@@ -69,6 +69,17 @@ jobs:
           echo "PE subsystem=$sub"
           test "$sub" -eq 2
 
+      # BUILD-06: the MFC version is gone; nothing may reintroduce MFC / Win32-GUI / Direct2D / GDI code or
+      # MSVC project files. (assets/ElectricField.rc is the icon-only resource from phase-3 D-14; src/gui/main.cpp's
+      # windows.h include is the headless crash-dialog suppression, not a UI dependency. Prose comments that name
+      # Direct2D as replaced history are fine.)
+      - name: MFC-free tree guard (BUILD-06)
+        run: |
+          if git grep -inE "afx|CWinApp|CWnd|CDocument|CMDIF|d2d1|dwrite\.h|gdi32|GetProfileInt|\.vcxproj|\.sln" \
+              -- src tests tests_gui tools build.zig build.zig.zon README.md; then
+            echo "MFC / Win32 / Direct2D / GDI remnants found (see above)"; exit 1
+          fi
+
       # Full UI smoke (D-16): scripted session through the real GUI code path on the dummy driver.
       - name: Headless GUI start-up (SDL dummy video driver + software renderer)
         run: zig build smoke -Doptimize=ReleaseFast --summary all

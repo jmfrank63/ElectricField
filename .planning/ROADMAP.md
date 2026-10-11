@@ -137,7 +137,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & Portable Physics Core | 4/4 | In Progress|  |
+| 1. Foundation & Portable Physics Core | 4/4 | Complete | 2026-10-11 (verification superseded by Phase 3 approval) |
 | 2. Compute Engine & Headless Parity | 4/4 | Complete    | 2026-10-10 |
 | 3. GUI Shell | 3/3 | Complete    | 2026-10-11 |
-| 4. Options, Export & MFC Removal | 0/TBD | Not started | - |
+| 4. Options, Export & MFC Removal | 3/3 | Verifying | - |

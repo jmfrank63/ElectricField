@@ -88,6 +88,30 @@ equipotentials per preset, and the GUI's export is checked to be byte-identical 
 `docs/baseline/mfc/` images were rendered by the original MFC application and are the visual reference
 for the port.
 
+### Command API
+
+Every menu entry and every editor/collection operation is callable through a text command interface
+(`docs/api.md` has the full reference). Scripts run the real application headlessly - what a script
+does is what a user clicking through the UI does:
+
+```sh
+ElectricField --script scenario.efscript --user-dir sandbox --out results.txt
+```
+
+```text
+# scenario.efscript
+tab.new-empty
+app.wait-done
+charge.move 0 1 0
+editor.undo
+app.expect charges=1,0,0
+collection.save
+app.quit
+```
+
+`app.state` dumps the full UI state (collection, open tabs, charges, grid, view) and `app.expect`
+asserts against it - the same mechanism the CI script tests in `tests/scripts/` use on all three OSes.
+
 ## Options and configuration files
 
 Everything lives in the per-user config directory (`SDL_GetPrefPath("ElectricField", "ElectricField")`):

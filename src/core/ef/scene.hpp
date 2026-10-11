@@ -9,6 +9,7 @@
 
 #include "ef/charge_system.hpp"
 #include "ef/finalizer.hpp"
+#include "ef/grid.hpp"
 
 namespace ef {
 
@@ -28,6 +29,9 @@ struct DrawStyle {
   float potentialThickness = 1.f;
   float chargeRadiusPx = 25.f;
 };
+
+// The snap grid of a tab (v2.3 GRID): re-exported from the core since v2.4 (renderScene draws it).
+using GridSettings = ef::GridSettings;
 
 // Output surface: the world point `centre` appears at the canvas centre (v2.2 zoom/pan), y up,
 // `pixelsPerUnit` device pixels per world unit (view only, never physics). centre defaults to the
@@ -75,5 +79,11 @@ class Painter {
 
 // Draw order as in TheElectricField::Draw: electric lines, potential lines, charges.
 void renderScene(Painter& painter, const FieldScene& scene, const DrawStyle& style, const View& view);
+
+// v2.4 BUG-01: optional grid pass. The grid is drawn AFTER the background fill and BEFORE the paths and
+// charges (so the canvas background can never overwrite it, and the lines stay on top of the grid).
+// nullptr draws nothing (ef-cli / SVG export stay gridless).
+struct GridSettings;
+void renderScene(Painter& painter, const FieldScene& scene, const DrawStyle& style, const View& view, const GridSettings* grid);
 
 }  // namespace ef

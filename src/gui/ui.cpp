@@ -92,44 +92,6 @@ void viewControls(efapp::Tab& t, const ef::View& view, const ef::Vec2& mouseWorl
   }
 }
 
-// v2.3 GRID-02: draws the grid behind the scene. Cartesian: straight lines every `spacing`; polar:
-// circles every `spacing` (radial step) and rays every `angleStepDeg`, both around the grid origin.
-void drawGrid(ImDrawList* dl, const efapp::GridSettings& g, const ef::View& view, ImVec2 p) {
-  if (!(g.spacing > 0.0)) return;
-  const double ppu = view.pixelsPerUnit;
-  const ImU32 col = IM_COL32(170, 170, 170, 130);
-  if (!g.polar) {
-    const double wx0 = view.centre.X - (view.widthPx / 2.0) / ppu, wx1 = view.centre.X + (view.widthPx / 2.0) / ppu;
-    const double wy0 = view.centre.Y - (view.heightPx / 2.0) / ppu, wy1 = view.centre.Y + (view.heightPx / 2.0) / ppu;
-    const long nx0 = (long)std::ceil((wx0 - g.origin.X) / g.spacing), nx1 = (long)std::floor((wx1 - g.origin.X) / g.spacing);
-    const long ny0 = (long)std::ceil((wy0 - g.origin.Y) / g.spacing), ny1 = (long)std::floor((wy1 - g.origin.Y) / g.spacing);
-    if (nx1 - nx0 > 2000 || ny1 - ny0 > 2000) return;  // a pathological spacing must not stall the frame
-    for (long i = nx0; i <= nx1; ++i) {
-      const float sx = static_cast<float>(p.x + view.widthPx / 2.0 + (g.origin.X + i * g.spacing - view.centre.X) * ppu);
-      dl->AddLine(ImVec2(sx, p.y), ImVec2(sx, p.y + view.heightPx), col);
-    }
-    for (long j = ny0; j <= ny1; ++j) {
-      const float sy = static_cast<float>(p.y + view.heightPx / 2.0 - (g.origin.Y + j * g.spacing - view.centre.Y) * ppu);
-      dl->AddLine(ImVec2(p.x, sy), ImVec2(p.x + view.widthPx, sy), col);
-    }
-  } else {
-    const ef::Vec2 c = efapp::canvasFromWorld(view, p.x, p.y, g.origin);
-    const ImVec2 oc(static_cast<float>(c.X), static_cast<float>(c.Y));
-    const double farX = std::max(std::abs(static_cast<double>(p.x) - c.X), std::abs(static_cast<double>(p.x + view.widthPx) - c.X));
-    const double farY = std::max(std::abs(static_cast<double>(p.y) - c.Y), std::abs(static_cast<double>(p.y + view.heightPx) - c.Y));
-    const double maxR = std::sqrt(farX * farX + farY * farY) / ppu;
-    const long nMax = static_cast<long>(maxR / g.spacing) + 1;
-    if (nMax > 2000) return;
-    for (long i = 1; i <= nMax; ++i) dl->AddCircle(oc, static_cast<float>(i * g.spacing * ppu), col, 0, 1.f);
-    const int rays = static_cast<int>(std::round(360.0 / std::clamp(g.angleStepDeg, 1.0, 180.0)));
-    const double stepRad = g.angleStepDeg * 3.1415926535897932346 / 180.0;
-    for (int a = 0; a < rays; ++a) {
-      const double ang = a * stepRad;
-      dl->AddLine(oc, ImVec2(oc.x + static_cast<float>(std::cos(ang) * maxR * ppu * 1.5), oc.y - static_cast<float>(std::sin(ang) * maxR * ppu * 1.5)), col);
-    }
-  }
-}
-
 void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   ImVec2 avail = ImGui::GetContentRegionAvail();
   avail.x = std::max(1.f, avail.x);
@@ -145,10 +107,10 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   view.pixelsPerUnit *= t.zoom;  // v2.2 zoom
   view.centre = t.centre;        // v2.2 pan
   const ef::DrawStyle style = efapp::scaledStyle(env.drawStyle, env.k);  // user draw options (Phase 4), scaled for HiDPI
-  if (t.grid.visible) drawGrid(dl, t.grid, view, p);  // v2.3 GRID-02: the grid is drawn behind the scene
   {
     efrender::ImGuiPainter painter(dl, p);
-    ef::renderScene(painter, t.scene, style, view);
+    // v2.4 BUG-01: the grid is a core pass inside renderScene (after the background, before the lines).
+    ef::renderScene(painter, t.scene, style, view, t.grid.visible ? &t.grid : nullptr);
   }
   ui.canvasMin = p;
   ui.canvasMax = ImVec2(p.x + static_cast<float>(view.widthPx), p.y + static_cast<float>(view.heightPx));
@@ -239,6 +201,7 @@ void aboutModal(UiState& ui, const UiEnv& env) {
   ImGui::PopStyleVar();
   ui.aboutVisible = open;
   if (!open) return;
+  if (ui.closePopups) { ui.linkNote.clear(); ImGui::CloseCurrentPopup(); ImGui::EndPopup(); return; }
 
   const float icon = 48.f * env.k;
   if (env.aboutIcon)
@@ -320,6 +283,7 @@ void chooserModal(UiState& ui, const UiEnv& env) {
   ImGui::PopStyleVar();
   ui.chooserVisible = open;
   if (!open) return;
+  if (ui.closePopups) { ImGui::CloseCurrentPopup(); ImGui::EndPopup(); return; }
 
   const std::size_t cfgCount = ui.userConfigs.size();
   const std::size_t rowCount = cfgCount + 1;  // configurations of the collection, then "Empty Configuration"
@@ -385,6 +349,15 @@ void removeConfigModal(UiState& ui, const UiEnv& env) {
     ImGui::OpenPopup("Remove configuration?##removecfg");
     ui.removeConfigOpen = false;
   }
+  if (ui.closePopups) {
+    if (ui.removeConfigName.empty()) return;  // nothing pending, nothing open
+    ui.removeConfigName.clear();
+    if (ImGui::BeginPopupModal("Remove configuration?##removecfg", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse)) {
+      ImGui::CloseCurrentPopup();
+      ImGui::EndPopup();
+    }
+    return;
+  }
   if (ui.removeConfigName.empty()) return;  // nothing pending
   ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.f * env.k, 16.f * env.k));
@@ -428,6 +401,7 @@ void newCollectionModal(UiState& ui, const UiEnv& env) {
   ImGui::PopStyleVar();
   ui.newCollectionVisible = open;
   if (!open) return;
+  if (ui.closePopups) { ImGui::CloseCurrentPopup(); ImGui::EndPopup(); return; }
 
   ImGui::TextUnformatted("Name of the new collection:");
   ImGui::Dummy(ImVec2(0.f, 4.f * env.k));
@@ -468,6 +442,7 @@ void leaveConfirmModal(UiState& ui, const UiEnv& env) {
   ImGui::PopStyleVar();
   ui.leaveConfirmVisible = open;
   if (!open) return;
+  if (ui.closePopups) { ImGui::CloseCurrentPopup(); ImGui::EndPopup(); return; }
   ImGui::PushTextWrapPos(280.f * env.k);
   ImGui::TextWrapped("%s", ui.leaveText.c_str());
   ImGui::PopTextWrapPos();
@@ -503,6 +478,7 @@ void saveAsModal(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
     ui.saveAsConfirmVisible = false;
     return;
   }
+  if (ui.closePopups) { ui.saveAsError.clear(); ImGui::CloseCurrentPopup(); ImGui::EndPopup(); return; }
   const efapp::Tab* t = ws.find(ui.activeSerial);
   if (!t) {  // the tab vanished under the dialog: nothing to save
     ImGui::CloseCurrentPopup();
@@ -542,7 +518,6 @@ void saveAsModal(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
     else if (efapp::findUserConfig(ui.userConfigs, candidate.name) >= 0)
       ImGui::OpenPopup("Overwrite?##saveas");
     else {
-      ui.saveAsSerial = ui.activeSerial;
       ui.saveAsApply = candidate;
       close = true;
     }
@@ -561,7 +536,6 @@ void saveAsModal(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
       candidate.name = ui.saveAsName;
       candidate.charges.reserve(t->field.charges.size());
       for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::PresetCharge{c.charge, c.position.X, c.position.Y});
-      ui.saveAsSerial = ui.activeSerial;
       ui.saveAsApply = candidate;
       ImGui::CloseCurrentPopup();
       close = true;
@@ -591,6 +565,7 @@ void optionsModal(UiState& ui, const UiEnv& env) {
   ImGui::PopStyleVar();
   ui.optionsVisible = open;
   if (!open) return;
+  if (ui.closePopups) { ImGui::CloseCurrentPopup(); ImGui::EndPopup(); return; }
   efapp::OptionsEdit& e = ui.optionsEdit;
 
   if (ImGui::BeginTabBar("##optiontabs")) {
@@ -873,6 +848,93 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   ImGui::EndChild();
 }
 
+// v2.4 COL-07: Save Collection As - the current collection's configurations under a new name; the tabs
+// stay open and belong to the new collection (App consumes saveCollectionAsApply).
+void saveCollectionAsModal(UiState& ui, const UiEnv& env) {
+  const ImGuiViewport* vp = ImGui::GetMainViewport();
+  if (ui.saveCollectionAsOpen) {
+    ImGui::OpenPopup("Save Collection As##savecol");
+    ui.saveCollectionAsOpen = false;
+    ui.saveCollectionAsBuf[0] = '\0';
+  }
+  ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.f * env.k, 16.f * env.k));
+  const bool open = ImGui::BeginPopupModal("Save Collection As##savecol", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
+  ImGui::PopStyleVar();
+  ui.saveCollectionAsVisible = open;
+  if (!open) return;
+  if (ui.closePopups) {
+    ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+    return;
+  }
+
+  ImGui::TextUnformatted("Save the current collection's configurations under a new name:");
+  ImGui::Dummy(ImVec2(0.f, 4.f * env.k));
+  ImGui::InputText("##colname", ui.saveCollectionAsBuf, sizeof(ui.saveCollectionAsBuf));
+  ImGui::Dummy(ImVec2(0.f, 8.f * env.k));
+
+  const ImGuiStyle& st = ImGui::GetStyle();
+  const float w1 = ImGui::CalcTextSize("Save").x + 2 * st.FramePadding.x;
+  const float w2 = ImGui::CalcTextSize("Cancel").x + 2 * st.FramePadding.x;
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - (w1 + 8.f * env.k + w2));
+  bool close = false;
+  if (ImGui::Button("Save")) {
+    const std::string name = efapp::ini::trim(std::string(ui.saveCollectionAsBuf));
+    if (!name.empty()) {
+      ui.saveCollectionAsApply = name;
+      close = true;
+    }
+  }
+  ImGui::SetItemDefaultFocus();
+  ImGui::SameLine(0.f, 8.f * env.k);
+  if (ImGui::Button("Cancel")) close = true;
+  if (ImGui::IsKeyPressed(ImGuiKey_Escape)) close = true;
+  if (close) ImGui::CloseCurrentPopup();
+  ImGui::EndPopup();
+}
+
+// v2.4 TAB-03: rename a tab (from the tab context menu; the panel's name field does the same by typing).
+void renameModal(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
+  const ImGuiViewport* vp = ImGui::GetMainViewport();
+  if (ui.renameOpen) {
+    ImGui::OpenPopup("Rename Tab##rename");
+    ui.renameOpen = false;
+    if (const efapp::Tab* t = ws.find(ui.renameSerial)) std::snprintf(ui.renameBuf, sizeof(ui.renameBuf), "%s", t->title.c_str());
+  }
+  ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.f * env.k, 16.f * env.k));
+  const bool open = ImGui::BeginPopupModal("Rename Tab##rename", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
+  ImGui::PopStyleVar();
+  ui.renameVisible = open;
+  if (!open) return;
+  if (ui.closePopups) {
+    ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+    return;
+  }
+
+  ImGui::InputText("##tabname", ui.renameBuf, sizeof(ui.renameBuf));
+  ImGui::Dummy(ImVec2(0.f, 8.f * env.k));
+  const ImGuiStyle& st = ImGui::GetStyle();
+  const float w1 = ImGui::CalcTextSize("Rename").x + 2 * st.FramePadding.x;
+  const float w2 = ImGui::CalcTextSize("Cancel").x + 2 * st.FramePadding.x;
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - (w1 + 8.f * env.k + w2));
+  bool close = false;
+  if (ImGui::Button("Rename")) {
+    if (ui.renameBuf[0] != '\0') {
+      ws.rename(ui.renameSerial, ui.renameBuf);
+      close = true;
+    }
+  }
+  ImGui::SetItemDefaultFocus();
+  ImGui::SameLine(0.f, 8.f * env.k);
+  if (ImGui::Button("Cancel")) close = true;
+  if (ImGui::IsKeyPressed(ImGuiKey_Escape)) close = true;
+  if (close) ImGui::CloseCurrentPopup();
+  ImGui::EndPopup();
+}
+
 }  // namespace
 
 ImGuiStyle makeBaseStyle() {
@@ -926,7 +988,8 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
   ui.failedShown = false;
   ui.overlayMin = ui.overlayMax = ImVec2(0, 0);
   const bool modalOpen = ui.chooserVisible || ui.aboutVisible || ui.optionsVisible || ui.saveAsVisible || ui.newCollectionVisible ||
-                         ui.leaveConfirmVisible || ui.openChooser || ui.openAbout || ui.openOptions || ui.openSaveAs || ui.newCollectionOpen ||
+                         ui.leaveConfirmVisible || ui.saveCollectionAsVisible || ui.renameVisible || ui.openChooser || ui.openAbout ||
+                         ui.openOptions || ui.openSaveAs || ui.newCollectionOpen || ui.saveCollectionAsOpen || ui.renameOpen ||
                          !ui.removeConfigName.empty();
   const bool hasTabs = !ws.tabs().empty();
 
@@ -934,7 +997,7 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
   if (!modalOpen) {
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_N)) ui.openChooser = true;
     if (hasTabs && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_W)) ui.closeSerial = ui.activeSerial;
-    if (hasTabs && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S)) ui.openSaveAs = true;
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S)) ui.saveCollectionRequest = true;  // v2.4 COL-06 (no tabs needed)
     if (hasTabs && ImGui::Shortcut(ImGuiKey_F5)) ui.calculateActive = true;  // v2 CALC-01
     if (hasTabs && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Z)) ui.undoRequest = true;  // v2.3 EDIT-12
     if (hasTabs && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Y)) ui.redoRequest = true;
@@ -947,8 +1010,14 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
       if (ImGui::MenuItem("New Configuration...", efapp::shortcutLabel("N", env.mac).c_str())) ui.openChooser = true;
       if (ImGui::MenuItem("New Collection...")) ui.newCollectionOpen = true;
       ImGui::Separator();
+      // v2.4 COL-06..08 / TAB-02..04: the collection-centric File menu; per-configuration saving moved to
+      // "Save Configuration As..." (also in the tab context menu).
       if (ImGui::MenuItem("Close Tab", efapp::shortcutLabel("W", env.mac).c_str(), false, hasTabs)) ui.closeSerial = ui.activeSerial;
-      if (ImGui::MenuItem("Save As...", efapp::shortcutLabel("S", env.mac).c_str(), false, hasTabs)) ui.openSaveAs = true;
+      if (ImGui::MenuItem("Close Collection")) ui.closeCollectionRequest = true;
+      ImGui::Separator();
+      if (ImGui::MenuItem("Save Collection", efapp::shortcutLabel("S", env.mac).c_str())) ui.saveCollectionRequest = true;
+      if (ImGui::MenuItem("Save Collection As...")) ui.saveCollectionAsOpen = true;
+      if (ImGui::MenuItem("Save Configuration As...", nullptr, false, hasTabs)) ui.openSaveAs = true;
       if (ImGui::MenuItem("Calculate All")) ui.calculateAll = true;  // v2.2 COL-03
       ImGui::Separator();
       // EXP-01/02 (D-06): export replaces MFC's printing. Only a finished tab has a complete scene, so a busy or
@@ -1056,6 +1125,23 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
           drawEditorPanel(t, ui, env);
           ImGui::EndTabItem();
         }
+        // v2.4 TAB-04: right-click a tab -> Close / Rename / Save Configuration As / Calculate.
+        if (ImGui::BeginPopupContextItem("##tabctx")) {
+          if (ImGui::MenuItem("Close Tab")) ui.closeSerial = t.serial;
+          if (ImGui::MenuItem("Rename...")) {
+            ui.renameSerial = t.serial;
+            ui.renameOpen = true;
+          }
+          if (ImGui::MenuItem("Save Configuration As...")) {
+            ui.activeSerial = ui.selectSerial = t.serial;
+            ui.openSaveAs = true;
+          }
+          if (ImGui::MenuItem("Calculate")) {
+            ui.activeSerial = ui.selectSerial = t.serial;
+            ui.calculateActive = true;
+          }
+          ImGui::EndPopup();
+        }
         if (!open) toClose.push_back(t.serial);
       }
       ImGui::EndTabBar();
@@ -1078,6 +1164,8 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
   newCollectionModal(ui, env);
   leaveConfirmModal(ui, env);
   removeConfigModal(ui, env);
+  saveCollectionAsModal(ui, env);
+  renameModal(ws, ui, env);
 
   ImGui::End();
 

@@ -3,6 +3,7 @@
 //   ElectricField --smoke              headless start-up + tab lifecycle + UI-surface check (CI)
 //   ElectricField --screenshot <slug> <out.png> [--size WxH] [--scale k] [--modal about|chooser]   headless render of one finished tab
 //   ElectricField --export <dir>       headless PNG + SVG export of the finished Dipole (CI parity check)
+//   ElectricField --script <file> [--user-dir <dir>] [--out <results>] [--lenient]   headless command-API runner (v2.4)
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>  // Windows GUI subsystem: must be in the TU that defines main
 
@@ -41,7 +42,9 @@ const char* const kUsage =
     "  ElectricField                                  interactive application\n"
     "  ElectricField --smoke                          headless start-up check\n"
     "  ElectricField --screenshot <slug> <out.png> [--size WxH] [--scale k] [--modal about|chooser]\n"
-    "  ElectricField --export <dir>                   headless PNG + SVG export of the finished Dipole\n";
+    "  ElectricField --export <dir>                   headless PNG + SVG export of the finished Dipole\n"
+    "  ElectricField --script <file> [--user-dir <dir>] [--out <results>] [--lenient]\n"
+    "                                                 headless command-API runner (see docs/api.md)\n";
 
 // Malformed command line: usage on stderr, exit code 2. The message box (the only channel on the Windows GUI subsystem, which has no
 // console) is shown only for the interactive mode; any invocation that names a headless mode must never block on a modal box.
@@ -56,13 +59,23 @@ int run(int argc, char** argv) {
   efgui::AppOptions opt;
   bool headlessRequested = false;  // even a malformed headless invocation counts: it must not show a message box
   for (int i = 1; i < argc; ++i) {
-    if (std::strcmp(argv[i], "--smoke") == 0 || std::strcmp(argv[i], "--screenshot") == 0 || std::strcmp(argv[i], "--export") == 0)
+    if (std::strcmp(argv[i], "--smoke") == 0 || std::strcmp(argv[i], "--screenshot") == 0 || std::strcmp(argv[i], "--export") == 0 ||
+        std::strcmp(argv[i], "--script") == 0)
       headlessRequested = true;
   }
   for (int i = 1; i < argc; ++i) {
     const std::string a = argv[i];
     if (a == "--smoke") {
       opt.smoke = true;
+    } else if (a == "--script") {
+      if (i + 1 >= argc) return usageError("--script needs <file>.", headlessRequested);
+      opt.script = true;
+      opt.scriptFile = argv[++i];
+    } else if (a == "--user-dir") {
+      if (i + 1 >= argc) return usageError("--user-dir needs <dir>.", headlessRequested);
+      opt.userDir = argv[++i];
+    } else if (a == "--lenient") {
+      opt.lenient = true;
     } else if (a == "--export") {
       if (i + 1 >= argc) return usageError("--export needs <dir>.", headlessRequested);
       opt.exportMode = true;
@@ -91,6 +104,9 @@ int run(int argc, char** argv) {
       if (endp == argv[i] || *endp != 0 || !(k > 0.0))
         return usageError(std::string("Invalid --scale \"") + argv[i] + "\" (expected a number > 0).", headlessRequested);
       opt.scaleOverride = static_cast<float>(k);
+    } else if (a == "--out") {
+      if (i + 1 >= argc) return usageError("--out needs <file>.", headlessRequested);
+      opt.resultsFile = argv[++i];
     } else if (a.rfind("-psn_", 0) == 0) {
       // macOS passes a process serial number to apps launched from Finder; not an option
     } else {
@@ -115,6 +131,7 @@ int run(int argc, char** argv) {
   if (opt.smoke) return app.runSmoke();
   if (opt.screenshot) return app.runScreenshot();
   if (opt.exportMode) return app.runExportMode();
+  if (opt.script) return app.runScript();
   return app.runInteractive();
 }
 }  // namespace

@@ -1,0 +1,9 @@
+# 40-session: open tabs + edits, then quit (paired with 41 in the same user dir)
+tab.new-empty
+app.wait-done
+charge.move 0 2 0
+config.open Dipole
+app.wait-done
+tab.rename "My Dipole"
+app.expect tabs=2
+app.quit force

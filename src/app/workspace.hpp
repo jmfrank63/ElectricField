@@ -14,23 +14,15 @@
 #include "ef/presets.hpp"
 #include "ef/scene.hpp"
 #include "ef/session.hpp"
+#include "ef/grid.hpp"
 
 namespace efapp {
+
+using GridSettings = ef::GridSettings;  // v2.4: the type moved into the core (renderScene draws it)
 
 // Continuous calculation (v2.2 CALC-03): after an edit, recompute once this many seconds have passed
 // without a further edit (a drag arms the deadline on every frame, so one recompute fires when it settles).
 inline constexpr double kAutoRecalcDelay = 0.35;
-
-// v2.3 GRID: the snap grid of a tab. active = snapping on; visible = drawn; Cartesian (spacing) or
-// polar (radial spacing + angular step), both around a definable origin.
-struct GridSettings {
-  bool active = false;
-  bool visible = false;
-  bool polar = false;
-  ef::Vec2 origin;
-  double spacing = 0.5;
-  double angleStepDeg = 15.0;
-};
 
 // Tab::preset value for tabs that do not come from the built-in registry (user configurations, the empty
 // configuration). Everything downstream keys off the title, so the value is inert.

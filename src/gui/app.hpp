@@ -18,12 +18,19 @@ struct AppOptions {
   bool smoke = false;
   bool screenshot = false;   // --screenshot <slug> <png> [--size WxH] [--scale k] [--modal about|chooser]
   bool exportMode = false;   // --export <dir>: headless PNG + SVG export of the finished Dipole (EXP-01/02, CI)
+  bool script = false;       // --script <file>: headless command API runner (v2.4 API-01/02)
+  bool lenient = false;      // --lenient: keep executing after a failed command
   std::string slug, out;
   std::string exportDir;
+  std::string scriptFile;    // the command file
+  std::string resultsFile;   // optional --out: per-command results (default stdout)
+  std::string userDir;       // --user-dir <dir>: redirect all user-file paths (options/Collections/sessions)
   std::string modal;         // open that modal before the screenshot is taken
   float scaleOverride = 0.f; // headless HiDPI check: forces k
   int width = 0, height = 0;
-  bool headless() const { return smoke || screenshot || exportMode; }
+  bool headless() const { return smoke || screenshot || exportMode || script; }
+  // Script mode sets its user-file paths up (sandbox by default); smoke/screenshot never touch them.
+  bool usesUserDir() const { return !headless() || script; }
 };
 
 class App {
@@ -40,6 +47,9 @@ class App {
   int runSmoke();
   int runScreenshot();
   int runExportMode();
+  int runScript();
+  // The command API (v2.4): every menu action and editor/collection operation, callable by name.
+  std::string command(const std::string& line);
   void shutdown();  // idempotent: cancel sessions, then ImGui backends, context, renderer, window, SDL
 
  private:
@@ -58,13 +68,21 @@ class App {
   void exportStep();
   void runExport(const std::string& path);
   void exportFailed(const std::string& what);
-  // Collections (v2.2): switch / create; the session is saved with the collection tag on both paths, and
-  // the unsaved-changes prompt (leaveConfirmed_) gates the actual switch.
-  std::filesystem::path collectionFile(const std::string& name) const;
-  void refreshCollections();
+  std::filesystem::path collectionFile(const std::string& name) const;  void refreshCollections();
   void switchCollection(const std::string& name);
   void createCollection(const std::string& name);
   void saveSessionNow();
+  void writeSessionPointer();
+  // The common body of switching/closing/starting: become `name`'s collection (load its configurations)
+  // and, when restoreTabs, reopen its saved tabs from Sessions/<name>.ini.
+  void enterCollection(const std::string& name, bool restoreTabs);
+  // Collection-level actions behind the commands and the menu (v2.4 COL-06..08).
+  std::string saveCollection();               // merge matching edited tabs, write the collection file
+  std::string saveCollectionAs(const std::string& name);
+  std::string closeCollection();
+  std::string removeConfiguration(const std::string& name);
+  std::string saveConfigurationAs(const std::string& name);
+  void mergeDirtyTabsInto(std::vector<efapp::UserConfig>& configs);
 
   AppOptions opt_;
   SDL_Window* window_ = nullptr;
@@ -83,7 +101,8 @@ class App {
   std::vector<efapp::UserConfig> userConfigs_;  // user configurations (v2 CFG-01); master list, mirrored into ui_
   std::filesystem::path configsPath_;           // configurations.ini; empty in headless modes
   std::filesystem::path configDir_;             // the user config directory (v2.1 SES-03: Help > Open Configuration Folder)
-  std::filesystem::path sessionPath_;           // session.ini (v2.1 SES-01); empty in headless modes
+  std::filesystem::path sessionPath_;           // session.ini (v2.4: the POINTER file, collection = <name>)
+  std::filesystem::path sessionsDir_;           // Sessions\ (v2.4 COL-09: one open-tab file per collection)
   std::filesystem::path collectionsDir_;        // Collections\ (v2.2 COL-01); empty in headless modes
   std::string currentCollection_ = "Original";  // v2.2 COL: the collection being worked on
   std::vector<std::string> collections_;        // known collection names (switcher)

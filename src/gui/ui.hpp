@@ -39,6 +39,15 @@ struct UiState {
   std::string leaveButton;       // "Quit anyway" / "Switch anyway"
   int leaveDecision = 0;         // 1 = leave anyway (consumed by App::frame)
   bool undoRequest = false, redoRequest = false;  // v2.3 EDIT-12 (Edit menu / Ctrl+Z, Ctrl+Y)
+  bool saveCollectionRequest = false;      // File > Save Collection (Ctrl+S, v2.4 COL-06)
+  bool closeCollectionRequest = false;     // File > Close Collection (v2.4 COL-08)
+  std::string saveCollectionAsApply;       // name from the Save Collection As modal (v2.4 COL-07)
+  bool saveCollectionAsOpen = false, saveCollectionAsVisible = false;
+  char saveCollectionAsBuf[128] = "";
+  bool renameOpen = false, renameVisible = false;  // tab rename modal (v2.4 TAB-03)
+  unsigned renameSerial = 0;
+  char renameBuf[128] = "";
+  bool closePopups = false;  // v2.4 BUG-02: a collection change closes every open modal exactly once
   std::string removeConfigName;  // v2.3 COL-05: right-clicked configuration awaiting confirmation
   bool removeConfigOpen = false; // the confirm popup was requested this frame
   std::string removeConfigApply; // confirmed removal; consumed by App::frame
@@ -55,7 +64,6 @@ struct UiState {
   double addX = 0.0, addY = 0.0;
   char tabNameBuf[128] = "";
   unsigned tabNameBufSerial = 0;
-  unsigned saveAsSerial = 0;  // the tab whose charges Save As stored (marked clean by App::frame)
   int exportRequest = 0;     // File > Export: 1 = PNG..., 2 = SVG... (consumed by App::frame, D-06)
   unsigned closeSerial = 0;  // request to close a tab (0 = none)
   // state carried between frames

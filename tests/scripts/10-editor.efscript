@@ -1,0 +1,22 @@
+# 10-editor: the editor core scenarios through the command API (v2.4)
+tab.new-empty
+app.wait-done
+app.expect state=done
+charge.move 0 1 0
+app.expect stale=1
+editor.undo
+app.expect charges=1,0,0
+editor.redo
+app.expect charges=1,1,0
+tab.esc
+app.expect stale=0
+app.expect charges=1,0,0
+charge.add 2 3 0
+app.expect charges=1,0,0;2,3,0
+charge.sign 1
+app.expect -2,3,0
+charge.value 1 -7
+app.expect -7,3,0
+charge.remove 1
+app.expect charges=1,0,0
+app.quit force

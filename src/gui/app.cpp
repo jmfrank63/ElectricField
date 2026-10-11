@@ -4,12 +4,19 @@
 #include <cstdio>
 #include <cfloat>
 #include <cstdlib>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 
 #include "app/session_file.hpp"
 #include "app/ui_logic.hpp"
 #include "app/ini_text.hpp"
+#include "app/configs.hpp"
+#include "app/options.hpp"
+#include "app/editor.hpp"
 #include "ef/presets.hpp"
 #include "ef/svg.hpp"
 #include "ef_build_info.h"
@@ -107,19 +114,34 @@ bool App::init(const AppOptions& opt, std::string& step, std::string& message) {
   env_.semver = EF_VERSION;
   env_.gitHash = EF_GIT_HASH;
   // User options (Phase 4, D-03), user configurations (v2 CFG-01) and the open-tab session (v2.1 SES-01)
-  // live in the per-user config directory. Headless modes skip both load and save so CI runs never depend
-  // on, or overwrite, user files.
-  bool restoredTabs = false;
-  if (!opt_.headless()) {
-    if (char* pref = SDL_GetPrefPath("ElectricField", "ElectricField")) {
-      const std::filesystem::path dir = std::filesystem::u8path(pref);  // SDL hands out UTF-8; u8path keeps non-ASCII intact
-      SDL_free(pref);
+  // live in the per-user config directory. Smoke/screenshot never touch user files; script mode always
+  // sets them up, in a sandbox by default and under --user-dir <dir> when given (v2.4 API-04).
+  if (opt_.usesUserDir()) {
+    std::filesystem::path dir;
+    if (!opt_.userDir.empty()) {
+      dir = std::filesystem::path(opt_.userDir);
+    } else if (!opt_.script) {
+      if (char* pref = SDL_GetPrefPath("ElectricField", "ElectricField")) {
+        dir = std::filesystem::u8path(pref);  // SDL hands out UTF-8; u8path keeps non-ASCII intact
+        SDL_free(pref);
+      }
+    } else {
+      // Script sandbox: a throwaway directory under the temp folder.
+      std::ostringstream sandbox;
+      sandbox << "ef-script-" << SDL_GetTicks();
+      dir = std::filesystem::temp_directory_path() / sandbox.str();
+      opt_.userDir = dir.string();
+    }
+    if (!dir.empty()) {
+      std::filesystem::create_directories(dir);
       configDir_ = dir;
       optionsPath_ = dir / "options.ini";
       options_ = efapp::loadOptions(optionsPath_);
       configsPath_ = dir / "configurations.ini";
       userConfigs_ = efapp::loadConfigs(configsPath_);
       sessionPath_ = dir / "session.ini";
+      sessionsDir_ = dir / "Sessions";
+      std::filesystem::create_directories(sessionsDir_);
       // v2.2 COL-01: the Original collection is seeded once with the built-ins + any legacy configurations.
       collectionsDir_ = dir / "Collections";
       std::filesystem::create_directories(collectionsDir_);
@@ -136,18 +158,18 @@ bool App::init(const AppOptions& opt, std::string& step, std::string& message) {
         std::string migErr;
         efapp::saveConfigs(original, seed, migErr);
       }
-      // COL-04: restore the current collection (and its tabs) from the session.
-      const efapp::SavedSession ses = efapp::loadSessionFull(sessionPath_);
-      currentCollection_ = std::filesystem::exists(collectionsDir_ / (ses.collection + ".ini")) ? ses.collection : std::string("Original");
-      userConfigs_ = efapp::loadConfigs(collectionFile(currentCollection_));
-      // SES-01: restore the open tabs (exact titles, charges, per-tab method, continuous calculation).
-      // Unknown method names fall back to the current default.
-      for (const efapp::SavedTab& s : ses.tabs) {
-        ef::ComputeParams params = options_.compute;
-        if (const std::optional<ef::Method> m = ef::methodFromName(s.method)) params.method = *m;
-        ws_.openRestored(s.title, s.preset, params, s.charges, s.autoRecalc);
-        restoredTabs = true;
+      // COL-09 (v2.4): session.ini is the pointer; the tabs live in Sessions/<Collection>.ini. A legacy
+      // session.ini that still carries tabs migrates once into Sessions/<its collection>.ini.
+      const efapp::SavedSession legacy = efapp::loadSessionFull(sessionPath_);
+      std::string startCollection = legacy.collection;
+      if (!legacy.tabs.empty()) {
+        std::string migErr;
+        if (efapp::saveSession(sessionsDir_ / (legacy.collection + ".ini"), legacy.tabs, legacy.collection, migErr))
+          efapp::saveSession(sessionPath_, {}, legacy.collection, migErr);  // now a pure pointer
       }
+      // The pointer names the collection; fall back to Original when the file is gone.
+      currentCollection_ = std::filesystem::exists(collectionFile(startCollection)) ? startCollection : std::string("Original");
+      enterCollection(currentCollection_, true);
       refreshCollections();
     }
   }
@@ -219,6 +241,7 @@ void App::frame() {
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
   drawUi(ws_, ui_, env_);
+  ui_.closePopups = false;  // the modal guards saw it for exactly one frame (v2.4 BUG-02)
   if (ui_.optionsToApply) {  // Options accepted (Phase 4, D-05): draw options re-render every open tab next frame,
     // computation options reach tabs opened afterwards; persist immediately (MFC parity: saved on Apply, D-03).
     options_ = *ui_.optionsToApply;
@@ -232,18 +255,27 @@ void App::frame() {
     }
   }
   exportStep();  // EXP-01/02: start the save dialog / run a chosen export on the UI thread between frames
-  if (ui_.saveAsApply) {  // v2 CFG-03 / v2.2 COL: Save As accepted - upsert into the CURRENT collection
-    std::vector<std::string> reserved;
-    for (const ef::Preset& p : ef::presets()) reserved.emplace_back(p.displayName);
-    efapp::upsertUserConfig(userConfigs_, *ui_.saveAsApply, reserved);
-    if (efapp::Tab* saved = ws_.find(ui_.saveAsSerial)) saved->dirty = false;  // stored: no longer unsaved work
+  if (ui_.saveAsApply) {  // v2 CFG-03 / v2.4 COL: Save Configuration As accepted (the modal pre-validated;
+    // overwriting an existing name was confirmed in the modal, and saveConfigurationAs upserts in place)
+    const std::string err = saveConfigurationAs(ui_.saveAsApply->name);
+    if (!err.empty()) std::fprintf(stderr, "configurations: %s\n", err.c_str());
     ui_.saveAsApply.reset();
     pacer_.notifyActivity();
-    refreshCollections();  // a first Save As in a fresh collection creates it on disk
-    if (!collectionsDir_.empty()) {
-      std::string err;
-      if (!efapp::saveConfigs(collectionFile(currentCollection_), userConfigs_, err)) std::fprintf(stderr, "configurations: %s\n", err.c_str());
-    }
+  }
+  if (ui_.saveCollectionRequest) {  // v2.4 COL-06
+    ui_.saveCollectionRequest = false;
+    const std::string err = saveCollection();
+    if (!err.empty()) std::fprintf(stderr, "collection: %s\n", err.c_str());
+  }
+  if (ui_.closeCollectionRequest) {  // v2.4 COL-08
+    ui_.closeCollectionRequest = false;
+    const std::string err = closeCollection();
+    if (!err.empty()) std::fprintf(stderr, "collection: %s\n", err.c_str());
+  }
+  if (!ui_.saveCollectionAsApply.empty()) {  // v2.4 COL-07
+    const std::string err = saveCollectionAs(ui_.saveCollectionAsApply);
+    ui_.saveCollectionAsApply.clear();
+    if (!err.empty()) std::fprintf(stderr, "collection: %s\n", err.c_str());
   }
   // v2.2 COL-02/03: collection switching (gated by the unsaved-changes prompt) and Calculate All.
   if (ui_.leaveDecision != 0) {
@@ -255,6 +287,7 @@ void App::frame() {
         leaveConfirmed_ = false;
       } else {
         quit_ = true;  // the next iterate() leaves the loop and the session is saved
+        ui_.closePopups = true;  // the prompt closes with the answer (v2.4 BUG-02; the app may still render a frame)
       }
     } else {
       leaveConfirmed_ = false;
@@ -294,18 +327,10 @@ void App::frame() {
     for (const efapp::UserConfig& c : userConfigs_) ws_.openUser(c.name, c.charges);
     pacer_.notifyActivity();
   }
-  if (!ui_.removeConfigApply.empty()) {  // v2.3 COL-05
-    for (std::size_t i = 0; i < userConfigs_.size(); ++i)
-      if (userConfigs_[i].name == ui_.removeConfigApply) {
-        userConfigs_.erase(userConfigs_.begin() + static_cast<std::ptrdiff_t>(i));
-        break;
-      }
+  if (!ui_.removeConfigApply.empty()) {  // v2.3 COL-05 / v2.4: removal through the shared action
+    const std::string err = removeConfiguration(ui_.removeConfigApply);
     ui_.removeConfigApply.clear();
-    ui_.userConfigs = userConfigs_;
-    if (!collectionsDir_.empty()) {
-      std::string err;
-      if (!efapp::saveConfigs(collectionFile(currentCollection_), userConfigs_, err)) std::fprintf(stderr, "configurations: %s\n", err.c_str());
-    }
+    if (!err.empty()) std::fprintf(stderr, "configurations: %s\n", err.c_str());
   }
   if (ui_.openConfigFolder) {  // v2.1 SES-03
     ui_.openConfigFolder = false;
@@ -718,6 +743,20 @@ bool App::smokeExtras(std::string& report) {
                   std::to_string(dt->field.charges[0].position.X) + ")");
   }
   ws_.find(es)->autoRecalc = false;
+
+  // v2.4 BUG-02: the leave prompt must CLOSE after its answer (it used to stay open and lock the UI).
+  ws_.find(es)->dirty = true;  // make quitting "unsaved"
+  quit_ = true;                // iterate() opens the leave prompt instead of quitting
+  iterate();
+  if (!ui_.leaveConfirmVisible) return fail("the leave prompt did not open for a dirty tab");
+  ui_.leaveDecision = 1;  // "Quit anyway": the pending quit proceeds and the prompt must close
+  iterate();
+  frames(2);  // the closePopups guard draws once
+  if (ui_.leaveConfirmVisible || ui_.openLeaveConfirm) return fail("BUG-02: the leave prompt stayed open after its answer");
+  quit_ = false;  // the prompt flow is done; the smoke continues
+  leaveConfirmed_ = false;
+  if (!ws_.find(es)) return fail("BUG-02: the tab vanished during the leave-prompt flow");
+  ws_.find(es)->dirty = false;
   ui_.closeSerial = es;
   frames(2);
 
@@ -941,25 +980,48 @@ void App::refreshCollections() {
   if (std::find(collections_.begin(), collections_.end(), currentCollection_) == collections_.end()) collections_.push_back(currentCollection_);
 }
 
-void App::switchCollection(const std::string& name) {
-  if (name == currentCollection_) return;
-  saveSessionNow();  // the tabs of the collection being left
+void App::writeSessionPointer() {
+  if (sessionPath_.empty()) return;
+  std::string err;
+  if (!efapp::saveSession(sessionPath_, {}, currentCollection_, err)) std::fprintf(stderr, "session: %s\n", err.c_str());
+}
+
+void App::enterCollection(const std::string& name, const bool restoreTabs) {
   currentCollection_ = name;
   userConfigs_ = efapp::loadConfigs(collectionFile(name));
-  ws_.closeAll();  // a fresh start in the new collection (the user creates configurations there)
-  saveSessionNow();  // empty session tagged with the new collection
+  ui_.userConfigs = userConfigs_;
+  if (restoreTabs) {
+    const efapp::SavedSession ses = efapp::loadSessionFull(sessionsDir_ / (name + ".ini"));
+    for (const efapp::SavedTab& s : ses.tabs) {
+      ef::ComputeParams params = options_.compute;
+      if (const std::optional<ef::Method> m = ef::methodFromName(s.method)) params.method = *m;
+      ws_.openRestored(s.title, s.preset, params, s.charges, s.autoRecalc, s.grid);
+    }
+    pacer_.notifyActivity();
+  }
+  writeSessionPointer();
+  ui_.closePopups = true;  // a collection change invalidates every open modal (v2.4 BUG-02)
+}
+
+void App::switchCollection(const std::string& name) {
+  if (name == currentCollection_) return;
+  saveSessionNow();  // the tabs of the collection being left -> Sessions/<old>.ini
+  ws_.closeAll();
+  enterCollection(name, true);  // the target's tabs come back
   refreshCollections();
-  pacer_.notifyActivity();
 }
 
 void App::createCollection(const std::string& name) {
   std::string err;
   efapp::saveConfigs(collectionFile(name), {}, err);  // empty collection
-  switchCollection(name);
+  saveSessionNow();  // the tabs of the collection being left
+  ws_.closeAll();    // a new collection starts with no tabs and no configurations
+  enterCollection(name, false);
+  refreshCollections();
 }
 
 void App::saveSessionNow() {
-  if (sessionPath_.empty()) return;
+  if (sessionsDir_.empty() || currentCollection_.empty()) return;
   std::vector<efapp::SavedTab> saved;
   for (const auto& tp : ws_.tabs()) {
     efapp::SavedTab s;
@@ -967,12 +1029,591 @@ void App::saveSessionNow() {
     s.preset = tp->preset;
     s.method = std::string(ef::info(tp->params.method).name);
     s.autoRecalc = tp->autoRecalc;
+    s.grid = tp->grid;
     s.charges.reserve(tp->field.charges.size());
     for (const ef::Charge& c : tp->field.charges) s.charges.push_back(ef::PresetCharge{c.charge, c.position.X, c.position.Y});
     saved.push_back(std::move(s));
   }
   std::string err;
-  if (!efapp::saveSession(sessionPath_, saved, currentCollection_, err)) std::fprintf(stderr, "session: %s\n", err.c_str());
+  if (!efapp::saveSession(sessionsDir_ / (currentCollection_ + ".ini"), saved, currentCollection_, err)) std::fprintf(stderr, "session: %s\n", err.c_str());
+}
+
+// --- Collection-level actions (v2.4 COL-06..08, API-01) --------------------------------------------------
+
+// Open tabs whose edits are not stored yet get merged into matching configurations (the tab title's
+// base name = the configuration name); the merged tabs are marked clean.
+void App::mergeDirtyTabsInto(std::vector<efapp::UserConfig>& configs) {
+  for (const auto& tp : ws_.tabs()) {
+    efapp::Tab& t = *tp;
+    if (!t.dirty) continue;
+    const std::string name = efapp::baseTitle(t.title);
+    const int at = efapp::findUserConfig(configs, name);
+    if (at < 0) continue;
+    efapp::UserConfig& c = configs[static_cast<std::size_t>(at)];
+    c.charges.clear();
+    c.charges.reserve(t.field.charges.size());
+    for (const ef::Charge& ch : t.field.charges) c.charges.push_back(ef::PresetCharge{ch.charge, ch.position.X, ch.position.Y});
+    t.dirty = false;
+  }
+}
+
+std::string App::saveCollection() {
+  mergeDirtyTabsInto(userConfigs_);
+  std::string err;
+  if (!efapp::saveConfigs(collectionFile(currentCollection_), userConfigs_, err)) return "error: " + err;
+  return {};
+}
+
+std::string App::saveCollectionAs(const std::string& name) {
+  const std::string trimmed = efapp::ini::trim(name);
+  if (trimmed.empty()) return "error: the collection name is empty";
+  mergeDirtyTabsInto(userConfigs_);
+  std::string err;
+  if (!efapp::saveConfigs(collectionFile(trimmed), userConfigs_, err)) return "error: " + err;
+  currentCollection_ = trimmed;  // the tabs stay open; they belong to the new collection now
+  refreshCollections();
+  saveSessionNow();    // Sessions/<new>.ini = the open tabs
+  writeSessionPointer();
+  return {};
+}
+
+std::string App::closeCollection() {
+  const std::string err = saveCollection();
+  saveSessionNow();  // the closing collection keeps its tabs for the next open
+  ws_.closeAll();
+  if (currentCollection_ != "Original") {
+    enterCollection("Original", true);  // Original's tabs come back
+    refreshCollections();
+  } else {
+    saveSessionNow();  // closing Original: an empty session tags Original
+  }
+  pacer_.notifyActivity();
+  return err;
+}
+
+std::string App::removeConfiguration(const std::string& name) {
+  const int at = efapp::findUserConfig(userConfigs_, name);
+  if (at < 0) return "error: no configuration named '" + name + "'";
+  userConfigs_.erase(userConfigs_.begin() + static_cast<std::ptrdiff_t>(at));
+  std::string err;
+  if (!efapp::saveConfigs(collectionFile(currentCollection_), userConfigs_, err)) return "error: " + err;
+  ui_.userConfigs = userConfigs_;
+  return {};
+}
+
+std::string App::saveConfigurationAs(const std::string& name) {
+  const efapp::Tab* t = ws_.find(ui_.activeSerial);
+  if (!t) return "error: no active tab";
+  std::vector<std::string> reserved;
+  for (const ef::Preset& p : ef::presets()) reserved.emplace_back(p.displayName);
+  efapp::UserConfig candidate;
+  candidate.name = name;
+  candidate.charges.reserve(t->field.charges.size());
+  for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::PresetCharge{c.charge, c.position.X, c.position.Y});
+  if (efapp::upsertUserConfig(userConfigs_, candidate, reserved) != efapp::UpsertResult::OK) return "error: invalid or reserved name";
+  std::string err;
+  if (!efapp::saveConfigs(collectionFile(currentCollection_), userConfigs_, err)) return "error: " + err;
+  if (efapp::Tab* saved = ws_.find(ui_.activeSerial)) saved->dirty = false;
+  ui_.userConfigs = userConfigs_;
+  refreshCollections();
+  return {};
+}
+
+// --- The command API (v2.4 API-01/02) --------------------------------------------------------------------
+
+namespace {
+
+// Whitespace-separated tokens; double quotes group a token (configuration/collection names with spaces).
+std::vector<std::string> apiTokens(const std::string& line) {
+  std::vector<std::string> out;
+  std::string cur;
+  bool inQuote = false, started = false;
+  for (const char c : line) {
+    if (inQuote) {
+      if (c == '"')
+        inQuote = false;
+      else
+        cur += c;
+    } else if (c == '"') {
+      inQuote = true;
+      started = true;
+    } else if (c == ' ' || c == '\t') {
+      if (!cur.empty() || started) {
+        out.push_back(std::move(cur));
+        cur.clear();
+        started = false;
+      }
+    } else {
+      cur += c;
+    }
+  }
+  if (!cur.empty() || started) out.push_back(std::move(cur));
+  return out;
+}
+
+bool parseApiInt(const std::string& s, long long& out) {
+  try {
+    std::size_t pos = 0;
+    out = std::stoll(s, &pos);
+    return pos == s.size();
+  } catch (...) {
+    return false;
+  }
+}
+
+bool parseApiDouble(const std::string& s, double& out) {
+  try {
+    std::size_t pos = 0;
+    out = std::stod(s, &pos);
+    return pos == s.size() && std::isfinite(out);
+  } catch (...) {
+    return false;
+  }
+}
+
+bool apiOnOff(const std::string& s, bool& out) {
+  const std::string v = efapp::ini::toLower(s);
+  if (v == "on" || v == "true" || v == "1") {
+    out = true;
+    return true;
+  }
+  if (v == "off" || v == "false" || v == "0") {
+    out = false;
+    return true;
+  }
+  return false;
+}
+
+}  // namespace
+
+// The single dispatcher behind the script runner (and step by step the menus, v2.4 D-01). Returns "ok"
+// or "error: <why>"; app.state returns a multi-line dump of the whole UI state.
+std::string App::command(const std::string& line) {
+  const std::vector<std::string> tok = apiTokens(line);
+  if (tok.empty()) return "ok";  // blank lines are not errors
+  const std::string& cmd = tok[0];
+  std::string e;  // shared error slot for the helpers below
+  auto need = [&](std::size_t n) -> std::string {
+    if (tok.size() - 1 < n) return "error: " + cmd + " needs " + std::to_string(n) + " argument(s)";
+    return {};
+  };
+  auto activeTab = [&]() -> efapp::Tab* {
+    efapp::Tab* t = ws_.find(ui_.activeSerial);
+    if (!t) e = "error: no active tab";
+    return t;
+  };
+  // A typed position lands on the grid when snapping is active (GRID-04).
+  auto typedWorld = [&](efapp::Tab& t, double x, double y) { return t.grid.active ? efapp::editor::snapPoint(t.grid, ef::Vec2{x, y}) : ef::Vec2{x, y}; };
+
+  if (cmd == "app.state") {
+    std::ostringstream os;
+    os << "collection=" << currentCollection_ << '\n';
+    os << "collections=";
+    for (std::size_t i = 0; i < collections_.size(); ++i) os << (i ? "|" : "") << collections_[i];
+    os << '\n';
+    os << "configs=";
+    for (std::size_t i = 0; i < userConfigs_.size(); ++i) os << (i ? "|" : "") << userConfigs_[i].name;
+    os << '\n';
+    const auto& tabs = ws_.tabs();
+    os << "tabs=" << tabs.size() << '\n';
+    for (const auto& tp : tabs) {
+      const efapp::Tab& t = *tp;
+      os << "tab serial=" << t.serial << " title=" << t.title << " state="
+         << (t.state == efapp::TabState::Computing ? "computing" : t.state == efapp::TabState::Done ? "done" : "failed")
+         << " method=" << ef::info(t.params.method).name << " autocalc=" << (t.autoRecalc ? 1 : 0)
+         << " stale=" << (t.stale ? 1 : 0) << " dirty=" << (t.dirty ? 1 : 0) << " selected=" << t.selected << " lines=" << t.scene.electric.size()
+         << " zoom=" << t.zoom << " centre=" << t.centre.X << "," << t.centre.Y << " grid=" << (t.grid.active ? 1 : 0) << ','
+         << (t.grid.visible ? 1 : 0) << ',' << (t.grid.polar ? 1 : 0) << ',' << t.grid.origin.X << ',' << t.grid.origin.Y << ','
+         << t.grid.spacing << ',' << t.grid.angleStepDeg << " charges=";
+      for (std::size_t i = 0; i < t.field.charges.size(); ++i)
+        os << (i ? ";" : "") << t.field.charges[i].charge << ',' << t.field.charges[i].position.X << ',' << t.field.charges[i].position.Y;
+      os << '\n';
+    }
+    return os.str();
+  }
+  if (cmd == "app.quit") {
+    if (tok.size() >= 2 && tok[1] == "force") {
+      quit_ = true;
+      return "ok";
+    }
+    if (ws_.anyDirty()) return "error: unsaved changes (use: app.quit force)";
+    quit_ = true;
+    return "ok";
+  }
+  if (cmd == "app.frames") {
+    if (const std::string e = need(1); !e.empty()) return e;
+    long long n = 0;
+    if (!parseApiInt(tok[1], n) || n < 0 || n > 10000) return "error: invalid frame count";
+    frames(static_cast<int>(n));
+    return "ok";
+  }
+  if (cmd == "app.wait-done") {
+    unsigned serial = ui_.activeSerial;
+    unsigned timeoutMs = 60000;
+    if (tok.size() >= 2 && tok[1] != "active") {
+      long long s = 0;
+      if (!parseApiInt(tok[1], s) || s <= 0) return "error: invalid serial";
+      serial = static_cast<unsigned>(s);
+    }
+    if (tok.size() >= 3) {
+      long long ms = 0;
+      if (!parseApiInt(tok[2], ms) || ms <= 0) return "error: invalid timeout";
+      timeoutMs = static_cast<unsigned>(ms);
+    }
+    if (!pumpUntilDone(serial, timeoutMs)) return "error: the tab did not finish in " + std::to_string(timeoutMs) + " ms";
+    return "ok";
+  }
+  if (cmd == "app.open-config-folder") return "ok";  // a real desktop action; headless scripts record the intent
+
+  if (cmd == "collection.new") {
+    if (const std::string e = need(1); !e.empty()) return e;
+    const std::string name = efapp::ini::trim(tok[1]);
+    if (name.empty()) return "error: the collection name is empty";
+    createCollection(name);
+    return "ok";
+  }
+  if (cmd == "collection.switch") {
+    if (const std::string e = need(1); !e.empty()) return e;
+    const std::string name = efapp::ini::trim(tok[1]);
+    if (std::find(collections_.begin(), collections_.end(), name) == collections_.end()) return "error: no collection named '" + name + "'";
+    switchCollection(name);
+    return "ok";
+  }
+  if (cmd == "collection.save") {
+    const std::string err = saveCollection();
+    return err.empty() ? "ok" : err;
+  }
+  if (cmd == "collection.save-as") {
+    if (const std::string e = need(1); !e.empty()) return e;
+    return saveCollectionAs(tok[1]);
+  }
+  if (cmd == "collection.close") {
+    const std::string err = closeCollection();
+    return err.empty() ? "ok" : err;
+  }
+
+  if (cmd == "config.open") {
+    if (const std::string e = need(1); !e.empty()) return e;
+    const int at = efapp::findUserConfig(userConfigs_, tok[1]);
+    if (at < 0) return "error: no configuration named '" + tok[1] + "'";
+    const efapp::UserConfig& c = userConfigs_[static_cast<std::size_t>(at)];
+    ui_.selectSerial = ws_.openUser(c.name, c.charges);
+    ui_.activeSerial = ui_.selectSerial;
+    pacer_.notifyActivity();
+    return "ok";
+  }
+  if (cmd == "config.remove") {
+    if (const std::string e = need(1); !e.empty()) return e;
+    return removeConfiguration(tok[1]);
+  }
+  if (cmd == "config.save-as") {
+    if (const std::string e = need(1); !e.empty()) return e;
+    return saveConfigurationAs(tok[1]);
+  }
+
+  if (cmd == "tab.new-empty") {
+    ui_.selectSerial = ws_.openEmpty();
+    ui_.activeSerial = ui_.selectSerial;
+    pacer_.notifyActivity();
+    return "ok";
+  }
+  if (cmd == "tab.close") {
+    unsigned serial = ui_.activeSerial;
+    if (tok.size() >= 2 && tok[1] != "active") {
+      long long s = 0;
+      if (!parseApiInt(tok[1], s) || s <= 0) return "error: invalid serial";
+      serial = static_cast<unsigned>(s);
+    }
+    if (serial == 0) return "error: no active tab";
+    if (!ws_.close(serial)) return "error: no tab with serial " + std::to_string(serial);
+    if (ui_.activeSerial == serial) ui_.activeSerial = ws_.tabs().empty() ? 0 : ws_.tabs().back()->serial;
+    return "ok";
+  }
+  if (cmd == "tab.select") {
+    if (const std::string e = need(1); !e.empty()) return e;
+    long long s = 0;
+    if (!parseApiInt(tok[1], s) || s <= 0) return "error: invalid serial";
+    if (!ws_.find(static_cast<unsigned>(s))) return "error: no tab with serial " + tok[1];
+    ui_.selectSerial = ui_.activeSerial = static_cast<unsigned>(s);
+    return "ok";
+  }
+  if (cmd == "tab.rename") {
+    if (const std::string e = need(1); !e.empty()) return e;
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    if (!ws_.rename(ui_.activeSerial, tok[1])) return "error: the name is empty";
+    return "ok";
+  }
+  if (cmd == "tab.calculate" || cmd == "tab.calculate-all") {
+    if (cmd == "tab.calculate-all") {
+      ws_.closeAll();
+      for (const efapp::UserConfig& c : userConfigs_) ws_.openUser(c.name, c.charges);
+      pacer_.notifyActivity();
+      return "ok";
+    }
+    unsigned serial = ui_.activeSerial;
+    if (tok.size() >= 2 && tok[1] != "active") {
+      long long s = 0;
+      if (!parseApiInt(tok[1], s) || s <= 0) return "error: invalid serial";
+      serial = static_cast<unsigned>(s);
+    }
+    if (serial == 0) return "error: no active tab";
+    if (!ws_.calculate(serial)) return "error: the tab is computing or unknown";
+    return "ok";
+  }
+  if (cmd == "tab.esc") {
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    if (!efapp::editor::revertToComputed(*t)) return "error: nothing to revert (the tab is not stale)";
+    return "ok";
+  }
+  if (cmd == "editor.undo" || cmd == "editor.redo") {
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    if (cmd == "editor.undo" ? !efapp::editor::undo(*t) : !efapp::editor::redo(*t)) return "error: nothing to " + (cmd == "editor.undo" ? std::string("undo") : std::string("redo"));
+    return "ok";
+  }
+
+  if (cmd == "charge.add") {
+    if (const std::string e = need(3); !e.empty()) return e;
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    long long v = 0;
+    double x = 0, y = 0;
+    if (!parseApiInt(tok[1], v) || !parseApiDouble(tok[2], x) || !parseApiDouble(tok[3], y)) return "error: charge.add needs <value> <x> <y>";
+    if (!efapp::editor::addCharge(*t, typedWorld(*t, x, y), static_cast<int>(v))) return "error: the tab is computing";
+    return "ok";
+  }
+  auto selectedOrArg = [&](std::string& err) -> int {
+    efapp::Tab* t = activeTab();
+    if (!t) {
+      err = e;
+      return -1;
+    }
+    if (tok.size() >= 2) {
+      long long i = 0;
+      if (!parseApiInt(tok[1], i) || i < 0) {
+        err = "error: invalid charge index";
+        return -1;
+      }
+      return static_cast<int>(i);
+    }
+    if (t->selected < 0) {
+      err = "error: no charge selected";
+      return -1;
+    }
+    return t->selected;
+  };
+  if (cmd == "charge.select") {
+    if (const std::string e = need(1); !e.empty()) return e;
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    long long i = 0;
+    if (!parseApiInt(tok[1], i) || i < 0 || static_cast<std::size_t>(i) >= t->field.charges.size()) return "error: invalid charge index";
+    t->selected = static_cast<int>(i);
+    return "ok";
+  }
+  if (cmd == "charge.move") {
+    if (const std::string e = need(3); !e.empty()) return e;
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    long long i = 0;
+    double x = 0, y = 0;
+    if (!parseApiInt(tok[1], i) || i < 0 || static_cast<std::size_t>(i) >= t->field.charges.size()) return "error: invalid charge index";
+    if (!parseApiDouble(tok[2], x) || !parseApiDouble(tok[3], y)) return "error: charge.move needs <index> <x> <y>";
+    if (!efapp::editor::moveCharge(*t, static_cast<std::size_t>(i), typedWorld(*t, x, y))) return "error: the tab is computing";
+    return "ok";
+  }
+  if (cmd == "charge.value") {
+    if (const std::string e = need(2); !e.empty()) return e;
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    const int at = selectedOrArg(e);
+    if (at < 0) return e;
+    long long v = 0;
+    if (!parseApiInt(tok[at == t->selected && tok.size() < 3 ? 1 : 2], v)) return "error: invalid value";
+    const int delta = static_cast<int>(v) - t->field.charges[static_cast<std::size_t>(at)].charge;
+    if (!efapp::editor::stepValue(*t, delta)) return "error: the tab is computing";
+    return "ok";
+  }
+  if (cmd == "charge.sign") {
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    const int at = selectedOrArg(e);
+    if (at < 0) return e;
+    t->selected = at;
+    if (!efapp::editor::flipSign(*t)) return "error: the tab is computing";
+    return "ok";
+  }
+  if (cmd == "charge.remove") {
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    const int at = selectedOrArg(e);
+    if (at < 0) return e;
+    t->selected = at;
+    if (!efapp::editor::removeSelected(*t)) return "error: cannot remove the last charge";
+    return "ok";
+  }
+
+  if (cmd == "view.zoom") {
+    if (const std::string e = need(1); !e.empty()) return e;
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    double f = 0;
+    if (!parseApiDouble(tok[1], f) || f <= 0) return "error: invalid zoom factor";
+    efapp::editor::zoomAt(*t, f, t->centre);
+    return "ok";
+  }
+  if (cmd == "view.pan") {
+    if (const std::string e = need(2); !e.empty()) return e;
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    double dx = 0, dy = 0;
+    if (!parseApiDouble(tok[1], dx) || !parseApiDouble(tok[2], dy)) return "error: view.pan needs <dpx> <dpy>";
+    const double ppu = 100.0 * static_cast<double>(efapp::clampScale(k_)) * t->zoom;
+    efapp::editor::pan(*t, ef::Vec2{dx, dy}, ppu);
+    return "ok";
+  }
+  if (cmd == "view.reset") {
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    efapp::editor::resetView(*t);
+    return "ok";
+  }
+
+  if (cmd == "grid.set") {
+    if (const std::string e = need(2); !e.empty()) return e;
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    efapp::GridSettings& g = t->grid;
+    const std::string what = tok[1];
+    if (what == "active" || what == "visible" || what == "polar") {
+      bool v = false;
+      if (tok.size() < 3 || !apiOnOff(tok[2], v)) return "error: grid.set " + what + " needs on|off";
+      if (what == "active") g.active = v;
+      if (what == "visible") g.visible = v;
+      if (what == "polar") g.polar = v;
+      return "ok";
+    }
+    if (what == "origin") {
+      if (const std::string e2 = need(3); !e2.empty()) return e2;
+      double x = 0, y = 0;
+      if (!parseApiDouble(tok[2], x) || !parseApiDouble(tok[3], y)) return "error: grid.set origin needs <x> <y>";
+      g.origin = ef::Vec2{x, y};
+      return "ok";
+    }
+    if (what == "spacing") {
+      if (const std::string e2 = need(2); !e2.empty()) return e2;
+      double s = 0;
+      if (!parseApiDouble(tok[2], s) || s <= 0) return "error: invalid spacing";
+      g.spacing = s;
+      return "ok";
+    }
+    if (what == "angle") {
+      if (const std::string e2 = need(2); !e2.empty()) return e2;
+      double a = 0;
+      if (!parseApiDouble(tok[2], a) || a <= 0 || a > 180) return "error: invalid angle step";
+      g.angleStepDeg = a;
+      return "ok";
+    }
+    return "error: unknown grid property '" + what + "'";
+  }
+
+  if (cmd == "options.set") {
+    if (const std::string e = need(2); !e.empty()) return e;
+    const std::string key = tok[1];
+    ef::ComputeParams& c = options_.compute;
+    if (key == "lines") {
+      long long v = 0;
+      if (!parseApiInt(tok[2], v)) return "error: invalid value";
+      c.linesPerUnitCharge = static_cast<unsigned>(v);
+    } else if (key == "threads") {
+      long long v = 0;
+      if (!parseApiInt(tok[2], v)) return "error: invalid value";
+      c.numThreads = static_cast<unsigned>(v);
+    } else if (key == "interval") {
+      double v = 0;
+      if (!parseApiDouble(tok[2], v)) return "error: invalid value";
+      c.potentialInterval = v;
+    } else if (key == "equipotentials") {
+      bool v = false;
+      if (!apiOnOff(tok[2], v)) return "error: options.set equipotentials needs on|off";
+      c.calculateEquipotentials = v;
+    } else if (key == "method") {
+      const std::optional<ef::Method> m = ef::methodFromName(efapp::ini::toLower(tok[2]));
+      if (!m) return "error: unknown method '" + tok[2] + "'";
+      c.method = *m;
+    } else {
+      return "error: unknown option '" + key + "'";
+    }
+    efapp::Options o;
+    o.compute = c;
+    o.draw = options_.draw;
+    const std::string verr = efapp::validate(o);
+    if (!verr.empty()) return "error: " + verr;
+    ws_.setDefaults(c);
+    if (!optionsPath_.empty()) {
+      std::string err;
+      if (!efapp::saveOptions(optionsPath_, options_, err)) return "error: " + err;
+    }
+    return "ok";
+  }
+
+  if (cmd == "app.expect") {  // script assertion: the state dump must contain the text
+    if (const std::string e2 = need(1); !e2.empty()) return e2;
+    const std::string state = command("app.state");
+    if (state.find(tok[1]) == std::string::npos) return "error: app.state does not contain '" + tok[1] + "'";
+    return "ok";
+  }
+
+  return "error: unknown command '" + cmd + "' (see docs/api.md)";
+}
+
+// --script <file> (v2.4 API-02): headless command runner. One result line per command ("[ok]" /
+// "[error] ..."); app.state results are printed verbatim. Strict by default: the first error stops the
+// run with exit 1; --lenient continues.
+int App::runScript() {
+  std::ifstream in(opt_.scriptFile);
+  if (!in) {
+    std::fprintf(stderr, "script: cannot open %s\n", opt_.scriptFile.c_str());
+    return 2;
+  }
+  std::ofstream resultsFile;
+  if (!opt_.resultsFile.empty()) {
+    resultsFile.open(opt_.resultsFile);
+    if (!resultsFile) {
+      std::fprintf(stderr, "script: cannot open the results file %s\n", opt_.resultsFile.c_str());
+      return 2;
+    }
+  }
+  std::ostream& out = opt_.resultsFile.empty() ? static_cast<std::ostream&>(std::cout) : static_cast<std::ostream&>(resultsFile);
+  std::printf("script sandbox userDir=%s collection=%s\n", opt_.userDir.c_str(), currentCollection_.c_str());
+  out << "script sandbox userDir=" << opt_.userDir << " collection=" << currentCollection_ << '\n';
+  out.flush();
+
+  std::string lineRaw;
+  bool failed = false;
+  while (!failed && std::getline(in, lineRaw)) {
+    while (!lineRaw.empty() && (lineRaw.back() == '\r' || lineRaw.back() == ' ' || lineRaw.back() == '\t')) lineRaw.pop_back();
+    if (lineRaw.empty() || lineRaw[0] == '#') continue;
+    const std::string result = command(lineRaw);
+    if (result.rfind("error:", 0) == 0) {
+      out << "[error] " << lineRaw << " -> " << result << '\n';
+      out.flush();
+      std::printf("[error] %s -> %s\n", lineRaw.c_str(), result.c_str());
+      std::fflush(stdout);
+      failed = true;
+    } else {
+      out << "[ok] " << lineRaw << '\n';
+      if (result != "ok") out << result;  // app.state dumps its body
+      out.flush();
+    }
+  }
+  // Leave the workspace consistent. A clean quit (app.quit) keeps the tabs for the next start; an error
+  // abort leaves nothing computing but preserves the session as it was.
+  if (!quit_) ws_.closeAll();
+  saveSessionNow();
+  return failed ? 1 : 0;
 }
 
 // --export <dir>: the export path CI exercises on all three OSes (D-06). Fixed inputs — the Dipole preset with

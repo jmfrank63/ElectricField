@@ -153,3 +153,37 @@ TEST_CASE("renderScene honours the view centre (v2.2 zoom/pan)") {
   CHECK(shifted.circles[0].c.x == doctest::Approx(0));
   CHECK(shifted.circles[0].c.y == doctest::Approx(100));
 }
+
+TEST_CASE("renderScene draws the grid between background and scene (v2.4 BUG-01)") {
+  Recorder r;
+  FieldScene scene;
+  scene.charges.push_back(SceneCharge{Vec2{0, 0}, 1});
+  ef::GridSettings g;
+  g.visible = true;
+  g.active = false;
+  g.spacing = 1.0;  // lines every 100 px on a 200 px view
+  renderScene(r, scene, DrawStyle{}, View{200, 200, 100.}, &g);
+  // 3 vertical + 3 horizontal lines cross the 200x200 view at spacing 1.0 (centred origin).
+  CHECK(r.strokes.size() >= 4);
+  bool gridColorSeen = false;
+  for (const auto& s : r.strokes)
+    if (s.color.r == 200 && s.color.g == 200 && s.color.b == 200) gridColorSeen = true;
+  CHECK(gridColorSeen);
+  // The charge is still drawn on top.
+  CHECK(r.circles.size() == 1);
+  CHECK(r.ended);
+
+  // nullptr (the ef-cli path) draws no grid.
+  Recorder r2;
+  renderScene(r2, scene, DrawStyle{}, View{200, 200, 100.});
+  bool gridInOracle = false;
+  for (const auto& s : r2.strokes)
+    if (s.color.r == 200 && s.color.g == 200 && s.color.b == 200) gridInOracle = true;
+  CHECK_FALSE(gridInOracle);
+
+  // visible=false draws nothing even when passed.
+  Recorder r3;
+  g.visible = false;
+  renderScene(r3, scene, DrawStyle{}, View{200, 200, 100.}, &g);
+  CHECK(r3.strokes.empty());
+}

@@ -1,0 +1,8 @@
+# 41-session-restore: the same user dir as 40 - both tabs must come back with their edits (v2.4 COL-09)
+app.expect tabs=2
+app.expect "title=My Dipole"
+app.expect "title=Empty Configuration 1"
+app.expect charges=1,2,0
+tab.close
+app.expect tabs=1
+app.quit force

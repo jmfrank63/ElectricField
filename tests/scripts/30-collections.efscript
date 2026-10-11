@@ -1,0 +1,25 @@
+# 30-collections: collection lifecycle, save/save-as/close, remove configuration (v2.4 COL-06..09)
+app.expect collection=Original
+app.expect collections=Original
+config.open Dipole
+app.wait-done
+app.expect "title=Dipole 1"
+charge.move 0 0.5 0
+app.expect dirty=1
+collection.save
+app.expect dirty=0
+collection.new Test
+app.expect collection=Test
+app.expect tabs=0
+tab.new-empty
+app.wait-done
+config.save-as "My Field"
+app.expect configs=My Field
+collection.close
+app.expect collection=Original
+app.expect "title=Dipole 1"
+app.expect charges=1,0.5,0
+config.remove Dipole
+app.expect tabs=1
+app.expect configs=
+app.quit force

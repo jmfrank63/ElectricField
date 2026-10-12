@@ -132,7 +132,8 @@ bool Workspace::rename(const unsigned serial, const std::string& name) {
 }
 
 unsigned Workspace::openRestored(const std::string& title, const std::size_t presetIndex, const ef::ComputeParams& params,
-                                 const std::vector<ef::PresetCharge>& charges, const bool autoRecalc, const GridSettings& grid) {
+                                 const std::vector<ef::PresetCharge>& charges, const bool autoRecalc, const GridSettings& grid,
+                                 const std::string& source) {
   ef::ChargeSystem field;
   field.charges.reserve(charges.size());
   for (const ef::PresetCharge& c : charges) field.charges.push_back(ef::Charge{c.charge, ef::Vec2{c.x, c.y}});
@@ -143,8 +144,12 @@ unsigned Workspace::openRestored(const std::string& title, const std::size_t pre
   t->autoRecalc = autoRecalc;
   t->grid = grid;
   // v2.5 CFG-04: a restored tab keeps its configuration identity (a built-in preset's name, or a user
-  // configuration's the title's base name - the same convention mergeDirtyTabsInto established).
-  t->sourceConfig = presetIndex != kNoPreset ? std::string(ef::presets()[presetIndex].displayName) : baseTitle(t->title);
+  // configuration's the title's base name - the same convention mergeDirtyTabsInto established). The
+  // persisted source (h22) keeps the tab's provenance exact across a restart so Save Configuration can
+  // still rename the entry in place; empty keeps the legacy title-derived value. Preset tabs persist
+  // their preset displayName as the source, which the override reproduces - identical outcome either way.
+  t->sourceConfig =
+      !source.empty() ? source : (presetIndex != kNoPreset ? std::string(ef::presets()[presetIndex].displayName) : baseTitle(t->title));
   t->computed = t->field;  // v2.3 EDIT-11
   // Bump the matching counter past the restored number so a later open never duplicates this title (SES-01).
   const std::size_t sp = t->title.rfind(' ');

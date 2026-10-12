@@ -61,8 +61,8 @@ tab serial=2 title=Empty Configuration 1 state=done method=euler autocalc=0 stal
 | Command | Effect |
 |---|---|
 | `config.open <name>` | open a configuration of the current collection in a new tab |
-| `config.save` | store the active tab's charges back into the configuration it came from (v2.5 CFG-04; fails for tabs never saved to a configuration) |
-| `config.save-as <name>` | store the active tab's charges under the name (reserved preset names refused); the tab now saves there with `config.save` |
+| `config.save` | store the active tab's charges into the configuration it came from, renaming that entry in place to the tab's current name when the tab was renamed (v2.5 CFG-04); a name owned by a different configuration is refused — use `config.save-as` to overwrite with confirmation; preset-sourced tabs append a new configuration under the current name; fails for tabs never saved to a configuration |
+| `config.save-as <name>` | store the active tab's charges under the name (reserved preset names refused); the tab takes the name and now saves there with `config.save` |
 | `config.remove <name>` | remove a configuration from the collection (open tabs unaffected) |
 | `export.configuration <path.pdf>` | export the active configuration as a PDF with a fitted view (v2.5 EXP-03) |
 | `export.collection <path.pdf>` | export every configuration of the collection - one PDF page each (v2.5 EXP-03) |

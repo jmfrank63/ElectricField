@@ -46,7 +46,7 @@ struct Tab {
   std::size_t preset = 0;    // index into ef::presets(); kNoPreset for user configurations
   unsigned number = 0;       // per-preset (or per-name) counter, starts at 1, never reused after a close
   std::string title;         // "<Display Name> <N>"
-  std::string sourceConfig;  // v2.5 CFG-04: the configuration this tab came from ("" = unsaved); Save Configuration saves in place
+  std::string sourceConfig;  // the configuration this tab came from ("" = unsaved) - Save Configuration writes to the tab's CURRENT name and uses this field as the provenance to rename that entry in place (see the configs.hpp saveIntoUserConfig contract)
   ef::ChargeSystem field;
   ef::ComputeParams params;
   TabState state = TabState::Computing;
@@ -101,9 +101,12 @@ class Workspace {
   // Renames a tab to the exact trimmed name (v2.1 TAB-01). False for unknown serials and empty names.
   bool rename(unsigned serial, const std::string& name);
   // Restores a saved session tab (v2.1 SES-01) with its EXACT title and params. Bumps the matching counter
-  // so later opens never duplicate a restored title.
+  // so later opens never duplicate a restored title. A non-empty `source` (h22) overrides the title-derived
+  // configuration identity so Save Configuration still renames the tab's entry in place after a restart;
+  // empty keeps the legacy derivation.
   unsigned openRestored(const std::string& title, std::size_t presetIndex, const ef::ComputeParams& params,
-                        const std::vector<ef::PresetCharge>& charges, bool autoRecalc = false, const GridSettings& grid = GridSettings{});
+                        const std::vector<ef::PresetCharge>& charges, bool autoRecalc = false, const GridSettings& grid = GridSettings{},
+                        const std::string& source = std::string());
   // Continuous calculation (v2.2 CALC-03): recalculates every tab that has autoRecalc on, is stale, and
   // whose pending deadline has passed. Called every frame by the GUI with the current time in seconds.
   void autoRecalcTick(double nowSeconds);

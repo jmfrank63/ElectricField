@@ -511,4 +511,11 @@ TEST_CASE("openRestored: exact title, restored params, counters never duplicate 
   CHECK(ws.find(u)->title == "My Field");
   CHECK(ws.openUser("My Field", {}) == u + 1);
   CHECK(ws.find(ws.tabs().back()->serial)->title == "My Field 1");
+
+  // h22: the persisted source overrides the title derivation - the tab's provenance survives a restart,
+  // so Save Configuration still renames the entry in place (the title "My Dipole" would otherwise
+  // derive itself as the source and strand the "Dipole" link).
+  const unsigned rs = ws.openRestored("My Dipole", efapp::kNoPreset, ef::ComputeParams{}, {{1, 0, 0}}, false, {}, "Dipole");
+  CHECK(ws.find(rs)->title == "My Dipole");
+  CHECK(ws.find(rs)->sourceConfig == "Dipole");
 }

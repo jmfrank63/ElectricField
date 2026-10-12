@@ -460,6 +460,7 @@ int App::runInteractive() {
       efapp::SavedTab s;
       s.title = tp->title;
       s.preset = tp->preset;
+      s.source = tp->sourceConfig;  // h22: the tab's configuration provenance survives the restart
       s.method = std::string(ef::info(tp->params.method).name);
       s.charges.reserve(tp->field.charges.size());
       for (const ef::Charge& c : tp->field.charges) s.charges.push_back(ef::PresetCharge{c.charge, c.position.X, c.position.Y});
@@ -1176,7 +1177,7 @@ void App::enterCollectionAt(const std::filesystem::path& file, const bool restor
     for (const efapp::SavedTab& s : ses.tabs) {
       ef::ComputeParams params = options_.compute;
       if (const std::optional<ef::Method> m = ef::methodFromName(s.method)) params.method = *m;
-      const unsigned serial = ws_.openRestored(s.title, s.preset, params, s.charges, s.autoRecalc, s.grid);
+      const unsigned serial = ws_.openRestored(s.title, s.preset, params, s.charges, s.autoRecalc, s.grid, s.source);
       ui_.activeSerial = ui_.selectSerial = serial;  // the newest restored tab is active (TAB/commands resolve "active")
     }
     pacer_.notifyActivity();
@@ -1217,6 +1218,7 @@ void App::saveSessionNow() {
     efapp::SavedTab s;
     s.title = tp->title;
     s.preset = tp->preset;
+    s.source = tp->sourceConfig;  // h22: the tab's configuration provenance survives the restart
     s.method = std::string(ef::info(tp->params.method).name);
     s.autoRecalc = tp->autoRecalc;
     s.grid = tp->grid;
@@ -1320,6 +1322,7 @@ std::string App::saveConfigurationAs(const std::string& name) {
   if (efapp::Tab* saved = ws_.find(ui_.activeSerial)) {
     saved->dirty = false;
     saved->sourceConfig = efapp::ini::trim(name);  // the tab now belongs to this configuration (v2.5 CFG-04)
+    ws_.rename(ui_.activeSerial, name);            // h22: the tab takes the saved name too - its base title is the identity Save Configuration writes to
   }
   ui_.userConfigs = userConfigs_;
   refreshCollections();

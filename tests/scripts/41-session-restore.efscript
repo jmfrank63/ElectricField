@@ -1,10 +1,18 @@
 # 41-session-restore: the same user dir as 40 - the collection comes back as a document (v2.5), then
-# both tabs restore with their edits (v2.4 COL-09)
+# both tabs restore with their edits (v2.4 COL-09). The renamed tab's Save Configuration renames its
+# source entry in place (h22): 40 renamed the Dipole tab to "My Dipole" and quit, and the session's
+# persisted source ("Dipole") makes the restore keep that provenance across the restart.
 collection.open Original
 app.expect tabs=2
 app.expect "title=My Dipole"
 app.expect "title=Empty Configuration 1"
 app.expect charges=1,2,0
+app.wait-done
+charge.move 0 0.1 0
+app.expect dirty=1
+config.save
+app.expect dirty=0
+app.expect configs=My Dipole|Two Equal Charges|Two Unequal Charges Same Sign|Two Unequal Charges Different Signs|Quadrupole|Four Charges Same Sign|Two Dipoles Same Direction|Two Dipoles Opposed Direction|Parallel Dipoles
 tab.close
 app.expect tabs=1
 app.quit force

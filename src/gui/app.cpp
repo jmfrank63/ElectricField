@@ -734,6 +734,17 @@ bool App::smokeExtras(std::string& report) {
   eio.AddMouseButtonEvent(0, false);
   frames(2);
   if (ws_.find(es)->field.charges[0].position.X < 0.4) return fail("editor: dragging did not move the charge");
+  // v2.5 (261012-h24): the drag coalesced into exactly ONE undo entry (the undo stack was empty when the
+  // drag began, so the count is exact); one undo restores the pre-drag origin, redo returns the drag.
+  if (ws_.find(es)->undo.size() != 1)
+    return fail("editor: the drag did not coalesce into one undo entry (undo=" +
+                std::to_string(ws_.find(es)->undo.size()) + ")");
+  efapp::editor::undo(*ws_.find(es));
+  if (ws_.find(es)->field.charges[0].position.X != 0.0)
+    return fail("editor: one undo did not restore the pre-drag origin (X=" +
+                std::to_string(ws_.find(es)->field.charges[0].position.X) + ")");
+  efapp::editor::redo(*ws_.find(es));
+  if (ws_.find(es)->field.charges[0].position.X < 0.4) return fail("editor: redo did not restore the dragged position");
   eio.AddMousePosEvent(cx + 150.f, cy - 80.f);
   frames(2);
   eio.AddMouseButtonEvent(0, true);

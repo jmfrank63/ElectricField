@@ -131,11 +131,20 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   }
   // A drag that started on the canvas keeps moving the charge even past the edge until the button is released.
   if (canEdit && t.selected >= 0 && ImGui::IsMouseDragging(0) && (hovered || ui.canvasDrag)) {
+    // v2.5 (261012-h24): the whole physical drag coalesces into ONE undo entry — open the transaction on
+    // the first drag frame, keyed on dragActive (not the canvasDrag transition) so one that survived a
+    // mid-drag computation is never re-begun (beginDrag's own guard is the backstop).
+    if (!efapp::editor::dragActive(t)) efapp::editor::beginDrag(t, static_cast<std::size_t>(t.selected));
     if (efapp::editor::moveCharge(t, static_cast<std::size_t>(t.selected), mouseWorld)) armAutoRecalc(t);
     ui.canvasDrag = ImGui::IsMouseDown(0);
   } else {
     ui.canvasDrag = false;
   }
+  // v2.5 (261012-h24): commit exactly once per physical drag on the release itself, not on editing state —
+  // that is what lets the transaction span a mid-drag auto-recalc (CALC-04). The release frame falls out of
+  // the drag branch (IsMouseDragging(0) goes false with the button up) into the else above; this also
+  // covers releasing off-canvas or after an interruption.
+  if (!ImGui::IsMouseDown(0) && efapp::editor::dragActive(t)) efapp::editor::commitDrag(t);
   if (canEdit && t.selected >= 0 && (hovered || ImGui::IsItemFocused())) {
     const double step = ImGui::IsKeyDown(ImGuiMod_Shift) ? efapp::editor::arrowStep(t.grid) * 5.0 : efapp::editor::arrowStep(t.grid);  // EDIT-02 + v2.3 GRID-01
     ef::Vec2 d{0, 0};

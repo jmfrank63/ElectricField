@@ -136,3 +136,72 @@ TEST_CASE("upsertUserConfig: trim, reserved names, in-place overwrite, append (C
   REQUIRE(configs.size() == 3);
   CHECK(configs[2].name == "Third");
 }
+
+// h22: the Save Configuration decision core - the tab's CURRENT base title is the configuration's
+// identity, and the save reconciles the tab's source entry with it.
+TEST_CASE("saveIntoUserConfig: rename in place, foreign refuses, vanished appends (h22, CFG-04)") {
+  const std::vector<std::string> reserved = {"Dipole", "Two Equal Charges", "Quadrupole"};
+
+  // a. Rename in place preserves the position and every other entry.
+  std::vector<efapp::UserConfig> configs = {{"A", {{1, 0, 0}}}, {"B", {{2, 1, 1}}}, {"C", {{3, 2, 2}}}};
+  CHECK(efapp::saveIntoUserConfig(configs, "A", {"Renamed A", {{9, 9, 9}}}, reserved) == efapp::SaveIntoResult::OK);
+  REQUIRE(configs.size() == 3);
+  CHECK(configs[0].name == "Renamed A");
+  REQUIRE(configs[0].charges.size() == 1);
+  CHECK(configs[0].charges[0].charge == 9);
+  CHECK(configs[1].name == "B");
+  CHECK(configs[1].charges[0].charge == 2);
+  CHECK(configs[2].name == "C");
+  CHECK(configs[2].charges[0].charge == 3);
+
+  // b. Case-only respell of the tab's own entry: position kept, the candidate's spelling adopted.
+  configs = {{"a", {{1, 0, 0}}}, {"B", {{2, 1, 1}}}, {"C", {{3, 2, 2}}}};
+  CHECK(efapp::saveIntoUserConfig(configs, "a", {"A", {{4, 4, 4}}}, reserved) == efapp::SaveIntoResult::OK);
+  REQUIRE(configs.size() == 3);
+  CHECK(configs[0].name == "A");
+  CHECK(configs[0].charges[0].charge == 4);
+  CHECK(configs[1].name == "B");
+  CHECK(configs[2].name == "C");
+
+  // c. Unrenamed save (target == at): charges replaced in place.
+  configs = {{"A", {{1, 0, 0}}}, {"B", {{2, 1, 1}}}, {"C", {{3, 2, 2}}}};
+  CHECK(efapp::saveIntoUserConfig(configs, "B", {"B", {{5, 5, 5}}}, reserved) == efapp::SaveIntoResult::OK);
+  REQUIRE(configs.size() == 3);
+  CHECK(configs[1].name == "B");
+  CHECK(configs[1].charges[0].charge == 5);
+  CHECK(configs[0].charges[0].charge == 1);
+
+  // d. A foreign collision refuses and mutates nothing.
+  configs = {{"A", {{1, 0, 0}}}, {"B", {{2, 1, 1}}}, {"C", {{3, 2, 2}}}};
+  CHECK(efapp::saveIntoUserConfig(configs, "A", {"C", {{9, 9, 9}}}, reserved) == efapp::SaveIntoResult::NAME_TAKEN);
+  REQUIRE(configs.size() == 3);
+  CHECK(configs[0].name == "A");
+  CHECK(configs[0].charges[0].charge == 1);
+  CHECK(configs[2].name == "C");
+  CHECK(configs[2].charges[0].charge == 3);
+
+  // e. A vanished source appends under the fresh name (last position).
+  configs = {{"A", {{1, 0, 0}}}, {"B", {{2, 1, 1}}}, {"C", {{3, 2, 2}}}};
+  CHECK(efapp::saveIntoUserConfig(configs, "Ghost", {"New", {{7, 7, 7}}}, reserved) == efapp::SaveIntoResult::OK);
+  REQUIRE(configs.size() == 4);
+  CHECK(configs[3].name == "New");
+  CHECK(configs[3].charges[0].charge == 7);
+
+  // f. A vanished source never earns the right to clobber a foreign entry.
+  configs = {{"A", {{1, 0, 0}}}, {"B", {{2, 1, 1}}}, {"C", {{3, 2, 2}}}};
+  CHECK(efapp::saveIntoUserConfig(configs, "Ghost", {"C", {{9, 9, 9}}}, reserved) == efapp::SaveIntoResult::NAME_TAKEN);
+  REQUIRE(configs.size() == 3);
+  CHECK(configs[2].name == "C");
+  CHECK(configs[2].charges[0].charge == 3);
+
+  // g. Reserved names are refused: a renamed tab's new name, and the unrenamed-preset shape (the
+  //    source lookup misses because presets are never user configs in the list).
+  configs = {{"A", {{1, 0, 0}}}, {"B", {{2, 1, 1}}}, {"C", {{3, 2, 2}}}};
+  CHECK(efapp::saveIntoUserConfig(configs, "A", {"dipole", {{9, 9, 9}}}, reserved) == efapp::SaveIntoResult::RESERVED_NAME);
+  CHECK(efapp::saveIntoUserConfig(configs, "dipole", {"dipole", {{9, 9, 9}}}, reserved) == efapp::SaveIntoResult::RESERVED_NAME);
+  REQUIRE(configs.size() == 3);
+  CHECK(configs[0].name == "A");
+
+  // h. Empty candidate name.
+  CHECK(efapp::saveIntoUserConfig(configs, "A", {"   ", {}}, reserved) == efapp::SaveIntoResult::EMPTY_NAME);
+}

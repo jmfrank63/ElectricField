@@ -56,4 +56,25 @@ int findUserConfig(const std::vector<UserConfig>& configs, const std::string& na
 UpsertResult upsertUserConfig(std::vector<UserConfig>& configs, const UserConfig& candidate,
                               const std::vector<std::string>& reservedNames);
 
+enum class SaveIntoResult { OK, EMPTY_NAME, RESERVED_NAME, NAME_TAKEN };
+
+// Save Configuration decision core (h22, v2.5 CFG-04): writes `candidate` - the active tab's charges
+// named by the tab's CURRENT base title - into the collection on behalf of the tab's source entry
+// `sourceName`. The tab's name is the user's configuration identity, so a renamed tab updates its own
+// entry in place instead of stranding the charges under the old name:
+//   - an empty/whitespace candidate name -> EMPTY_NAME;
+//   - the candidate matching the tab's OWN source entry case-insensitively (the unrenamed save and
+//     case-only respells) renames that entry in place - position, other entries and the reserved list
+//     are irrelevant here, because the entry is a user configuration the tab verifiably came from;
+//   - any other candidate name matching a DIFFERENT existing entry -> NAME_TAKEN: a save that would
+//     silently overwrite a foreign configuration is refused; Save Configuration As owns confirmed
+//     overwrites (and a vanished source never earns the right to clobber a foreign entry either);
+//   - a candidate that is a reserved built-in preset name in every other case -> RESERVED_NAME (the
+//     built-in presets are immutable; a preset-sourced tab with a fresh name escapes via the append);
+//   - a vanished source (renamed away, or a legacy session restore) with a fresh candidate name
+//     appends the candidate (Save-As creation semantics) -> OK.
+// The candidate name is trimmed; all name matching is case-insensitive via findUserConfig.
+SaveIntoResult saveIntoUserConfig(std::vector<UserConfig>& configs, const std::string& sourceName, const UserConfig& candidate,
+                                  const std::vector<std::string>& reservedNames);
+
 }  // namespace efapp

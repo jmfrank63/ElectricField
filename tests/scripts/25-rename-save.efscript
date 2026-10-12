@@ -1,0 +1,32 @@
+# 25-rename-save: CFG-04's rename hole (h22): a renamed tab's Save Configuration renames its source
+# entry IN PLACE to the tab's current name (position and other entries kept, file persisted); a save
+# under a foreign configuration's name is refused with the Save-As pointer; config.open works under
+# the new name.
+collection.open Original
+config.open Dipole
+app.wait-done
+tab.rename "My Dipole"
+app.expect "title=My Dipole"
+charge.move 0 0.75 0
+app.expect dirty=1
+config.save
+app.expect dirty=0
+app.expect configs=My Dipole|Two Equal Charges|Two Unequal Charges Same Sign|Two Unequal Charges Different Signs|Quadrupole|Four Charges Same Sign|Two Dipoles Same Direction|Two Dipoles Opposed Direction|Parallel Dipoles
+config.open "My Dipole"
+app.expect "title=My Dipole 1"
+app.expect charges=1,0.75,0
+app.wait-done
+tab.close
+# the refusal path: the tab's new name belongs to a DIFFERENT configuration -> refused, list unchanged
+tab.rename "Two Equal Charges"
+app.expect-error "already exists" config.save
+app.expect configs=My Dipole|Two Equal Charges|Two Unequal Charges Same Sign|Two Unequal Charges Different Signs|Quadrupole|Four Charges Same Sign|Two Dipoles Same Direction|Two Dipoles Opposed Direction|Parallel Dipoles
+tab.rename "My Dipole"
+# persistence: the file itself carries the renamed entry, and the session restores the renamed tab
+collection.close
+app.expect configs=
+collection.open Original
+app.expect configs=My Dipole|Two Equal Charges|Two Unequal Charges Same Sign|Two Unequal Charges Different Signs|Quadrupole|Four Charges Same Sign|Two Dipoles Same Direction|Two Dipoles Opposed Direction|Parallel Dipoles
+app.expect "title=My Dipole"
+app.expect charges=1,0.75,0
+app.quit force

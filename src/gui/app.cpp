@@ -1326,23 +1326,36 @@ std::string App::saveConfigurationAs(const std::string& name) {
   return {};
 }
 
-// v2.5 CFG-04: File > Save Configuration - the active tab's charges go back into the configuration it
-// was opened from (in place, position preserved), inside the currently open collection.
+// v2.5 CFG-04 + h22: File > Save Configuration - the active tab's charges go to the tab's CURRENT name
+// (the tab's name is the configuration's identity): the source entry is renamed in place (position and
+// other entries kept) when it exists; preset-sourced or vanished sources append under the current name;
+// a name owned by a DIFFERENT configuration is refused - Save Configuration As owns confirmed overwrites.
 std::string App::saveConfiguration() {
-  const efapp::Tab* t = ws_.find(ui_.activeSerial);
+  efapp::Tab* t = ws_.find(ui_.activeSerial);
   if (!t) return "error: no active tab";
   if (currentCollectionPath_.empty()) return "error: no collection open";
   if (t->sourceConfig.empty()) return "error: the active tab is not a saved configuration (use Save Configuration As)";
-  const int at = efapp::findUserConfig(userConfigs_, t->sourceConfig);
-  if (at < 0) return "error: no configuration named '" + t->sourceConfig + "'";
-  efapp::UserConfig c;
-  c.name = t->sourceConfig;
-  c.charges.reserve(t->field.charges.size());
-  for (const ef::Charge& ch : t->field.charges) c.charges.push_back(ef::PresetCharge{ch.charge, ch.position.X, ch.position.Y});
-  userConfigs_[static_cast<std::size_t>(at)] = std::move(c);  // overwrite in place: the order stays
+  std::vector<std::string> reserved;
+  for (const ef::Preset& p : ef::presets()) reserved.emplace_back(p.displayName);
+  efapp::UserConfig candidate;
+  candidate.name = efapp::baseTitle(t->title);
+  candidate.charges.reserve(t->field.charges.size());
+  for (const ef::Charge& ch : t->field.charges) candidate.charges.push_back(ef::PresetCharge{ch.charge, ch.position.X, ch.position.Y});
+  const efapp::SaveIntoResult r = efapp::saveIntoUserConfig(userConfigs_, t->sourceConfig, candidate, reserved);
+  switch (r) {
+    case efapp::SaveIntoResult::EMPTY_NAME: return "error: the configuration name is empty";
+    case efapp::SaveIntoResult::RESERVED_NAME:
+      return "error: '" + candidate.name + "' is a built-in preset and cannot be overwritten (use Save Configuration As)";
+    case efapp::SaveIntoResult::NAME_TAKEN:
+      return "error: a configuration named '" + candidate.name + "' already exists (use Save Configuration As to overwrite it)";
+    case efapp::SaveIntoResult::OK: break;
+  }
   std::string err;
   if (!efapp::saveConfigs(currentCollectionPath_, userConfigs_, err)) return "error: " + err;
-  if (efapp::Tab* saved = ws_.find(ui_.activeSerial)) saved->dirty = false;
+  if (efapp::Tab* saved = ws_.find(ui_.activeSerial)) {
+    saved->dirty = false;
+    saved->sourceConfig = efapp::ini::trim(candidate.name);  // the tab now belongs to this configuration under its current name
+  }
   ui_.userConfigs = userConfigs_;
   return {};
 }

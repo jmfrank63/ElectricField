@@ -159,4 +159,27 @@ UpsertResult upsertUserConfig(std::vector<UserConfig>& configs, const UserConfig
   return UpsertResult::OK;
 }
 
+SaveIntoResult saveIntoUserConfig(std::vector<UserConfig>& configs, const std::string& sourceName, const UserConfig& candidate,
+                                  const std::vector<std::string>& reservedNames) {
+  const std::string name = trim(candidate.name);
+  if (name.empty()) return SaveIntoResult::EMPTY_NAME;
+  const int at = findUserConfig(configs, sourceName);
+  const int target = findUserConfig(configs, name);
+  const bool ownEntry = at >= 0 && target == at;  // the unrenamed save and case-only respells
+  if (target >= 0 && !ownEntry) return SaveIntoResult::NAME_TAKEN;  // a foreign entry owns the name
+  if (!ownEntry) {
+    const std::string key = toLower(name);
+    for (const std::string& r : reservedNames)
+      if (toLower(r) == key) return SaveIntoResult::RESERVED_NAME;  // built-in presets are immutable
+  }
+  if (at >= 0) {  // the tab's own entry (unrenamed or renamed): in place - position and other entries kept
+    configs[static_cast<std::size_t>(at)].name = name;  // keep the list position, adopt the new spelling
+    configs[static_cast<std::size_t>(at)].charges = candidate.charges;
+    return SaveIntoResult::OK;
+  }
+  configs.push_back(candidate);  // vanished source with a fresh name: Save-As creation semantics
+  configs.back().name = name;
+  return SaveIntoResult::OK;
+}
+
 }  // namespace efapp

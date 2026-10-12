@@ -668,9 +668,11 @@ bool App::smokeExtras(std::string& report) {
     e.reset(options_);
     e.lines = 32;
     e.electricThickness = 4;
+    e.chargeSize = 60;  // v2.5 SIZE-01: the charge size applies through the same dialog path
     ui_.optionsToApply = e.apply();
     frames(2);
     if (options_.draw.electricThickness != 4.f) return fail("accepted options were not applied");
+    if (options_.draw.chargeRadiusPx != 60.f) return fail("the charge size was not applied");
   }
   ui_.openPresetNow = 2;
   frames(2);
@@ -684,6 +686,7 @@ bool App::smokeExtras(std::string& report) {
     ui_.optionsToApply = e.apply();
     frames(2);
     if (options_.draw.electricThickness != 1.f) return fail("options were not restored to the defaults");
+    if (options_.draw.chargeRadiusPx != 25.f) return fail("the charge size was not restored");
   }
 
   // User configurations (v2): headless has no file, so the list is populated in memory; a user config and

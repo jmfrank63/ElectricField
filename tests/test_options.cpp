@@ -288,3 +288,26 @@ TEST_CASE("OptionsEdit: reset copies, validate rejects without clamping, apply c
   CHECK(e.validate());
   CHECK(e.apply().compute.method == ef::Method::AdaptiveDormandPrince);
 }
+
+TEST_CASE("OptionsEdit chargeSize: edges rejected without clamping, reset copies, apply converts (SIZE-01)") {
+  efapp::OptionsEdit e;
+  e.reset(defaults());
+  e.chargeSize = 1.9;
+  CHECK_FALSE(e.validate());
+  CHECK_FALSE(e.error.empty());
+  e.chargeSize = 121.0;
+  CHECK_FALSE(e.validate());
+  e.chargeSize = 2.0;
+  CHECK(e.validate());
+  CHECK(e.apply().draw.chargeRadiusPx == 2.f);
+  e.chargeSize = 120.0;
+  CHECK(e.validate());
+  CHECK(e.apply().draw.chargeRadiusPx == 120.f);
+
+  // reset copies the applied value, apply round-trips it (operator== covers chargeRadiusPx).
+  efapp::Options custom = defaults();
+  custom.draw.chargeRadiusPx = 60.f;
+  e.reset(custom);
+  CHECK(e.chargeSize == doctest::Approx(60.0));
+  CHECK(e.apply() == custom);
+}

@@ -550,7 +550,7 @@ void optionsModal(UiState& ui, const UiEnv& env) {
       ImGui::ColorEdit3("Negative charge", e.negative);
       ImGui::ColorEdit3("Field lines", e.electric);
       ImGui::ColorEdit3("Equipotentials", e.potential);
-      ImGui::InputDouble("Charge size", &e.chargeSize, 0.0, 0.0, "%.0f");  // v2.5 SIZE-01: dot to very large
+      ImGui::InputDouble("Charge size", &e.chargeSize, 1.0, 10.0, "%.0f");  // v2.5 SIZE-01: dot to very large; +/- steppers like the MFC spin control
       ImGui::InputInt("Field line thickness", &e.electricThickness);
       ImGui::InputInt("Equipotential thickness", &e.potentialThickness);
       ImGui::TextDisabled("Charge size 2 - 120, thicknesses 1 - 64");

@@ -73,6 +73,12 @@ struct Tab {
     ef::Method method;
   };
   std::vector<HistoryEntry> undo, redo;
+  // v2.5 (261012-h24): an open mouse-drag transaction. dragIndex = the dragged charge while the canvas
+  // drag runs, -1 = none (same sentinel style as selected / pendingRecalcAt). dragPre is the pre-drag
+  // snapshot beginDrag captured — valid only while dragIndex >= 0 — and becomes ONE undo entry at
+  // commitDrag, so a whole physical drag coalesces into a single history entry.
+  int dragIndex = -1;
+  HistoryEntry dragPre;
   // v2.3 GRID: snap grid settings (independently active and visible; Cartesian or polar; own origin).
   GridSettings grid;
 };

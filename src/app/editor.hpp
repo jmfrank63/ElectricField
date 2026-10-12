@@ -36,6 +36,16 @@ bool flipSign(Tab& t);
 inline constexpr std::size_t kHistoryLimit = 100;
 bool undo(Tab& t);
 bool redo(Tab& t);
+// v2.5 (261012-h24): mouse-drag transactions. beginDrag captures the pre-drag state; while the
+// transaction is open, moveCharge of that same index records nothing (the moves themselves keep the
+// realtime-draw semantics untouched). commitDrag turns the captured state into ONE undo entry when the
+// drag moved the charge — a no-op when no transaction is open, when the dragged charge was removed
+// mid-drag, or when the charge is exactly at its pre-drag position (no net movement / returned to the
+// start, the same exact X/Y comparison moveCharge uses). Pure std-only, no ImGui/SDL types.
+void beginDrag(Tab& t, std::size_t index);
+void commitDrag(Tab& t);
+// True while a drag transaction is open on the tab (inline like kHistoryLimit, one definition site).
+inline bool dragActive(const Tab& t) { return t.dragIndex >= 0; }
 // v2.3 EDIT-11: restore the charges of the last (re)computation (Esc). False when the tab has no
 // uncalculated changes.
 bool revertToComputed(Tab& t);

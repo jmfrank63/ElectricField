@@ -252,3 +252,117 @@ TEST_CASE("autoRecalcTick recomputes stale autoRecalc tabs after the deadline (v
   CHECK(t.state == efapp::TabState::Done);
   CHECK(t.stale);
 }
+
+// v2.5 (261012-h24): a mouse drag coalesces into ONE undo entry — the pre-drag state — through the
+// editor begin/commit drag transaction. Plain moves outside a transaction keep one entry per call.
+TEST_CASE("a mouse drag coalesces into one undo entry (v2.5)") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);
+  REQUIRE(t.field.charges[0].position.X == doctest::Approx(-2.0));  // dipole: +1 at (-2,0)
+  CHECK_FALSE(efapp::editor::dragActive(t));
+
+  efapp::editor::beginDrag(t, 0);
+  CHECK(efapp::editor::dragActive(t));
+  // Moves while the transaction is open stay silent for history, but keep every realtime-draw semantic:
+  CHECK(efapp::editor::moveCharge(t, 0, ef::Vec2{-1, 0}));
+  CHECK(efapp::editor::moveCharge(t, 0, ef::Vec2{1, 0}));
+  CHECK(t.field.charges[0].position.X == doctest::Approx(1.0));
+  CHECK(t.scene.charges[0].position.X == doctest::Approx(1.0));  // scene mirror still synced
+  CHECK(t.stale);
+  CHECK(t.dirty);
+  CHECK(t.pendingRecalcAt == -2);
+  CHECK(t.undo.empty());
+
+  efapp::editor::beginDrag(t, 0);  // a second begin mid-drag: no-op, never overwrites the snapshot
+  efapp::editor::commitDrag(t);
+  CHECK_FALSE(efapp::editor::dragActive(t));
+  REQUIRE(t.undo.size() == 1);  // the whole drag is exactly one entry
+
+  CHECK(efapp::editor::undo(t));  // one undo restores the pre-drag position
+  CHECK(t.field.charges[0].position.X == doctest::Approx(-2.0));
+  CHECK(t.field.charges[0].position.Y == doctest::Approx(0.0));
+  CHECK(t.scene.charges[0].position.X == doctest::Approx(-2.0));  // re-synced
+  REQUIRE(t.redo.size() == 1);
+  CHECK(efapp::editor::redo(t));  // redo returns to the dragged position
+  CHECK(t.field.charges[0].position.X == doctest::Approx(1.0));
+}
+
+TEST_CASE("a drag with no net movement records nothing (v2.5)") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);
+
+  efapp::editor::beginDrag(t, 0);
+  efapp::editor::commitDrag(t);  // never moved
+  CHECK(t.undo.empty());
+  CHECK_FALSE(efapp::editor::dragActive(t));
+
+  efapp::editor::beginDrag(t, 0);
+  CHECK(efapp::editor::moveCharge(t, 0, ef::Vec2{3, 0}));
+  CHECK(efapp::editor::moveCharge(t, 0, ef::Vec2{-2, 0}));  // back to the exact start (exact X/Y equality)
+  efapp::editor::commitDrag(t);
+  CHECK(t.undo.empty());
+  CHECK_FALSE(efapp::editor::dragActive(t));
+}
+
+TEST_CASE("discrete moves keep one entry per call and never open a transaction (v2.5)") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);
+  CHECK_FALSE(efapp::editor::dragActive(t));
+  CHECK(efapp::editor::moveCharge(t, 0, ef::Vec2{-1, 0}));
+  CHECK(efapp::editor::moveCharge(t, 0, ef::Vec2{-0.5, 0}));
+  REQUIRE(t.undo.size() == 2);  // one entry per moveCharge call
+  CHECK_FALSE(efapp::editor::dragActive(t));  // plain moves never open a transaction
+  t.selected = 0;
+  CHECK(efapp::editor::stepSelected(t, ef::Vec2{0.5, 0}));
+  REQUIRE(t.undo.size() == 3);  // the arrow-key rule: one entry per press
+}
+
+TEST_CASE("a drag transaction spans a computation and commits once (v2.5)") {
+  efapp::Workspace ws;
+  const unsigned s = ws.openEmpty();
+  efapp::Tab& t = *ws.find(s);
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+  while (t.state == efapp::TabState::Computing && std::chrono::steady_clock::now() < deadline) {
+    ws.pollAll();
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  REQUIRE(t.state == efapp::TabState::Done);
+
+  efapp::editor::beginDrag(t, 0);
+  CHECK(efapp::editor::dragActive(t));
+  CHECK(efapp::editor::moveCharge(t, 0, ef::Vec2{1, 0}));  // silent while the transaction is open
+  CHECK(t.undo.empty());
+
+  CHECK(ws.calculate(s));  // a mid-drag computation does not close the transaction
+  CHECK(t.state == efapp::TabState::Computing);
+  CHECK_FALSE(efapp::editor::moveCharge(t, 0, ef::Vec2{2, 0}));  // refused while computing (D-02)
+  CHECK(efapp::editor::dragActive(t));  // the transaction survives the computation
+  while (t.state == efapp::TabState::Computing && std::chrono::steady_clock::now() < deadline) {
+    ws.pollAll();
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  REQUIRE(t.state == efapp::TabState::Done);
+  CHECK(efapp::editor::moveCharge(t, 0, ef::Vec2{2, 0}));  // silent again
+  efapp::editor::commitDrag(t);
+  REQUIRE(t.undo.size() == 1);  // the whole physical drag is one entry, not one per computation boundary
+  CHECK(efapp::editor::undo(t));
+  CHECK(t.field.charges[0].position.X == doctest::Approx(0.0));  // the pre-drag origin
+  CHECK(t.field.charges[0].position.Y == doctest::Approx(0.0));
+  ws.closeAll();
+}
+
+TEST_CASE("commitDrag after the dragged charge was removed mid-drag records nothing (v2.5)") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);
+  t.selected = 1;
+  efapp::editor::beginDrag(t, 1);
+  CHECK(efapp::editor::dragActive(t));
+  CHECK(efapp::editor::moveCharge(t, 1, ef::Vec2{4, 1}));  // silent
+  CHECK(t.undo.empty());
+  CHECK(efapp::editor::removeSelected(t));  // Delete mid-drag: its own entry stands
+  REQUIRE(t.undo.size() == 1);
+  REQUIRE(t.field.charges.size() == 1);
+  efapp::editor::commitDrag(t);  // the dragged index is out of range: discard, no crash
+  CHECK_FALSE(efapp::editor::dragActive(t));
+  CHECK(t.undo.size() == 1);
+}

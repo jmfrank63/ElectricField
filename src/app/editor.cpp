@@ -68,6 +68,15 @@ bool moveCharge(Tab& t, std::size_t index, ef::Vec2 world) {
   return true;
 }
 
+// v2.5 (261012-h24) RED skeletons: compile-only so the new drag-transaction cases run and fail on their
+// planned assertions; the real behavior lands in the GREEN step.
+void beginDrag(Tab& t, std::size_t index) {
+  (void)t;
+  (void)index;
+}
+
+void commitDrag(Tab& t) { (void)t; }
+
 bool addCharge(Tab& t, ef::Vec2 world, int value) {
   if (!editable(t)) return false;
   t.field.charges.push_back(ef::Charge{value, clamped(world)});

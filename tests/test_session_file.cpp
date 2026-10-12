@@ -135,3 +135,38 @@ TEST_CASE("autocalc is persisted per tab (v2.2 CALC-03)") {
   REQUIRE(r2.value.size() == 1);
   CHECK(r2.value[0].autoRecalc);
 }
+
+// h22: the session persists each tab's source configuration so Save Configuration can still rename
+// the entry in place after a restart. Additive and optional: absent lines keep the title derivation.
+TEST_CASE("the tab's source configuration round-trips (h22)") {
+  std::vector<efapp::SavedTab> tabs = {sample()};
+  tabs[0].source = "My Dipole";  // spaces intact
+  efapp::ParsedSession r = efapp::parseSession(efapp::serializeSession(tabs));
+  REQUIRE(r.value.size() == 1);
+  CHECK(r.value[0].source == "My Dipole");
+
+  // Double quotes are stripped on serialize (free-form renamed titles may contain them).
+  tabs[0].source = "Renamed \"Field\"";
+  r = efapp::parseSession(efapp::serializeSession(tabs));
+  REQUIRE(r.value.size() == 1);
+  CHECK(r.value[0].source == "Renamed Field");
+
+  // An empty source emits no line and parses back empty (backward compatible with today's files).
+  tabs[0].source.clear();
+  const std::string text = efapp::serializeSession(tabs);
+  CHECK(text.find("source =") == std::string::npos);
+  r = efapp::parseSession(text);
+  REQUIRE(r.value.size() == 1);
+  CHECK(r.value[0].source.empty());
+
+  // Legacy-format text without any source line parses exactly as before.
+  const std::string legacy = "[tab \"Dipole 1\"]\npreset = 0\nmethod = euler\ncharge = 1, -2, 0\ncharge = -1, 2, 0\n"
+                             "[tab \"My Field\"]\npreset = none\ncharge = 2, 0.5, 0\n";
+  const efapp::ParsedSession l = efapp::parseSession(legacy);
+  CHECK(l.skippedTabs == 0);
+  REQUIRE(l.value.size() == 2);
+  CHECK(l.value[0].title == "Dipole 1");
+  CHECK(l.value[0].source.empty());
+  CHECK(l.value[1].title == "My Field");
+  CHECK(l.value[1].source.empty());
+}

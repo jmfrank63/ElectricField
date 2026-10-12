@@ -7,6 +7,7 @@
 //   # Electric Field open tabs
 //   [tab "Dipole 1"]
 //   preset = 0          # index into ef::presets(), or "none" for user/empty/custom tabs
+//   source = My Dipole  # optional (h22): the configuration the tab came from; absent = derive from the title on restore
 //   method = euler      # a kMethods name; unknown names fall back to the default on restore
 //   charge = 1, -2, 0
 //   charge = -1, 2, 0
@@ -27,6 +28,7 @@ struct SavedTab {
   bool autoRecalc = false;         // v2.2 CALC-03: continuous calculation
   GridSettings grid;               // v2.3 GRID: snap grid settings
   std::vector<ef::PresetCharge> charges;
+  std::string source{};            // h22: the configuration the tab came from; empty = derive from the title on restore (the pre-change convention)
 };
 
 // Sections `[tab "Title"]` with `preset`, `method` and `charge` lines (same grammar as the configuration

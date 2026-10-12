@@ -1,5 +1,6 @@
 #include "app/session_file.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <fstream>
 #include <sstream>
@@ -38,6 +39,11 @@ std::string serializeSession(const std::vector<SavedTab>& tabs, const std::strin
     title.erase(std::remove(title.begin(), title.end(), '"'), title.end());
     os << "\n[tab \"" << title << "\"]\n";
     os << "preset = " << (t.preset == kNoPreset ? std::string("none") : std::to_string(t.preset)) << '\n';
+    if (!t.source.empty()) {  // h22: the tab's configuration provenance; free-form names may contain quotes
+      std::string source = t.source;
+      source.erase(std::remove(source.begin(), source.end(), '"'), source.end());
+      os << "source = " << source << '\n';
+    }
     os << "method = " << (t.method.empty() ? std::string("euler") : t.method) << '\n';
     if (t.autoRecalc) os << "autocalc = true\n";
     char gx[32], gy[32], gs[32], ga[32];
@@ -122,6 +128,8 @@ ParsedSession parseSession(const std::string& text) {
         else
           cur.preset = kNoPreset;  // an invalid index degrades to a plain named tab, not a lost one
       }
+    } else if (key == "source") {
+      if (inTab && !value.empty()) cur.source = value;  // h22: the configuration the tab came from
     } else if (key == "method") {
       if (inTab) cur.method = ini::toLower(value);
     } else if (key == "charge") {

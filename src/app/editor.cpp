@@ -82,8 +82,9 @@ void beginDrag(Tab& t, std::size_t index) {
 
 // v2.5: close the transaction — the captured pre-drag state becomes ONE undo entry when the drag moved
 // the charge. Nothing is recorded when no transaction is open, when the dragged charge was removed
-// mid-drag (the removal's own entry stands, T-h24-03), or when the charge is exactly at its pre-drag
-// position (no net movement / returned to the start — the same exact X/Y comparison moveCharge uses).
+// mid-drag (removals record no history entry in this codebase — the out-of-range index is simply
+// discarded, T-h24-03), or when the charge is exactly at its pre-drag position (no net movement /
+// returned to the start — the same exact X/Y comparison moveCharge uses).
 // commitDrag touches none of stale / dirty / pendingRecalcAt / scene / computed: the per-move semantics
 // already did their job, so the undo stack alone carries the coalescing.
 void commitDrag(Tab& t) {

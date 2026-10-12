@@ -252,7 +252,14 @@ void drawGrid(Painter& painter, const GridSettings& g, const View& view) {
     }
     if (nMax > 2000) return;
     for (long i = 1; i <= nMax; ++i) {  // circle as a dense polyline through the Painter contract
-      const std::size_t N = 96;
+      // 261012-h21: each ring's segment count adapts to its on-screen radius so grid circles stay smooth
+      // when zoomed in: the chord sagitta is s = r_px * (2*pi/N)^2 / 8, so s <= 1 px means
+      // N >= 2*pi*sqrt(r_px/8) = 2.2214*sqrt(r_px) (2.2214 = 2*pi/sqrt(8)). The 96 floor keeps every ring
+      // with an on-screen radius under ~1,866 px exactly as before; the 2048 cap bounds the worst case.
+      // Total emitted points stay bounded: zooming in shrinks the visible world radius maxR (proportional
+      // to 1/ppu) so few big rings exist when rings are big, and zooming out trips the nMax <= 2000 guard.
+      const double rPx = static_cast<double>(i) * g.spacing * ppu;
+      const std::size_t N = static_cast<std::size_t>(std::clamp(std::ceil(2.2214 * std::sqrt(rPx)), 96.0, 2048.0));
       std::vector<PointF> pts(N + 1);
       const double r = static_cast<double>(i) * g.spacing;
       for (std::size_t k = 0; k <= N; ++k) {

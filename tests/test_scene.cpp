@@ -436,3 +436,35 @@ TEST_CASE("drawPath gate: ppu 100 stays legacy, ppu 250 refines (261012-h21)") {
   CHECK(refined.strokes[0].pts[1].x != doctest::Approx(static_cast<float>(2048.0 / 2.0 + circle.points[1].X * 250.0)));
   CHECK(refined.strokes[0].pts[1].y != doctest::Approx(static_cast<float>(2048.0 / 2.0 - circle.points[1].Y * 250.0)));
 }
+
+TEST_CASE("drawGrid polar: ring segment counts adapt to the on-screen radius (261012-h21)") {
+  ef::GridSettings g;
+  g.visible = true;
+  g.polar = true;
+  g.spacing = 1.0;
+  const auto isGridRing = [](const Recorder::Stroke& s) {
+    return s.color.r == 120 && s.color.g == 210 && s.color.b == 120 && s.pts.size() > 2;  // rays have 2 points
+  };
+
+  // default view: the 96-segment floor pins the current behavior exactly
+  Recorder small;
+  renderScene(small, FieldScene{}, DrawStyle{}, View{200, 200, 100.}, &g);
+  std::vector<std::size_t> smallRings;
+  for (const auto& s : small.strokes)
+    if (isGridRing(s)) smallRings.push_back(s.pts.size());
+  REQUIRE(smallRings.size() == 2);  // maxR ~ 1.41 units -> rings 1 and 2
+  CHECK(smallRings[0] == 97);       // ring 1: 100 px radius -> N = 96 floor
+  CHECK(smallRings[1] == 97);       // ring 2: 200 px radius -> still the floor
+
+  // ppu 1000: ring 3 has a 3000 px radius -> N ~ 122 (sagitta <= 1 px); every ring <= 2049 points
+  Recorder zoomed;
+  renderScene(zoomed, FieldScene{}, DrawStyle{}, View{4000, 4000, 1000.}, &g);
+  std::vector<std::size_t> bigRings;
+  for (const auto& s : zoomed.strokes)
+    if (isGridRing(s)) bigRings.push_back(s.pts.size());
+  REQUIRE(bigRings.size() == 3);  // maxR ~ 2.83 units -> rings 1..3
+  CHECK(bigRings[0] == 97);       // ring 1: 1000 px radius -> ceil(2.2214*31.6) = 71 -> floor 96
+  CHECK(bigRings[1] == 101);      // ring 2: 2000 px -> ceil(2.2214*44.7) = 100
+  CHECK(bigRings[2] == 123);      // ring 3: 3000 px -> ceil(2.2214*54.8) = 122
+  for (const std::size_t cnt : bigRings) CHECK(cnt <= 2049);
+}

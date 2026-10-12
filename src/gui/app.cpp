@@ -254,6 +254,34 @@ void App::frame() {
   if (scaleDirty_) refreshScale();
   ImGui_ImplSDLRenderer3_NewFrame();
   ImGui_ImplSDL3_NewFrame();
+  // Both HiDPI corrections below derive from one ground-truth ratio: the renderer's true output size vs the window
+  // size. They only ever fire on a pixel-density > 1 framebuffer (macOS Retina / Wayland) and are no-ops elsewhere.
+  {
+    ImGuiIO& io = ImGui::GetIO();
+    int winW = 0, winH = 0, outW = 0, outH = 0;
+    SDL_GetWindowSize(window_, &winW, &winH);
+    SDL_GetRenderOutputSize(renderer_, &outW, &outH);
+    if (winW > 0 && winH > 0 && outW > 0 && outH > 0) {
+      // Geometry: imgui_impl_sdlrenderer3 submits vertices (and, whenever the SDL render scale differs from 1, the
+      // clip rectangles) in ImGui unit space and leaves the scaling to SDL's renderer view scale - which nothing
+      // sets (SDL initialises it to 1 and never updates it itself). On a density-2 framebuffer the whole UI then
+      // lands at half size in the top-left quadrant of the framebuffer, and hover lands half a UI away from the
+      // drawn widgets (a click opens a menu whose highlight sits at twice the pointer's offset). Setting the view
+      // scale to the density scales vertices AND clip rects consistently. Recomputed every frame from the output
+      // size, so it can never go stale (e.g. window moved between displays); SDL_SetRenderScale early-outs when
+      // the value is unchanged.
+      const float density = std::max(outW / static_cast<float>(winW), outH / static_cast<float>(winH));
+      SDL_SetRenderScale(renderer_, density, density);
+      // Font rasterizer density: with viewports disabled ImGui reads the main viewport's FramebufferScale, which
+      // the backend never fills (it stays 0), and falls back to io.DisplayFramebufferScale. The platform backend
+      // derives that from SDL_GetWindowDisplayScale() (= density x content scale), which can go stale on macOS -
+      // glyphs would then rasterize at the wrong density (blurry). Quarter-quantised to avoid font-atlas churn
+      // during resizes.
+      const float fb = std::round(density * 4.f) / 4.f;
+      if (fb >= 1.f && (std::abs(fb - io.DisplayFramebufferScale.x) > 0.01f || std::abs(fb - io.DisplayFramebufferScale.y) > 0.01f))
+        io.DisplayFramebufferScale = ImVec2(fb, fb);
+    }
+  }
   ImGui::NewFrame();
   drawUi(ws_, ui_, env_);
   ui_.closePopups = false;  // the modal guards saw it for exactly one frame (v2.4 BUG-02)

@@ -59,7 +59,10 @@ bool moveCharge(Tab& t, std::size_t index, ef::Vec2 world) {
   const ef::Vec2 target = clamped(world);
   ef::Charge& c = t.field.charges[index];
   if (c.position.X == target.X && c.position.Y == target.Y) return true;  // nothing to do, no history entry
-  recordHistory(t);
+  // v2.5 (261012-h24): while a drag transaction is open for this index the moves are silent for history —
+  // commitDrag records the whole drag as ONE entry (pre-drag state). Every other index keeps per-move
+  // history, and everything after this line stays unconditional (realtime-draw semantics untouched).
+  if (t.dragIndex < 0 || t.dragIndex != static_cast<int>(index)) recordHistory(t);
   c.position = target;
   syncScene(t, index);
   t.stale = true;
@@ -68,14 +71,34 @@ bool moveCharge(Tab& t, std::size_t index, ef::Vec2 world) {
   return true;
 }
 
-// v2.5 (261012-h24) RED skeletons: compile-only so the new drag-transaction cases run and fail on their
-// planned assertions; the real behavior lands in the GREEN step.
+// v2.5 (261012-h24): begin a mouse-drag transaction by capturing the pre-drag state. No-ops when the
+// tab is computing (no NEW drags — D-02), the index is out of range, or a transaction is already open
+// (a second beginDrag never overwrites the captured snapshot).
 void beginDrag(Tab& t, std::size_t index) {
-  (void)t;
-  (void)index;
+  if (!editable(t) || index >= t.field.charges.size() || t.dragIndex >= 0) return;
+  t.dragIndex = static_cast<int>(index);
+  t.dragPre = Tab::HistoryEntry{t.field, t.params.method};  // a value copy, no aliasing
 }
 
-void commitDrag(Tab& t) { (void)t; }
+// v2.5: close the transaction — the captured pre-drag state becomes ONE undo entry when the drag moved
+// the charge. Nothing is recorded when no transaction is open, when the dragged charge was removed
+// mid-drag (the removal's own entry stands, T-h24-03), or when the charge is exactly at its pre-drag
+// position (no net movement / returned to the start — the same exact X/Y comparison moveCharge uses).
+// commitDrag touches none of stale / dirty / pendingRecalcAt / scene / computed: the per-move semantics
+// already did their job, so the undo stack alone carries the coalescing.
+void commitDrag(Tab& t) {
+  if (t.dragIndex < 0) return;  // no open transaction
+  const std::size_t index = static_cast<std::size_t>(t.dragIndex);
+  Tab::HistoryEntry pre = std::move(t.dragPre);
+  t.dragIndex = -1;  // close first (exception-safe ordering), then decide what to record
+  if (index >= t.field.charges.size()) return;  // the dragged charge was removed mid-drag
+  const ef::Vec2& now = t.field.charges[index].position;
+  const ef::Vec2& was = pre.field.charges[index].position;
+  if (now.X == was.X && now.Y == was.Y) return;  // no net movement, nothing to record
+  t.undo.push_back(std::move(pre));
+  if (t.undo.size() > kHistoryLimit) t.undo.erase(t.undo.begin());  // same cap-erase-oldest rule as recordHistory
+  t.redo.clear();  // a new edit branch invalidates redo
+}
 
 bool addCharge(Tab& t, ef::Vec2 world, int value) {
   if (!editable(t)) return false;

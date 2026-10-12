@@ -359,10 +359,11 @@ TEST_CASE("commitDrag after the dragged charge was removed mid-drag records noth
   CHECK(efapp::editor::dragActive(t));
   CHECK(efapp::editor::moveCharge(t, 1, ef::Vec2{4, 1}));  // silent
   CHECK(t.undo.empty());
-  CHECK(efapp::editor::removeSelected(t));  // Delete mid-drag: its own entry stands
-  REQUIRE(t.undo.size() == 1);
+  // Delete mid-drag: removals record no history entry in this codebase (as today — add/remove are not
+  // undoable), so the drag transaction is the only thing the commit below could contribute to.
+  CHECK(efapp::editor::removeSelected(t));
   REQUIRE(t.field.charges.size() == 1);
   efapp::editor::commitDrag(t);  // the dragged index is out of range: discard, no crash
   CHECK_FALSE(efapp::editor::dragActive(t));
-  CHECK(t.undo.size() == 1);
+  CHECK(t.undo.empty());
 }

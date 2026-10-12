@@ -28,11 +28,14 @@ ElectricField --script <file> [--user-dir <dir>] [--out <results>] [--lenient]
 collection=Test
 collections=Original|Test
 configs=My Field
+drawsize=25
 tabs=1
 tab serial=2 title=Empty Configuration 1 state=done method=euler autocalc=0 stale=1 dirty=1 selected=1 lines=16 zoom=1 centre=0,0 grid=1,1,0,0,0,0,0.5,15 charges=1,0.5,0;3,0,2
 ```
 
 `grid=` is `active,visible,polar,intersectionsOnly,originX,originY,spacing,angleStepDeg`.
+
+`drawsize=` is the drawn charge radius in px (v2.5 SIZE-01, valid range 2-120; the `chargeSize` key in options.ini).
 
 ## Commands
 

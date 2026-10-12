@@ -1461,6 +1461,7 @@ std::string App::command(const std::string& line) {
     os << "configs=";
     for (std::size_t i = 0; i < userConfigs_.size(); ++i) os << (i ? "|" : "") << userConfigs_[i].name;
     os << '\n';
+    os << "drawsize=" << options_.draw.chargeRadiusPx << '\n';  // v2.5 SIZE-01: the applied charge radius, the script oracle for the Draw tab
     const auto& tabs = ws_.tabs();
     os << "tabs=" << tabs.size() << '\n';
     for (const auto& tp : tabs) {

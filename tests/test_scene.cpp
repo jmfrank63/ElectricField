@@ -10,6 +10,7 @@
 #include "ef/session.hpp"
 #include "ef/svg.hpp"
 #include "ef/pdf.hpp"
+#include "ef/bezier.hpp"
 #include "test_params.hpp"
 
 using namespace ef;
@@ -42,12 +43,33 @@ struct Recorder final : Painter {
 };
 
 ScenePath line(std::initializer_list<Vec2> pts, bool closed = false) { return ScenePath{std::vector<Vec2>(pts), closed}; }
+
+// 261012-h21: a realistic post-finalize equipotential: 64 on-curve steps around a unit circle plus the exact
+// closure point (the tracer pushes_back the exact start point to close the loop), with the inner control points
+// fitted by adjustForBezier (as finalize() leaves the layout p0,[c1,c2,p3],...). Anchor spacing is 3 raw steps
+// = 16.875 degrees of arc: ~29 px chords at ppu 100 (legacy branch), ~73 px at ppu 250, ~293 px at ppu 1000.
+ScenePath closedUnitCircle() {
+  const std::size_t steps = 64;
+  std::vector<Vec2> raw;
+  raw.reserve(steps + 1);
+  for (std::size_t k = 0; k < steps; ++k) {
+    const double a = static_cast<double>(k) * 6.283185307179586 / static_cast<double>(steps);
+    raw.push_back(Vec2{std::cos(a), std::sin(a)});
+  }
+  raw.push_back(raw.front());  // the tracer closes the loop with the exact start point
+  std::vector<Vec2> fitted = raw;
+  ef::adjustForBezier(fitted);
+  return ScenePath{fitted, true};
+}
 }  // namespace
 
 TEST_CASE("renderScene: y-up, centred, 100 px/unit, MFC colours/thickness/order") {
   FieldScene scene;
   scene.electric.push_back(line({{0, 0}, {0.1, 0.1}, {0.2, 0.2}, {0.3, 0.3}}));        // 1 cubic segment
-  scene.potential.push_back(line({{-1, 0}, {-1, 1}, {1, 1}, {1, 0}, {-1, 0}}, true));    // 4 pts+1: 1 segment + 1 tail line, closed
+  // 261012-h21: shrunk from the former +-1-unit square (whose 200 px anchor chords now cross the refinement
+  // gate and take the refined branch) to a 0.4-unit arch: still 1 cubic + 1 tail line, closed, but with
+  // 40 px anchor chords so it stays on the legacy branch this test pins.
+  scene.potential.push_back(line({{-0.2, 0}, {-0.2, 0.1}, {0.2, 0.1}, {0.2, 0}, {-0.2, 0}}, true));  // 4 pts+1: 1 segment + 1 tail line, closed
   scene.charges = {{Vec2(-2, 0), +1}, {Vec2(2, 0), -1}};
   Recorder rec;
   renderScene(rec, scene, DrawStyle{}, View{1024, 768, 100.});
@@ -292,4 +314,125 @@ TEST_CASE("renderScene draws the grid between background and scene (v2.4 BUG-01)
   renderScene(r3, scene, DrawStyle{}, View{200, 200, 100.}, &g);
   CHECK(r3.strokes.empty());
   CHECK(r3.circles.size() == 1);  // only the charge, no grid
+}
+
+// ---------------------------------------------------------------------------
+// 261012-h21: zoom-adaptive drawPath refinement (legacy below the 48 px anchor-chord gate,
+// uniform Catmull-Rom through the anchors above it).
+// ---------------------------------------------------------------------------
+
+TEST_CASE("drawPath legacy pin: while every anchor chord is <= 48 px the stroke stays the direct device mapping (261012-h21)") {
+  FieldScene scene;
+  // two complete cubic groups, anchors ~30 px apart at ppu 100
+  scene.electric.push_back(line({{0, 0}, {0.1, 0.05}, {0.2, 0}, {0.3, 0.05}, {0.4, 0}, {0.5, 0.05}, {0.6, 0}}));
+  // one cubic + one trailing line point
+  scene.electric.push_back(line({{0, 0}, {0.1, 0.05}, {0.2, 0}, {0.3, 0.05}, {0.4, 0.1}}));
+  Recorder rec;
+  const View view{1024, 768, 100.};
+  renderScene(rec, scene, DrawStyle{}, view);
+  REQUIRE(rec.strokes.size() == 2);
+  const double cx = view.widthPx / 2.0 - view.centre.X * view.pixelsPerUnit;
+  const double cy = view.heightPx / 2.0 + view.centre.Y * view.pixelsPerUnit;
+  for (std::size_t s = 0; s < rec.strokes.size(); ++s) {
+    const auto& path = scene.electric[s];
+    REQUIRE(rec.strokes[s].pts.size() == path.points.size());
+    for (std::size_t i = 0; i < path.points.size(); ++i) {
+      CHECK(rec.strokes[s].pts[i].x == doctest::Approx(static_cast<float>(cx + path.points[i].X * view.pixelsPerUnit)));
+      CHECK(rec.strokes[s].pts[i].y == doctest::Approx(static_cast<float>(cy - path.points[i].Y * view.pixelsPerUnit)));
+    }
+  }
+  CHECK(rec.strokes[0].segs == 2);  // (7-1)/3
+  CHECK_FALSE(rec.strokes[0].closed);
+  CHECK(rec.strokes[1].segs == 1);  // (5-1)/3, tail point kept as a straight line
+  CHECK_FALSE(rec.strokes[1].closed);
+}
+
+TEST_CASE("drawPath refinement: emitted cubics interpolate the anchors and are tangent-continuous at every join (261012-h21)") {
+  const ScenePath circle = closedUnitCircle();
+  FieldScene scene;
+  scene.potential.push_back(circle);
+  Recorder rec;
+  const View view{3000, 3000, 1000.};  // fully inside, every anchor chord ~293 px -> refined
+  renderScene(rec, scene, DrawStyle{}, view);
+  REQUIRE(rec.strokes.size() == 1);
+  const auto& s = rec.strokes[0];
+
+  // anchors: device points of fitted[0],fitted[3],...,fitted[63] (the duplicate closure anchor is dropped)
+  const std::size_t m = 22;
+  const double cx = view.widthPx / 2.0 - view.centre.X * view.pixelsPerUnit;
+  const double cy = view.heightPx / 2.0 + view.centre.Y * view.pixelsPerUnit;
+  auto anchor = [&](std::size_t k) {
+    const Vec2& w = circle.points[3 * k];
+    return PointF{static_cast<float>(cx + w.X * view.pixelsPerUnit), static_cast<float>(cy - w.Y * view.pixelsPerUnit)};
+  };
+
+  REQUIRE(s.segs == m);
+  REQUIRE(s.pts.size() == 1 + 3 * m);
+  CHECK(s.closed);
+  // every group starts and ends exactly on its anchors (wrap: the last group returns to the first anchor)
+  for (std::size_t k = 0; k < m; ++k) {
+    const std::size_t endIdx = (k + 1) % m;
+    CHECK(s.pts[3 * k].x == doctest::Approx(anchor(k).x));
+    CHECK(s.pts[3 * k].y == doctest::Approx(anchor(k).y));
+    CHECK(s.pts[3 * k + 3].x == doctest::Approx(anchor(endIdx).x));
+    CHECK(s.pts[3 * k + 3].y == doctest::Approx(anchor(endIdx).y));
+  }
+  // C1 at every interior join AND at the wrap seam: incoming 3*(p3-c2) equals outgoing 3*(c1'-p0).
+  // Not exact in floats (control points are stored as device floats, so each carries an ulp-scale rounding);
+  // a wrong construction would be off by O(anchor chord), so 1e-3 px pins the construction tightly.
+  for (std::size_t k = 0; k + 1 < m; ++k) {  // interior joins at pts[3k+3] (anchor k+1)
+    const double inx = 3.0 * (static_cast<double>(s.pts[3 * k + 3].x) - static_cast<double>(s.pts[3 * k + 2].x));
+    const double iny = 3.0 * (static_cast<double>(s.pts[3 * k + 3].y) - static_cast<double>(s.pts[3 * k + 2].y));
+    const double outx = 3.0 * (static_cast<double>(s.pts[3 * k + 4].x) - static_cast<double>(s.pts[3 * k + 3].x));
+    const double outy = 3.0 * (static_cast<double>(s.pts[3 * k + 4].y) - static_cast<double>(s.pts[3 * k + 3].y));
+    CHECK(std::abs(inx - outx) < 1e-3);
+    CHECK(std::abs(iny - outy) < 1e-3);
+  }
+  {  // the wrap seam: last group ends at the first anchor; its incoming tangent matches group 0's outgoing
+    const double inx = 3.0 * (static_cast<double>(s.pts[3 * m].x) - static_cast<double>(s.pts[3 * m - 1].x));
+    const double iny = 3.0 * (static_cast<double>(s.pts[3 * m].y) - static_cast<double>(s.pts[3 * m - 1].y));
+    const double outx = 3.0 * (static_cast<double>(s.pts[1].x) - static_cast<double>(s.pts[0].x));
+    const double outy = 3.0 * (static_cast<double>(s.pts[1].y) - static_cast<double>(s.pts[0].y));
+    CHECK(std::abs(inx - outx) < 1e-3);
+    CHECK(std::abs(iny - outy) < 1e-3);
+  }
+  // the closed loop is one stroke through the first anchor, and the final group is not zero-length
+  // (the duplicate closure anchor was dropped; the wrap segment spans the last anchor back to the first)
+  CHECK(s.pts[0].x == doctest::Approx(anchor(0).x));
+  CHECK(s.pts[0].y == doctest::Approx(anchor(0).y));
+  CHECK(s.pts[3 * m].x == doctest::Approx(anchor(0).x));
+  CHECK(s.pts[3 * m].y == doctest::Approx(anchor(0).y));
+  CHECK_FALSE(s.pts[3 * m - 3].x == doctest::Approx(s.pts[3 * m].x).epsilon(1e-9));
+  CHECK_FALSE(s.pts[3 * m - 3].y == doctest::Approx(s.pts[3 * m].y).epsilon(1e-9));
+}
+
+TEST_CASE("drawPath gate: ppu 100 stays legacy, ppu 250 refines (261012-h21)") {
+  const ScenePath circle = closedUnitCircle();
+  FieldScene scene;
+  scene.potential.push_back(circle);
+
+  // ppu 100: anchor chords ~29 px -> legacy branch: the stroke is the direct device mapping
+  Recorder legacy;
+  const View v100{1024, 768, 100.};
+  renderScene(legacy, scene, DrawStyle{}, v100);
+  REQUIRE(legacy.strokes.size() == 1);
+  const double cx = v100.widthPx / 2.0, cy = v100.heightPx / 2.0;
+  REQUIRE(legacy.strokes[0].pts.size() == circle.points.size());
+  for (std::size_t i = 0; i < circle.points.size(); ++i) {
+    CHECK(legacy.strokes[0].pts[i].x == doctest::Approx(static_cast<float>(cx + circle.points[i].X * 100.0)));
+    CHECK(legacy.strokes[0].pts[i].y == doctest::Approx(static_cast<float>(cy - circle.points[i].Y * 100.0)));
+  }
+  CHECK(legacy.strokes[0].segs == (circle.points.size() - 1) / 3);
+  CHECK(legacy.strokes[0].closed);
+
+  // ppu 250: anchor chords ~73 px -> refined branch: one extra group (22 wrap-aware segments, not 21)
+  // and inner points that are no longer the direct mapping of the input points
+  Recorder refined;
+  const View v250{2048, 2048, 250.};
+  renderScene(refined, scene, DrawStyle{}, v250);
+  REQUIRE(refined.strokes.size() == 1);
+  CHECK(refined.strokes[0].segs == 22);
+  CHECK(refined.strokes[0].pts.size() == 67);
+  CHECK(refined.strokes[0].pts[1].x != doctest::Approx(static_cast<float>(2048.0 / 2.0 + circle.points[1].X * 250.0)));
+  CHECK(refined.strokes[0].pts[1].y != doctest::Approx(static_cast<float>(2048.0 / 2.0 - circle.points[1].Y * 250.0)));
 }

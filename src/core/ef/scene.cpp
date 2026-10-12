@@ -35,6 +35,16 @@ struct Rect {
   }
 };
 
+// 261012-h21: device-space gate for the zoom-adaptive refinement in drawPath. 2x the ~24 px default-view
+// anchor spacing (the 8 px recorded thinning x 3): below it the legacy fitted cubics render sub-pixel
+// smooth, above it the corner kinks between consecutive anchors become visible and refinement pays off.
+constexpr double kRefineAnchorChordPx = 48.0;
+
+// One cubic group in the Painter::strokePath layout (p0, c1, c2, p3).
+struct CubicGroup {
+  PointF p[4];
+};
+
 void drawPath(Painter& painter, const ScenePath& path, const View& view, const Rect& vis, Color color, float width) {
   const std::size_t n = path.points.size();
   if (n < 2) return;  // MFC: a single point draws nothing
@@ -50,6 +60,98 @@ void drawPath(Painter& painter, const ScenePath& path, const View& view, const R
   const std::size_t segs = (n - 1) / 3;
   const std::size_t tail = (n - 1) % 3;  // trailing 1-2 points are drawn as straight lines (FieldLine::Draw morePoints)
 
+  // On-curve anchors (261012-h21): the fitted cubics pass through the group endpoints 0,3,6,...,3*segs plus the
+  // trailing line points. A closed figure whose last anchor closes the loop (world front==back, guaranteed by
+  // buildScene) drops that duplicate and wraps instead, so the loop needs no zero-length final group.
+  std::vector<PointF> anchors;
+  anchors.reserve(segs + 1 + tail);
+  for (std::size_t k = 0; k <= segs; ++k) anchors.push_back(dev[3 * k]);
+  for (std::size_t i = 1; i <= tail; ++i) anchors.push_back(dev[3 * segs + i]);
+  bool periodic = false;
+  if (path.closed && anchors.size() >= 2 && anchors.front().x == anchors.back().x && anchors.front().y == anchors.back().y) {
+    anchors.pop_back();
+    periodic = true;
+  }
+
+  // Gate: refine only when some anchor chord is big enough on screen for the joins to kink. Purely a draw-time
+  // decision from view.pixelsPerUnit: zooming never triggers a recompute and the trace data is untouched.
+  // (Squared comparison: identical decision, no sqrt.)
+  bool refine = false;
+  if (anchors.size() >= 2) {
+    double maxChordSq = 0.0;
+    for (std::size_t i = 0; i + 1 < anchors.size(); ++i) {
+      const double dx = static_cast<double>(anchors[i + 1].x) - static_cast<double>(anchors[i].x);
+      const double dy = static_cast<double>(anchors[i + 1].y) - static_cast<double>(anchors[i].y);
+      maxChordSq = std::max(maxChordSq, dx * dx + dy * dy);
+    }
+    if (periodic) {  // the wrap pair is drawn too (it closes the loop)
+      const double dx = static_cast<double>(anchors.front().x) - static_cast<double>(anchors.back().x);
+      const double dy = static_cast<double>(anchors.front().y) - static_cast<double>(anchors.back().y);
+      maxChordSq = std::max(maxChordSq, dx * dx + dy * dy);
+    }
+    refine = maxChordSq > kRefineAnchorChordPx * kRefineAnchorChordPx;
+  }
+
+  // The 4-point cubic groups + trailing straight-line points of the selected branch; both are consumed by ONE
+  // shared culling/flush loop below (behavior preserved exactly).
+  std::vector<CubicGroup> groups;
+  std::vector<PointF> tailPts;  // legacy branch only: connect point + 1-2 trailing line points
+  if (!refine) {
+    groups.reserve(segs);
+    for (std::size_t k = 0; k < segs; ++k) {
+      CubicGroup g;
+      for (std::size_t j = 0; j < 4; ++j) g.p[j] = dev[3 * k + j];
+      groups.push_back(g);
+    }
+    if (tail) {
+      tailPts.push_back(dev[3 * segs]);
+      for (std::size_t i = 1; i <= tail; ++i) tailPts.push_back(dev[3 * segs + i]);
+    }
+  } else {
+    // Refined emission (261012-h21): uniform Catmull-Rom through the anchors, emitted in the same 4-point group
+    // layout so the Painter contract and every backend stay unchanged. Control points
+    //   c1 = A[i] + (A[i+1] - A[i-1]) / 6,   c2 = A[i+1] - (A[i+2] - A[i]) / 6
+    // (the uniform Catmull-Rom -> Bezier conversion; tangent-continuous at every join by construction). Periodic
+    // paths wrap; open paths mirror the ends (2*A0 - A1 / 2*A[m-1] - A[m-2]). Pure double arithmetic, division by
+    // the constant 6 only: no degeneracy fallbacks and no new NaN paths; coincident-anchor groups fall out
+    // naturally and are harmless in every backend (the same class of degenerate groups the legacy path already
+    // emits after adjustForBezier fallbacks).
+    const std::size_t m = anchors.size();
+    const auto prevOf = [&](std::size_t k) -> PointF {  // neighbour before anchor k
+      if (k == 0) {
+        if (periodic) return anchors[m - 1];
+        return PointF{static_cast<float>(2.0 * static_cast<double>(anchors[0].x) - static_cast<double>(anchors[1].x)),
+                      static_cast<float>(2.0 * static_cast<double>(anchors[0].y) - static_cast<double>(anchors[1].y))};
+      }
+      return anchors[k - 1];
+    };
+    const auto nextOf = [&](std::size_t k) -> PointF {  // neighbour after anchor k
+      if (k == m - 1) {
+        if (periodic) return anchors[0];
+        return PointF{static_cast<float>(2.0 * static_cast<double>(anchors[m - 1].x) - static_cast<double>(anchors[m - 2].x)),
+                      static_cast<float>(2.0 * static_cast<double>(anchors[m - 1].y) - static_cast<double>(anchors[m - 2].y))};
+      }
+      return anchors[k + 1];
+    };
+    const std::size_t outSegs = periodic ? m : m - 1;
+    groups.reserve(outSegs);
+    for (std::size_t i = 0; i < outSegs; ++i) {
+      const std::size_t j = periodic ? (i + 1) % m : i + 1;  // destination anchor of the segment
+      const PointF pm = prevOf(i);
+      const PointF pn = nextOf(j);
+      const double x0 = pm.x, y0 = pm.y;
+      const double x1 = anchors[i].x, y1 = anchors[i].y;
+      const double x2 = anchors[j].x, y2 = anchors[j].y;
+      const double x3 = pn.x, y3 = pn.y;
+      CubicGroup g;
+      g.p[0] = anchors[i];
+      g.p[1] = PointF{static_cast<float>(x1 + (x2 - x0) / 6.0), static_cast<float>(y1 + (y2 - y0) / 6.0)};
+      g.p[2] = PointF{static_cast<float>(x2 - (x3 - x1) / 6.0), static_cast<float>(y2 - (y3 - y1) / 6.0)};
+      g.p[3] = anchors[j];
+      groups.push_back(g);
+    }
+  }
+
   std::vector<PointF> run;       // device points of the current visible run
   std::size_t runSegs = 0;       // cubic segments at the front of `run`
   bool culledAny = false;
@@ -59,24 +161,22 @@ void drawPath(Painter& painter, const ScenePath& path, const View& view, const R
     runSegs = 0;
   };
 
-  for (std::size_t k = 0; k < segs; ++k) {
-    const PointF* p = &dev[3 * k];
-    if (vis.intersects(p, 4)) {
-      if (run.empty()) run.push_back(p[0]);
-      run.push_back(p[1]);
-      run.push_back(p[2]);
-      run.push_back(p[3]);
+  for (const CubicGroup& g : groups) {
+    if (vis.intersects(g.p, 4)) {
+      if (run.empty()) run.push_back(g.p[0]);
+      run.push_back(g.p[1]);
+      run.push_back(g.p[2]);
+      run.push_back(g.p[3]);
       ++runSegs;
     } else {
       culledAny = true;
       flush(false);
     }
   }
-  if (tail) {
-    const PointF* p = &dev[3 * segs];
-    if (vis.intersects(p, tail + 1)) {
-      if (run.empty()) run.push_back(p[0]);
-      for (std::size_t i = 1; i <= tail; ++i) run.push_back(p[i]);
+  if (!tailPts.empty()) {
+    if (vis.intersects(tailPts.data(), tailPts.size())) {
+      if (run.empty()) run.push_back(tailPts[0]);
+      for (std::size_t i = 1; i < tailPts.size(); ++i) run.push_back(tailPts[i]);
     } else {
       culledAny = true;
       flush(false);

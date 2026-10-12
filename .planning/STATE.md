@@ -27,3 +27,12 @@ Last activity: 2026-10-12 — Milestone v2.5 completed and archived
 ## Operator Next Steps
 
 - Start the next milestone with /gsd-new-milestone
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 261012-h21 | Fix jagged equipotential circles when zoomed in (resolution must adapt to zoom) | 2026-10-12 | dc376f2 | .planning/quick/261012-h21-fix-jagged-equipotential-circles-when-zoomed-in |
+| 261012-h22 | Save Configuration after Rename must update the configuration name instead of erroring no-configuration-named-old-name | 2026-10-12 | 7e14cc7 | .planning/quick/261012-h22-save-configuration-after-rename |
+| 261012-h23 | Add a charge size control (charge radius) to the UI | 2026-10-12 | cde371c | .planning/quick/261012-h23-add-a-charge-size-control |
+| 261012-h24 | Coalesce undo history during mouse drag of a charge - record one entry on drop, not every mouse-move position | 2026-10-12 | 06382ab | .planning/quick/261012-h24-coalesce-undo-history-during-mouse-drag |

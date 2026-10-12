@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "batch_id": "261012-h20",
+  "created_at": "2026-10-12T05:16:49.259Z",
+  "options": {},
+  "base_revision": "471cca2b92fd87bd985554750bb3876c74ae31f7",
+  "items": [
+    {
+      "quick_id": "261012-h21",
+      "client_id": null,
+      "description": "Fix jagged equipotential circles when zoomed in (resolution must adapt to zoom)",
+      "status": "complete",
+      "depends_on": [],
+      "planned_files": [
+        "src/core/ef/scene.cpp",
+        "tests/test_scene.cpp"
+      ],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": "dc376f2",
+      "failure_reason": null
+    },
+    {
+      "quick_id": "261012-h22",
+      "client_id": null,
+      "description": "Save Configuration after Rename must update the configuration name instead of erroring no-configuration-named-old-name",
+      "status": "complete",
+      "depends_on": [],
+      "planned_files": [
+        "src/app/configs.hpp",
+        "src/app/configs.cpp",
+        "src/gui/app.cpp",
+        "src/app/session_file.hpp",
+        "src/app/session_file.cpp",
+        "src/app/workspace.hpp",
+        "src/app/workspace.cpp",
+        "tests/test_configs.cpp",
+        "tests/test_session_file.cpp",
+        "tests/test_app.cpp",
+        "tests/scripts/25-rename-save.efscript",
+        "tests/scripts/41-session-restore.efscript",
+        "docs/api.md"
+      ],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": "7e14cc7",
+      "failure_reason": null
+    },
+    {
+      "quick_id": "261012-h23",
+      "client_id": null,
+      "description": "Add a charge size control (charge radius) to the UI",
+      "status": "complete",
+      "depends_on": [],
+      "planned_files": [
+        "src/gui/ui.cpp",
+        "src/gui/app.cpp",
+        "tests/test_options.cpp",
+        "tests/scripts/15-options.efscript",
+        "docs/api.md"
+      ],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 1,
+      "commit": "cde371c",
+      "failure_reason": null
+    },
+    {
+      "quick_id": "261012-h24",
+      "client_id": null,
+      "description": "Coalesce undo history during mouse drag of a charge - record one entry on drop, not every mouse-move position",
+      "status": "complete",
+      "depends_on": [],
+      "planned_files": [
+        "src/app/workspace.hpp",
+        "src/app/editor.hpp",
+        "src/app/editor.cpp",
+        "src/gui/ui.cpp",
+        "src/gui/app.cpp",
+        "tests/test_editor.cpp"
+      ],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 2,
+      "commit": "06382ab",
+      "failure_reason": null
+    }
+  ]
+}

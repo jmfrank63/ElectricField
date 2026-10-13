@@ -31,10 +31,15 @@ recents=/tmp/ef-sandbox/Collections/Test|/tmp/ef-sandbox/Collections/Original
 configs=My Field
 drawsize=25
 tabs=1
-tab serial=2 title=Empty Configuration 1 state=done method=euler autocalc=0 stale=1 dirty=1 selected=1 lines=16 zoom=1 centre=0,0 grid=1,1,0,0,0,0,0.5,15 charges=1,0.5,0;3,0,2
+tab serial=2 title=Empty Configuration 1 state=done method=euler autocalc=0 stale=1 dirty=1 selected=1 lines=16 zoom=1 centre=0,0 grid=1,1,0,0,0,0,0.5,15 charges=1,0.5,0,25,1,Charge 1;3,0,2,0,2,Charge 2
 ```
 
 `grid=` is `active,visible,polar,intersectionsOnly,originX,originY,spacing,angleStepDeg`.
+
+`charges=` is a `;`-separated list of `v,x,y,sizePx,id,name` per charge (v2.6 phase 3): the drawn
+radius in px (0 = the Options default), the stable id, and the EFFECTIVE name (the stored name, or
+the derived `Charge N`; names are comma-free on disk). Older dumps' `v,x,y` prefix is unchanged, so
+`app.expect charges=1,0.5,0` keeps matching.
 
 `drawsize=` is the drawn charge radius in px (v2.5 SIZE-01, valid range 2-120; the `chargeSize` key in options.ini).
 
@@ -96,6 +101,8 @@ REC-02).
 |---|---|
 | `charge.add <value> <x> <y>` | append a charge (snapped when the grid is active) and select it |
 | `charge.select <index>` / `charge.move <i> <x> <y>` / `charge.value <i> <v>` / `charge.sign <i>` / `charge.remove <i>` | edit charges (index defaults to the selection where optional) |
+| `charge.name <i> <name...>` | set the charge's name (v2.6 phase 3): remaining tokens joined with single spaces, quoted names arrive as one token, ',' is stripped, empty resets to the derived "Charge N"; marks the tab dirty without invalidating the drawn lines |
+| `charge.size <i> <px>` | set the charge's own drawn radius (v2.6 phase 3): 0 = the Options default, else 2-120 px (`error: charge size must be 0 or 2-120`); dirty only, the canvas redraws at once |
 | `editor.undo` / `editor.redo` | step through charge and method changes |
 
 ### View & grid
@@ -108,7 +115,7 @@ REC-02).
 ### Options
 | Command | Effect |
 |---|---|
-| `options.set lines\|threads\|interval\|equipotentials\|method\|charge-size <value>` | change computation/draw options (validated, persisted); `charge-size` = the drawn charge radius, 2-120 px (v2.5) |
+| `options.set lines\|threads\|interval\|equipotentials\|method\|charge-size <value>` | change computation/draw options (validated, persisted); `charge-size` = the drawn charge radius, 2-120 px (v2.5) - since v2.6 phase 3 it is the DEFAULT size for NEW charges and the fallback for charges without their own size |
 
 ## Menu parity
 

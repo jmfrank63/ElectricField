@@ -51,15 +51,20 @@ preserved in history and on the `v1.0` tag.
   Configuration**; the file on disk updates immediately.
 - **Charge size**: the drawn radius of the charges scales from a dot to very large (2-120 px) - set
   it in **View > Options** (Draw tab) or with `options.set charge-size`. This is a drawing option
-  only; the physics never depends on it.
+  only; the physics never depends on it. Since v2.6 it is the DEFAULT size for new charges and the
+  fallback for charges without a size of their own.
 - **Charge editor**: click a charge to select it, drag it with the mouse, nudge it with the arrow keys
   (Shift = bigger steps) or type exact numbers into the editor panel's value/x/y fields with their arrow
   buttons (press and hold to repeat; **+/-** flips the sign). The **New charge** section creates a charge
   with any value and position, double-click empty canvas adds one, Delete removes the selected one.
-  Rename the tab by typing over its name at the top of the panel. Charges move in realtime; the drawn
-  lines keep showing the previous calculation (the tab is marked *edited*) until you press
-  **Calculate (F5)** - with a per-tab integration method selector in the panel and an optional
-  **Continuous calculation** checkbox that recomputes automatically after every edit.
+  Every charge also carries a name and its own drawn size (v2.6): edit both in the panel's **Name**
+  and **Size** rows (an empty name shows the derived *Charge N*, which is also what hovering the
+  charge on the canvas shows as a tooltip), and the selection ring follows the charge's size. Ids are
+  stable and never reused after a removal, even across undo/redo. Rename the tab by typing over its
+  name at the top of the panel. Charges move in realtime; the drawn lines keep showing the previous
+  calculation (the tab is marked *edited*) until you press **Calculate (F5)** - with a per-tab
+  integration method selector in the panel and an optional **Continuous calculation** checkbox that
+  recomputes automatically after every edit.
 - **Zoom and pan**: the mouse wheel zooms at the cursor, the panel's Zoom - / Zoom + / Reset view buttons
   are always at hand, right-drag pans, and the arrow keys pan whenever no charge is selected. The
   calculation adapts to the view: when you zoom in, the field lines hug the charges (the seed circle
@@ -154,14 +159,17 @@ Everything lives in the per-user config directory (`SDL_GetPrefPath("ElectricFie
 - `configurations.ini` - the pre-collections user configurations (kept for reference; imported into the
   Original collection on first run of v2.2 or later).
 - `Collections\<Name>.ini` (or any path you pick) - a COLLECTION FILE: sections [configuration "Name"]
-  with `charge = value, x, y` lines. The file you have open is the working collection;
+  with `charge = value, x, y, sizePx, id, name` lines (since v2.6 each charge also stores its own
+  drawn radius, stable id and editable name; legacy 3-field lines still load - size 0 = the Options
+  default, no id, derived name). The file you have open is the working collection;
   **File > Save Collection / Save Collection As...** write it. `options.ini` also stores `chargeSize`
   (v2.5): the drawn charge radius, 2-120 px.
 
 - `session.ini` - a pointer to the last-opened collection plus the recently opened collection files
   (`recent` lines, the Recent Collections menu); the open tabs of each collection live in
   `Sessions\<Collection>.ini` (title, preset source, per-tab method, continuous-calculation flag,
-  grid settings, charges) and are restored when that collection is opened.
+  grid settings, charges - each with its size, id and name since v2.6) and are restored when that
+  collection is opened.
 
 ## Project layout
 

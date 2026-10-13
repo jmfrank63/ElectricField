@@ -1,7 +1,7 @@
 # Roadmap - Milestone v2.6: Collections UX, Adaptive Zoom & Charge Identity
 
 **Created:** 2026-10-13
-**Status:** Executing
+**Status:** Complete (archived to milestones/v2.6-*)
 **Milestone goal:** As a user, I can pick up where I left off (Recent Collections always shows what I opened, even right after an update), delete configurations from a collection without hidden knowledge, zoom into charges without ever seeing empty white areas (the calculation adapts to the view), give every charge its own drawn size and an editable name with a stable id, and see that name as a tooltip on the canvas.
 
 ## Phases

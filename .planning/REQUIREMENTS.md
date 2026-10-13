@@ -311,22 +311,22 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ## Collections UX
 
-- [ ] **REC-02**: Recent Collections shows what was opened even when starting fresh: at startup the list is restored from the session pointer, and a pointer written by an older version (a `collection =` line without `recent` lines) seeds its collection into the list; the pointer is also rewritten at quit, so the list is always current
-- [ ] **COL-10**: Deleting a configuration from the collection is discoverable: the configuration chooser offers a visible Remove action for the selected configuration (with the existing confirmation dialog), right-click removal keeps working, and `config.remove` is unchanged
+- [x] **REC-02**: Recent Collections shows what was opened even when starting fresh: at startup the list is restored from the session pointer, and a pointer written by an older version (a `collection =` line without `recent` lines) seeds its collection into the list; the pointer is also rewritten at quit, so the list is always current
+- [x] **COL-10**: Deleting a configuration from the collection is discoverable: the configuration chooser offers a visible Remove action for the selected configuration (with the existing confirmation dialog), right-click removal keeps working, and `config.remove` is unchanged
 
 ## Zoom
 
-- [ ] **ZOOM-02**: Zooming into a charge no longer shows the empty uncalculated disk around it: a zoomed tab recalculates with a view-adapted seed/hit radius so field lines start and end close to the charges on screen (the calculation always runs with a seed circle of about 1 px on screen - the smallest that makes sense; larger circles are no big deal, smaller sub-pixel ones are pointless), recomputing automatically (debounced) when the zoom settles; the zoom-in ceiling extends as far as the numerics allow; the default view and the ef-cli parity output stay unchanged
+- [x] **ZOOM-02**: Zooming into a charge no longer shows the empty uncalculated disk around it: a zoomed tab recalculates with a view-adapted seed/hit radius so field lines start and end close to the charges on screen (the calculation always runs with a seed circle of about 1 px on screen - the smallest that makes sense; larger circles are no big deal, smaller sub-pixel ones are pointless), recomputing automatically (debounced) when the zoom settles; the zoom-in ceiling extends as far as the numerics allow; the default view and the ef-cli parity output stay unchanged
 
 ## Charge identity & size
 
-- [ ] **CHARGE-01**: Each charge carries its own drawn size; View > Options' charge size is only the DEFAULT applied to new charges; the selected charge's size is editable in the editor panel; per-charge sizes persist in collections and sessions; callable via `charge.size <i> <px>`
-- [ ] **CHARGE-02**: Each charge carries a stable id and an editable name (new charges default to "Charge N"); the editor panel edits the name; hovering a charge on the canvas shows its name as a tooltip; ids and names persist in collections and sessions
+- [x] **CHARGE-01**: Each charge carries its own drawn size; View > Options' charge size is only the DEFAULT applied to new charges; the selected charge's size is editable in the editor panel; per-charge sizes persist in collections and sessions; callable via `charge.size <i> <px>`
+- [x] **CHARGE-02**: Each charge carries a stable id and an editable name (new charges default to "Charge N"); the editor panel edits the name; hovering a charge on the canvas shows its name as a tooltip; ids and names persist in collections and sessions
 
 ## Traceability (v2.6)
 
-| Requirement | Phase |
-|-------------|-------|
-| REC-02, COL-10 | 1 |
-| ZOOM-02 | 2 |
-| CHARGE-01, CHARGE-02 | 3 |
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| REC-02, COL-10 | 1 | Done (phase 1: commits 6c1fbd6..05e7d9d) |
+| ZOOM-02 | 2 | Done (phase 2: commits f6ad731..e18a961) |
+| CHARGE-01, CHARGE-02 | 3 | Done (phase 3: commits fbc1526..8e06f71) |

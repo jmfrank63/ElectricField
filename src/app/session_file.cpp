@@ -31,9 +31,15 @@ bool parseTabHeader(const std::string& line, std::string& title) {
 }  // namespace
 
 std::string serializeSession(const std::vector<SavedTab>& tabs, const std::string& collection) {
+  return serializeSession(tabs, collection, {});
+}
+
+std::string serializeSession(const std::vector<SavedTab>& tabs, const std::string& collection, const std::vector<std::string>& recents) {
   std::ostringstream os;
   os << "# Electric Field open tabs\n";
   os << "collection = " << collection << '\n';
+  // 261012-h26: the recently opened collection files, newest first (the session pointer's recents menu).
+  for (const std::string& r : recents) os << "recent = " << r << '\n';
   for (const SavedTab& t : tabs) {
     std::string title = t.title;
     title.erase(std::remove(title.begin(), title.end(), '"'), title.end());
@@ -97,6 +103,8 @@ ParsedSession parseSession(const std::string& text) {
 
     if (key == "collection") {
       if (!value.empty()) r.collection = value;  // v2.2: which collection the tabs belong to
+    } else if (key == "recent") {  // 261012-h26: a recently opened collection file (UTF-8 path, newest first)
+      if (!value.empty() && r.recents.size() < 100) r.recents.push_back(value);
     } else if (key == "autocalc") {
       if (inTab && ini::toLower(value) == "true") cur.autoRecalc = true;
     } else if (key == "grid") {
@@ -148,12 +156,17 @@ ParsedSession parseSession(const std::string& text) {
 }
 
 bool saveSession(const std::filesystem::path& file, const std::vector<SavedTab>& tabs, const std::string& collection, std::string& error) {
+  return saveSession(file, tabs, collection, {}, error);
+}
+
+bool saveSession(const std::filesystem::path& file, const std::vector<SavedTab>& tabs, const std::string& collection,
+                 const std::vector<std::string>& recents, std::string& error) {
   std::ofstream out(file, std::ios::binary | std::ios::trunc);
   if (!out) {
     error = "Could not write the session file.";
     return false;
   }
-  out << serializeSession(tabs, collection);
+  out << serializeSession(tabs, collection, recents);
   out.flush();
   if (!out) {
     error = "Could not write the session file.";
@@ -179,6 +192,7 @@ SavedSession loadSessionFull(const std::filesystem::path& file) {
   const ParsedSession r = parseSession(text);
   s.collection = r.collection;
   s.tabs = r.value;
+  s.recents = r.recents;
   return s;
 }
 

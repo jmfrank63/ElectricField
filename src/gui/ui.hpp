@@ -24,6 +24,13 @@ struct UiEnv {
   const efapp::Options* options = nullptr;  // the current options, owned by App; the dialog resets its edits from here
 };
 
+// 261012-h26: one File > Recent Collections entry: label for display (stem, unique in the list, ImGui
+// '&' already escaped), path = the collection file's UTF-8 path.
+struct RecentCollection {
+  std::string label;
+  std::string path;
+};
+
 struct UiState {
   // requests (set by menu / shortcuts / startup, consumed by drawUi)
   bool openChooser = false, openAbout = false, requestQuit = false;
@@ -43,6 +50,9 @@ struct UiState {
   bool saveCollectionRequest = false;       // File > Save Collection (Ctrl+S, v2.4 COL-06)
   bool saveConfigurationRequest = false;    // File > Save Configuration (v2.5 CFG-04; needs a source configuration)
   bool closeCollectionRequest = false;      // File > Close Collection (v2.4 COL-08; v2.5: no collection open after)
+  // 261012-h26: the recents mirror (the App owns the master list) and a clicked entry's request.
+  std::vector<RecentCollection> recentCollections;
+  std::string openRecentPath;
   bool renameOpen = false, renameVisible = false;  // tab rename modal (v2.4 TAB-03)
   unsigned renameSerial = 0;
   char renameBuf[128] = "";

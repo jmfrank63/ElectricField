@@ -33,6 +33,9 @@ struct AppOptions {
   bool usesUserDir() const { return !headless() || script; }
 };
 
+// 261012-h26: how many entries File > Recent Collections keeps (and session.ini persists).
+inline constexpr std::size_t kMaxRecentCollections = 10;
+
 class App {
  public:
   App() = default;
@@ -117,6 +120,10 @@ class App {
   std::string currentCollection_ = "Original";  // v2.2 COL: the collection being worked on ("" = none open, v2.5)
   std::filesystem::path currentCollectionPath_;  // v2.5 OPEN-01: the open collection's file (empty = none)
   std::vector<std::string> collections_;        // known collection names (switcher)
+  // 261012-h26: recently opened collection files, newest first (UTF-8 paths, v2.5 OPEN-01), persisted in
+  // the session pointer (session.ini `recent` lines) and listed by File > Recent Collections.
+  std::vector<std::string> recents_;
+  void noteRecentCollection(const std::filesystem::path& file);  // dedupe to the front, cap at kMaxRecentCollections
   bool leaveConfirmed_ = false;                 // v2.2: the unsaved-changes prompt was answered with "leave"
   std::string pendingCollection_;               // v2.2: collection to switch to once confirmed
   std::filesystem::path pendingCollectionFile_;  // v2.5 OPEN-01: collection file to open once confirmed

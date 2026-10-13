@@ -58,9 +58,21 @@ double arrowStep(const GridSettings& g);
 // View controls (v2.2 zoom/pan). View-only: they never mark the tab stale and never touch the computation.
 inline constexpr double kZoomMin = 0.05;
 inline constexpr double kZoomMax = 20.0;
+// 261012-h25: zooming IN is limited to views that still show kMinViewWorld world units across the canvas's
+// smaller side. The calculation starts at the seed circle, 0.25 world units from each charge (the disk
+// inside is never traced: field lines are born on that circle and equipotentials spawn on the lines), so a
+// smaller view around a charge can be nothing but the uncalculated hole - the "empty spots" at extreme
+// zoom. One world unit of view keeps that hole at most half of the smaller side; larger views are fine.
+inline constexpr double kMinViewWorld = 1.0;
+// The largest legal zoom for a canvas whose smaller side is `minCanvasPx` logical pixels, rendered at
+// `pixelsPerUnitBase` px per world unit WITHOUT the zoom factor (canvasView's 100 * HiDPI scale):
+// zoom <= minCanvasPx / pixelsPerUnitBase, clamped to [kZoomMin, kZoomMax]. Degenerate inputs (no canvas
+// measured yet) fall back to the static kZoomMax.
+double zoomCeiling(double minCanvasPx, double pixelsPerUnitBase);
 // Multiplies the zoom by `factor` while keeping `anchor` (the world point under the mouse) at the same
-// screen position. Clamped to [kZoomMin, kZoomMax].
-bool zoomAt(Tab& t, double factor, ef::Vec2 anchor);
+// screen position. Clamped to [kZoomMin, zoomMax] - the caller passes zoomCeiling(...) as zoomMax
+// (kZoomMax when not, e.g. before the first frame has measured the canvas).
+bool zoomAt(Tab& t, double factor, ef::Vec2 anchor, double zoomMax = kZoomMax);
 // Pans by a screen-space delta in device pixels (right-drag, arrow keys): the world centre moves opposite.
 // `pixelsPerUnit` is the tab's current view scale.
 bool pan(Tab& t, ef::Vec2 screenDeltaPx, double pixelsPerUnit);

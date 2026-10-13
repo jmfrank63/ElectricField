@@ -36,10 +36,12 @@ preserved in history and on the `v1.0` tag.
   holds named configurations - **File > Open Collection... (Ctrl+O)** opens one with the native file
   picker (from anywhere), **File > New Collection...** creates one through the save dialog, and
   **File > Save Collection / Save Collection As...** write it back (Ctrl+S or a chosen path). The
-  **Original** collection (under `Collections\` in the per-user config directory) holds the built-in
-  arrangements. The collection you have open appears in the menu bar's switcher; the configuration
-  menu entries (New/Open/Save Configuration...) are greyed out until a collection is open - the flow
-  is always *open a collection, then work with its configurations*. Nothing is auto-opened at startup.
+  **File > Recent Collections** submenu re-opens the files you worked with lately (the list survives
+  restarts). The **Original** collection (under `Collections\` in the per-user config directory) holds
+  the built-in arrangements. The collection you have open appears in the menu bar's switcher; the
+  configuration menu entries (New/Open/Save Configuration...) are greyed out until a collection is
+  open - the flow is always *open a collection, then work with its configurations*. Nothing is
+  auto-opened at startup.
 - **Save Configuration**: a tab opened from a configuration (or saved with **Save Configuration
   As...**) can write its current charges back into that configuration with **File > Save
   Configuration**; the file on disk updates immediately.
@@ -55,7 +57,9 @@ preserved in history and on the `v1.0` tag.
   **Calculate (F5)** - with a per-tab integration method selector in the panel and an optional
   **Continuous calculation** checkbox that recomputes automatically after every edit.
 - **Zoom and pan**: the mouse wheel zooms at the cursor, the panel's Zoom - / Zoom + / Reset view buttons
-  are always at hand, right-drag pans, and the arrow keys pan whenever no charge is selected.
+  are always at hand, right-drag pans, and the arrow keys pan whenever no charge is selected. Zooming in
+  is limited to views of at least 1 world unit across the smaller canvas side - the calculation starts at
+  the seed circle 0.25 world units from each charge, so a smaller view around it would be an empty spot.
 - **Your workspace comes back**: the open tabs - including each tab's calculation method, continuous
   calculation, grid settings and any charge edits - are stored per collection when you quit
   (`Sessions\<Collection>.ini`) and restored when you open the collection again. If tabs have changes
@@ -147,7 +151,8 @@ Everything lives in the per-user config directory (`SDL_GetPrefPath("ElectricFie
   **File > Save Collection / Save Collection As...** write it. `options.ini` also stores `chargeSize`
   (v2.5): the drawn charge radius, 2-120 px.
 
-- `session.ini` - a pointer to the last-opened collection; the open tabs of each collection live in
+- `session.ini` - a pointer to the last-opened collection plus the recently opened collection files
+  (`recent` lines, the Recent Collections menu); the open tabs of each collection live in
   `Sessions\<Collection>.ini` (title, preset source, per-tab method, continuous-calculation flag,
   grid settings, charges) and are restored when that collection is opened.
 

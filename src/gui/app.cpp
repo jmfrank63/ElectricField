@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -33,6 +34,37 @@ namespace {
 SDL_Surface* loadPng(const unsigned char* data, std::size_t size) {
   SDL_IOStream* io = SDL_IOFromConstMem(data, size);
   return io ? SDL_LoadPNG_IO(io, true) : nullptr;
+}
+
+// 261012-h26: the File > Recent Collections entries of one frame: label = the file's stem (duplicates get
+// their parent folder appended - two folders can hold the same name; '&' doubled, a bare one is ImGui's
+// shortcut marker), path = the stored UTF-8 string. Newest first (the list's order).
+std::vector<RecentCollection> recentMenus(const std::vector<std::string>& recents) {
+  std::vector<RecentCollection> out;
+  out.reserve(recents.size());
+  for (const std::string& p : recents) {
+    RecentCollection r;
+    r.label = std::filesystem::u8path(p).stem().u8string();
+    r.path = p;
+    out.push_back(std::move(r));
+  }
+  std::map<std::string, int> stemCount;
+  for (const RecentCollection& r : out) ++stemCount[r.label];
+  for (RecentCollection& r : out) {
+    if (stemCount[r.label] > 1) {
+      const std::filesystem::path parent = std::filesystem::u8path(r.path).parent_path();
+      const std::string folder = parent.filename().u8string();
+      r.label += "  (" + (folder.empty() ? parent.u8string() : folder) + ")";
+    }
+    std::string escaped;
+    escaped.reserve(r.label.size());
+    for (const char c : r.label) {
+      escaped += c;
+      if (c == '&') escaped += '&';
+    }
+    r.label = std::move(escaped);
+  }
+  return out;
 }
 
 // A session that never finishes: lets smoke draw the busy overlay deterministically.
@@ -176,7 +208,7 @@ bool App::init(const AppOptions& opt, std::string& step, std::string& message) {
       if (!legacy.tabs.empty()) {
         std::string migErr;
         if (efapp::saveSession(sessionsDir_ / (legacy.collection + ".ini"), legacy.tabs, legacy.collection, migErr))
-          efapp::saveSession(sessionPath_, {}, legacy.collection, migErr);  // now a pure pointer
+          efapp::saveSession(sessionPath_, {}, legacy.collection, legacy.recents, migErr);  // now a pure pointer
       }
       // v2.5 OPEN-01: the app starts with no collection open - a collection is a document file that
       // the user opens explicitly (File > Open Collection..., Ctrl+O; any path). The seeded
@@ -186,6 +218,9 @@ bool App::init(const AppOptions& opt, std::string& step, std::string& message) {
       userConfigs_.clear();
       ui_.userConfigs.clear();
       refreshCollections();
+      // 261012-h26: the recents list comes back (File > Recent Collections), even though no collection
+      // is opened automatically.
+      recents_ = efapp::loadSessionFull(sessionPath_).recents;
     }
   }
   env_.options = &options_;
@@ -250,6 +285,7 @@ void App::frame() {
   ws_.autoRecalcTick(ImGui::GetTime());  // v2.2 CALC-03: fire due continuous recalculations
   ui_.userConfigs = userConfigs_;  // the chooser reads the mirror; the App keeps the master list
   ui_.collections = collections_;
+  ui_.recentCollections = recentMenus(recents_);  // 261012-h26: File > Recent Collections entries
   ui_.currentCollection = currentCollection_;
   if (scaleDirty_) refreshScale();
   ImGui_ImplSDLRenderer3_NewFrame();
@@ -364,6 +400,25 @@ void App::frame() {
       ui_.openChooserAfterSwitch = false;
     }
     ui_.switchToCollection.clear();
+  }
+  if (!ui_.openRecentPath.empty()) {  // 261012-h26 REC-01: File > Recent Collections <entry> - the same
+    // switch flow as the file picker (prompt first when tabs have unsaved edits).
+    const std::filesystem::path file = std::filesystem::u8path(ui_.openRecentPath);
+    ui_.openRecentPath.clear();
+    if (!std::filesystem::exists(file)) {  // deleted since it was last opened: drop it from the list
+      const std::string key = file.u8string();
+      recents_.erase(std::remove(recents_.begin(), recents_.end(), key), recents_.end());
+      writeSessionPointer();  // the drop survives the restart even with no collection open
+      exportFailed("The collection file '" + key + "' no longer exists.");
+    } else if (ws_.anyDirty() && !leaveConfirmed_) {
+      pendingCollectionFile_ = file;
+      ui_.leaveText = "Some tabs have changes that are not saved to a collection.";
+      ui_.leaveButton = "Switch anyway";
+      ui_.openLeaveConfirm = true;
+      leaveConfirmed_ = true;  // the prompt is up; do not re-fire every frame
+    } else {
+      switchCollectionAt(file);
+    }
   }
   if (ui_.calculateAll) {  // v2.2 COL-03: open every configuration of the current collection in tabs
     ui_.calculateAll = false;
@@ -715,6 +770,10 @@ bool App::smokeExtras(std::string& report) {
   const float cx = (ui_.canvasMin.x + ui_.canvasMax.x) * 0.5f, cy = (ui_.canvasMin.y + ui_.canvasMax.y) * 0.5f;
   eio.AddMousePosEvent(cx, cy);
   frames(2);
+  // The click needs an editable tab (editing is a Done/Failed activity): the single-charge session
+  // usually finishes within these frames on CI's ReleaseFast, but a slow Debug run can still be
+  // computing here - wait for it (and so the check stops flaking).
+  if (!pumpUntilDone(es, 60000)) return fail("editor: the tab did not finish before the click");
   eio.AddMouseButtonEvent(0, true);
   frames(1);
   eio.AddMouseButtonEvent(0, false);
@@ -1170,9 +1229,20 @@ void App::refreshCollections() {
 }
 
 void App::writeSessionPointer() {
-  if (sessionPath_.empty() || currentCollection_.empty()) return;
+  // 261012-h26: also written with no collection open (collection line empty) so a recents change -
+  // e.g. a dropped entry whose file vanished - persists outside a collection switch too.
+  if (sessionPath_.empty()) return;
   std::string err;
-  if (!efapp::saveSession(sessionPath_, {}, currentCollection_, err)) std::fprintf(stderr, "session: %s\n", err.c_str());
+  if (!efapp::saveSession(sessionPath_, {}, currentCollection_, recents_, err)) std::fprintf(stderr, "session: %s\n", err.c_str());
+}
+
+// 261012-h26: an opened collection file becomes the newest entry of the recents list (deduped, capped).
+// Paths are stored as UTF-8 strings (u8string <-> u8path, the v2.5 OPEN-01 convention).
+void App::noteRecentCollection(const std::filesystem::path& file) {
+  const std::string key = file.u8string();
+  recents_.erase(std::remove(recents_.begin(), recents_.end(), key), recents_.end());
+  recents_.insert(recents_.begin(), key);
+  if (recents_.size() > kMaxRecentCollections) recents_.resize(kMaxRecentCollections);
 }
 
 void App::enterCollection(const std::string& name, const bool restoreTabs) {
@@ -1196,6 +1266,7 @@ void App::enterCollectionAt(const std::filesystem::path& file, const bool restor
     }
     pacer_.notifyActivity();
   }
+  noteRecentCollection(file);  // 261012-h26: the menu's newest entry (persisted by the pointer write below)
   writeSessionPointer();
   ui_.closePopups = true;  // a collection change invalidates every open modal (v2.4 BUG-02)
 }
@@ -1469,6 +1540,10 @@ std::string App::command(const std::string& line) {
     os << "collections=";
     for (std::size_t i = 0; i < collections_.size(); ++i) os << (i ? "|" : "") << collections_[i];
     os << '\n';
+    os << "recents=";  // 261012-h26: the File > Recent Collections labels (the files' stems), newest first
+    const std::vector<RecentCollection> menus = recentMenus(recents_);
+    for (std::size_t i = 0; i < menus.size(); ++i) os << (i ? "|" : "") << menus[i].label;
+    os << '\n';
     os << "configs=";
     for (std::size_t i = 0; i < userConfigs_.size(); ++i) os << (i ? "|" : "") << userConfigs_[i].name;
     os << '\n';
@@ -1563,6 +1638,16 @@ std::string App::command(const std::string& line) {
   if (cmd == "collection.close") {
     const std::string err = closeCollection();
     return err.empty() ? "ok" : err;
+  }
+  if (cmd == "collection.open-recent") {  // 261012-h26: File > Recent Collections, 1-based into the list
+    if (const std::string e = need(1); !e.empty()) return e;
+    long long n = 0;
+    if (!parseApiInt(tok[1], n) || n < 1 || static_cast<std::size_t>(n) > recents_.size())
+      return "error: no recent collection " + tok[1];
+    const std::filesystem::path file = std::filesystem::u8path(recents_[static_cast<std::size_t>(n - 1)]);
+    if (!std::filesystem::exists(file)) return "error: the collection file '" + file.u8string() + "' no longer exists";
+    switchCollectionAt(file);
+    return "ok";
   }
 
   if (cmd == "config.open") {
@@ -1747,7 +1832,11 @@ std::string App::command(const std::string& line) {
     if (!t) return e;
     double f = 0;
     if (!parseApiDouble(tok[1], f) || f <= 0) return "error: invalid zoom factor";
-    efapp::editor::zoomAt(*t, f, t->centre);
+    // 261012-h25: the same ceiling as the UI - the canvas's smaller side shows at least kMinViewWorld
+    // world units. Before the first frame has measured the canvas the static kZoomMax still applies
+    // (the first drawn frame re-clamps the stored zoom).
+    const float minSide = std::min(ui_.canvasMax.x - ui_.canvasMin.x, ui_.canvasMax.y - ui_.canvasMin.y);
+    efapp::editor::zoomAt(*t, f, t->centre, efapp::editor::zoomCeiling(minSide, 100.0 * efapp::clampScale(k_)));
     return "ok";
   }
   if (cmd == "view.pan") {

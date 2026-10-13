@@ -85,7 +85,8 @@ jobs:
         run: zig build smoke -Doptimize=ReleaseFast --summary all
 
       # API-03 (v2.4): the editor/collection scenarios through the command API, headless and sandboxed.
-      # 41 must run in 40's user dir (it verifies the session restore of 40's quit).
+      # 41 must run in 40's user dir (it verifies the session restore of 40's quit); 43 in 42's (the
+      # recents list restored from the session pointer, 261012-h26).
       - name: Command-API script tests
         run: |
           mkdir -p script-out
@@ -94,6 +95,7 @@ jobs:
             name=$(basename "$f" .efscript)
             dir="script-out/$name"
             if [ "$name" = "41-session-restore" ]; then dir="script-out/40-session"; fi
+            if [ "$name" = "43-recents-restore" ]; then dir="script-out/42-recents"; fi
             echo "--- $name"
             ./zig-out/bin/ElectricField --script "$f" --user-dir "$dir" --out "script-out/$name.log" || status=1
           done

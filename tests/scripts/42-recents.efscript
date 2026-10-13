@@ -1,0 +1,30 @@
+# 42-recents: File > Recent Collections (261012-h26 REC-01) - newest-first ordering, re-ordering by open,
+# the 10-entry cap and the collection.open-recent command. Paired with 43 (same user dir) for the
+# persistence across the restart.
+app.expect recents=
+collection.new Alpha
+collection.new Beta
+# The recents order by recency: Beta is the newest (1), Alpha second (2).
+collection.open-recent 2
+app.expect collection=Alpha
+# Opening re-ordered the list: Alpha is the newest now, Beta second.
+collection.open-recent 2
+app.expect collection=Beta
+app.expect-error "no recent collection 11" collection.open-recent 11
+# The cap: 12 more collections leave exactly 10 entries (R12 newest ... R3 oldest).
+collection.new R1
+collection.new R2
+collection.new R3
+collection.new R4
+collection.new R5
+collection.new R6
+collection.new R7
+collection.new R8
+collection.new R9
+collection.new R10
+collection.new R11
+collection.new R12
+collection.open-recent 10
+app.expect collection=R3
+app.expect-error "no recent collection 11" collection.open-recent 11
+app.quit force

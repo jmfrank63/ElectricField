@@ -34,6 +34,8 @@ collection.open Original
 app.expect collection=Original
 app.expect "title=Dipole 1"
 app.expect charges=1,0.5,0
+# 261012-h26 REC-01: the recents list is newest-first and the last open wins the top.
+app.expect recents=Original|Test
 config.remove Dipole
 app.expect tabs=1
 app.expect configs=

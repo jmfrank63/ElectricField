@@ -1,0 +1,8 @@
+# 43-recents-restore: the SAME user dir as 42 - the recents list comes back from the session pointer
+# (session.ini `recent` lines, 261012-h26), newest first, and opens by index like in the menu.
+app.expect collection=
+app.expect-no collection=Original
+# 42 left the list as R3|R12|R11|...|R4 (opening R3 re-ordered it to the front): the 10th is R4.
+collection.open-recent 10
+app.expect collection=R4
+app.quit force

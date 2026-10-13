@@ -35,25 +35,33 @@ struct SavedTab {
 // charge lines). A section needs a non-empty title and at least one valid charge, else it is skipped
 // (counted). Unknown keys and foreign sections are ignored. `collection = <name>` (v2.2) selects the
 // collection the tabs belong to; files without it parse as the Original collection.
+// 261012-h26: `recent = <path>` lines (UTF-8, v2.5 OPEN-01 paths) record the recently opened collection
+// files, newest first - the pointer file (session.ini) carries them; a per-collection tab file never
+// writes any, and parsing one there is harmless.
 std::string serializeSession(const std::vector<SavedTab>& tabs, const std::string& collection = "Original");
+std::string serializeSession(const std::vector<SavedTab>& tabs, const std::string& collection, const std::vector<std::string>& recents);
 
 struct ParsedSession {
   std::string collection = "Original";  // v2.2: the collection the tabs belong to
   std::vector<SavedTab> value;
   int skippedTabs = 0;
   int skippedCharges = 0;
+  std::vector<std::string> recents;  // 261012-h26: `recent` lines, in file order (newest first)
 };
 
 ParsedSession parseSession(const std::string& text);
 
 bool saveSession(const std::filesystem::path& file, const std::vector<SavedTab>& tabs, std::string& error);
 bool saveSession(const std::filesystem::path& file, const std::vector<SavedTab>& tabs, const std::string& collection, std::string& error);
+bool saveSession(const std::filesystem::path& file, const std::vector<SavedTab>& tabs, const std::string& collection,
+                 const std::vector<std::string>& recents, std::string& error);
 std::vector<SavedTab> loadSession(const std::filesystem::path& file);
 
-// Like loadSession, but also returns the collection tag (v2.2 COL-04).
+// Like loadSession, but also returns the collection tag (v2.2 COL-04) and the recents (261012-h26).
 struct SavedSession {
   std::string collection = "Original";
   std::vector<SavedTab> tabs;
+  std::vector<std::string> recents;
 };
 SavedSession loadSessionFull(const std::filesystem::path& file);
 

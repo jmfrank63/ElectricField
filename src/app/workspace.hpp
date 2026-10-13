@@ -60,7 +60,8 @@ struct Tab {
   bool dirty = false;             // v2.2: charges edited since the tab was opened / last saved to a collection
   // View state (v2.2 zoom/pan): device px = centre-anchored transform, pixelsPerUnit *= zoom. View changes
   // are never stale edits (they do not touch the computation).
-  double zoom = 1.0;              // 1 = 100 px per world unit (at k = 1); clamped to [0.05, 20]
+  double zoom = 1.0;              // 1 = 100 px per world unit (at k = 1); clamped to [0.05, 20], and zoom-in is
+                                  // further capped by the canvas's zoomCeiling (261012-h25: >= 1 world unit visible)
   ef::Vec2 centre;                // world point shown at the canvas centre
   // Continuous calculation (v2.2 CALC-03): when autoRecalc is on and the tab is stale, the GUI calls
   // autoRecalcTick(now) every frame and the tab recomputes once `pendingRecalcAt` (now + delay) passes.

@@ -27,6 +27,7 @@ ElectricField --script <file> [--user-dir <dir>] [--out <results>] [--lenient]
 ```
 collection=Test
 collections=Original|Test
+recents=/tmp/ef-sandbox/Collections/Test|/tmp/ef-sandbox/Collections/Original
 configs=My Field
 drawsize=25
 tabs=1
@@ -36,6 +37,9 @@ tab serial=2 title=Empty Configuration 1 state=done method=euler autocalc=0 stal
 `grid=` is `active,visible,polar,intersectionsOnly,originX,originY,spacing,angleStepDeg`.
 
 `drawsize=` is the drawn charge radius in px (v2.5 SIZE-01, valid range 2-120; the `chargeSize` key in options.ini).
+
+`recents=` is the File > Recent Collections menu, newest first (261012-h26; the opened collection
+files' names, persisted as `recent` path lines in session.ini).
 
 ## Commands
 
@@ -55,6 +59,7 @@ tab serial=2 title=Empty Configuration 1 state=done method=euler autocalc=0 stal
 | Command | Effect |
 |---|---|
 | `collection.open <name\|path>` / `collection.switch <name\|path>` | open a collection FILE (v2.5 OPEN-01): a bare name resolves to `Collections\<name>.ini`, a path opens the file from anywhere; saves this collection's session, closes it, restores the target's tabs |
+| `collection.open-recent <n>` | open the n-th entry (1-based, newest first) of the recents list (261012-h26; = File > Recent Collections) |
 | `collection.new <name>` | create an empty collection (a file under Collections) and switch to it |
 | `collection.save` | store edited open tabs into matching configurations, write the file |
 | `collection.save-as <name\|path>` | save the collection's configurations to a new file; the tabs stay open and belong to it |
@@ -89,7 +94,7 @@ tab serial=2 title=Empty Configuration 1 state=done method=euler autocalc=0 stal
 ### View & grid
 | Command | Effect |
 |---|---|
-| `view.zoom <factor>` / `view.pan <dpx> <dpy>` / `view.reset` | view transform (pan in device pixels) |
+| `view.zoom <factor>` / `view.pan <dpx> <dpy>` / `view.reset` | view transform (pan in device pixels); zoom-in is capped like in the UI so at least 1 world unit stays visible across the canvas's smaller side (the uncalculated seed disk around a charge would fill it) |
 | `grid.set active\|visible\|polar\|intersections on\|off` | grid flags, independently settable; `intersections` = show only the lattice points (v2.5) |
 | `grid.set origin <x> <y>` / `grid.set spacing <s>` / `grid.set angle <a>` | grid geometry |
 
@@ -102,13 +107,14 @@ tab serial=2 title=Empty Configuration 1 state=done method=euler autocalc=0 stal
 
 The File/Edit menus call the same actions: Open Configuration... and New Configuration... = the
 chooser (= `config.open`), Open Collection... (Ctrl+O) and New Collection... = the native file
-dialogs (the same actions as `collection.open`/`collection.new`), Close Tab = `tab.close`,
-Close Collection = `collection.close`, Save Collection (Ctrl+S) = `collection.save`,
-Save Collection As... = `collection.save-as`, Save Configuration = `config.save`,
-Save Configuration As... = `config.save-as`, Calculate All = `tab.calculate-all`,
-Export Configuration = the export dialog (PNG/SVG/PDF; = `export.configuration`'s render),
-Export Collection... = `export.collection`, Edit > Undo/Redo = `editor.undo`/`editor.redo`,
-tab right-click menu = Close/Rename/Save Configuration As/Calculate.
+dialogs (the same actions as `collection.open`/`collection.new`), Recent Collections =
+`collection.open-recent <n>` (261012-h26), Close Tab = `tab.close`, Close Collection = `collection.close`,
+Save Collection (Ctrl+S) = `collection.save`, Save Collection As... = `collection.save-as`,
+Save Configuration = `config.save`, Save Configuration As... = `config.save-as`,
+Calculate All = `tab.calculate-all`, Export Configuration = the export dialog (PNG/SVG/PDF;
+= `export.configuration`'s render), Export Collection... = `export.collection`,
+Edit > Undo/Redo = `editor.undo`/`editor.redo`, tab right-click menu =
+Close/Rename/Save Configuration As/Calculate.
 
 The configuration menu entries are greyed out while no collection is open (v2.5 CFG-04): a collection
 is always opened first, then its configurations.

@@ -200,6 +200,38 @@ TEST_CASE("flipSign and the view controls (v2.2 EDIT-09, ZOOM/PAN)") {
   CHECK_FALSE(v.dirty);
 }
 
+// 261012-h25: zoom-in is capped so at least kMinViewWorld world units stay visible across the canvas's
+// smaller side - the uncalculated seed disk (0.25 world units around each charge) must never fill the view.
+TEST_CASE("zoom ceiling: one world unit stays visible (261012-h25)") {
+  // zoomCeiling = smaller canvas side / base pixels-per-unit, clamped to [kZoomMin, kZoomMax].
+  CHECK(efapp::editor::zoomCeiling(768.0, 100.0) == doctest::Approx(7.68));
+  CHECK(efapp::editor::zoomCeiling(1024.0, 200.0) == doctest::Approx(5.12));   // HiDPI base (2x) halves the ceiling
+  CHECK(efapp::editor::zoomCeiling(5000.0, 100.0) == doctest::Approx(efapp::editor::kZoomMax));  // huge canvas: static cap
+  CHECK(efapp::editor::zoomCeiling(50.0, 100.0) == doctest::Approx(0.5));      // tiny canvas: ceiling below 1 zoom
+  CHECK(efapp::editor::zoomCeiling(3.0, 100.0) == doctest::Approx(efapp::editor::kZoomMin));     // degenerate: floor wins
+  CHECK(efapp::editor::zoomCeiling(0.0, 100.0) == doctest::Approx(efapp::editor::kZoomMax));     // nothing measured yet
+  CHECK(efapp::editor::zoomCeiling(-5.0, 100.0) == doctest::Approx(efapp::editor::kZoomMax));
+  CHECK(efapp::editor::zoomCeiling(768.0, 0.0) == doctest::Approx(efapp::editor::kZoomMax));
+
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);
+  // The ceiling caps zoom-in; the anchor rule still applies at the clamped value (centre unmoved when
+  // the anchor is the centre, as the panel buttons do).
+  CHECK(efapp::editor::zoomAt(t, 100.0, ef::Vec2{0, 0}, 7.68));
+  CHECK(t.zoom == doctest::Approx(7.68));
+  CHECK(t.centre.X == doctest::Approx(0.0));
+  // A caller-supplied ceiling above the static cap is itself capped...
+  CHECK(efapp::editor::zoomAt(t, 10.0, ef::Vec2{0, 0}, 500.0));
+  CHECK(t.zoom == doctest::Approx(efapp::editor::kZoomMax));
+  // ...and zooming out is never blocked by the ceiling.
+  efapp::editor::resetView(t);
+  CHECK(efapp::editor::zoomAt(t, 0.01, ef::Vec2{0, 0}, 7.68));
+  CHECK(t.zoom == doctest::Approx(efapp::editor::kZoomMin));
+  // The ceiling never marks the tab stale or dirty (view-only).
+  CHECK_FALSE(t.stale);
+  CHECK_FALSE(t.dirty);
+}
+
 TEST_CASE("dirty tracking and anyDirty (v2.2 leave prompt)") {
   ThrowFactory f;
   efapp::Tab& t = dipoleTab(f);

@@ -170,3 +170,33 @@ TEST_CASE("the tab's source configuration round-trips (h22)") {
   CHECK(l.value[1].title == "My Field");
   CHECK(l.value[1].source.empty());
 }
+
+// 261012-h26: the session pointer's recents list - `recent = <path>` lines, newest first, persisted with
+// the collection tag. The pointer file has no tabs; the per-collection tab files never write any.
+TEST_CASE("recents round-trip in the session pointer (261012-h26)") {
+  const std::vector<std::string> recents = {"/tmp/ef/Second.ini", "/tmp/ef/First With Spaces.ini"};
+  const std::string text = efapp::serializeSession({}, "Original", recents);
+  const efapp::ParsedSession r = efapp::parseSession(text);
+  CHECK(r.collection == "Original");
+  CHECK(r.value.empty());
+  REQUIRE(r.recents.size() == 2);
+  CHECK(r.recents[0] == "/tmp/ef/Second.ini");
+  CHECK(r.recents[1] == "/tmp/ef/First With Spaces.ini");  // spaces intact, one entry per line
+
+  // The file round-trip preserves them (saveSession with recents / loadSessionFull).
+  const auto tmp = std::filesystem::temp_directory_path() / "ef-test-session-recents";
+  std::filesystem::create_directories(tmp);
+  const auto file = tmp / "session.ini";
+  std::string err;
+  REQUIRE(efapp::saveSession(file, {}, "Pointer", recents, err));
+  const efapp::SavedSession loaded = efapp::loadSessionFull(file);
+  CHECK(loaded.collection == "Pointer");
+  REQUIRE(loaded.recents.size() == 2);
+  CHECK(loaded.recents[0] == "/tmp/ef/Second.ini");
+  std::error_code ec;
+  std::filesystem::remove(file, ec);
+  std::filesystem::remove(tmp, ec);
+
+  // Legacy text without recents parses to an empty list.
+  CHECK(efapp::parseSession(efapp::serializeSession({sample()}, "X")).recents.empty());
+}

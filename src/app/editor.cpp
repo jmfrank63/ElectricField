@@ -219,9 +219,16 @@ ef::Vec2 snapPoint(const GridSettings& g, ef::Vec2 world) {
 
 double arrowStep(const GridSettings& g) { return g.active && g.spacing > 0.0 ? g.spacing : 0.1; }
 
-bool zoomAt(Tab& t, const double factor, const ef::Vec2 anchor) {
+double zoomCeiling(const double minCanvasPx, const double pixelsPerUnitBase) {
+  if (!(minCanvasPx > 0.0) || !std::isfinite(minCanvasPx) || !(pixelsPerUnitBase > 0.0) || !std::isfinite(pixelsPerUnitBase))
+    return kZoomMax;
+  return std::clamp(minCanvasPx / pixelsPerUnitBase, kZoomMin, kZoomMax);
+}
+
+bool zoomAt(Tab& t, const double factor, const ef::Vec2 anchor, const double zoomMax) {
   if (!(factor > 0.0) || !std::isfinite(factor)) return false;
-  const double z = std::clamp(t.zoom * factor, kZoomMin, kZoomMax);
+  const double ceiling = std::clamp(zoomMax, kZoomMin, kZoomMax);
+  const double z = std::clamp(t.zoom * factor, kZoomMin, ceiling);
   if (z == t.zoom) return false;
   // Keep the anchor world point at the same screen position: centre = anchor + (centre - anchor) / factor.
   t.centre = ef::Vec2{anchor.X + (t.centre.X - anchor.X) / factor, anchor.Y + (t.centre.Y - anchor.Y) / factor};

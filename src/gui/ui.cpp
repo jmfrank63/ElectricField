@@ -72,9 +72,10 @@ bool uiCanvasPan = false;
 
 // v2.2 zoom/pan: wheel zooms at the cursor, right-drag pans; with no charge selected the arrow keys pan
 // the view instead of nudging a charge (EDIT-02 keeps nudging while a charge is selected).
-void viewControls(efapp::Tab& t, const ef::View& view, const ef::Vec2& mouseWorld, const bool hovered) {
+// 261012-h25: the wheel zoom respects the caller's zoom ceiling (the canvas's zoomCeiling).
+void viewControls(efapp::Tab& t, const ef::View& view, const ef::Vec2& mouseWorld, const bool hovered, const double zoomMax) {
   const ImGuiIO& io = ImGui::GetIO();
-  if (hovered && io.MouseWheel != 0.f) efapp::editor::zoomAt(t, io.MouseWheel > 0.f ? 1.15 : 1.0 / 1.15, mouseWorld);
+  if (hovered && io.MouseWheel != 0.f) efapp::editor::zoomAt(t, io.MouseWheel > 0.f ? 1.15 : 1.0 / 1.15, mouseWorld, zoomMax);
   if (ImGui::IsMouseDragging(1) && (hovered || uiCanvasPan)) {
     efapp::editor::pan(t, ef::Vec2{io.MouseDelta.x, io.MouseDelta.y}, view.pixelsPerUnit);
     uiCanvasPan = ImGui::IsMouseDown(1);
@@ -104,6 +105,11 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   ImDrawList* dl = ImGui::GetWindowDrawList();
 
   ef::View view = efapp::canvasView(avail.x, avail.y, env.k);
+  // 261012-h25: the zoom ceiling from the canvas size, applied to the stored zoom every frame - a window
+  // shrunk after a deep zoom re-clamps it here, so the view never shows less than kMinViewWorld world
+  // units across the smaller side (the uncalculated seed disk around a charge would fill it).
+  const double zoomCeiling = efapp::editor::zoomCeiling(std::min(avail.x, avail.y), view.pixelsPerUnit);
+  t.zoom = std::min(t.zoom, zoomCeiling);
   view.pixelsPerUnit *= t.zoom;  // v2.2 zoom
   view.centre = t.centre;        // v2.2 pan
   const ef::DrawStyle style = efapp::scaledStyle(env.drawStyle, env.k);  // user draw options (Phase 4), scaled for HiDPI
@@ -163,7 +169,7 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     efapp::editor::revertToComputed(t);
   }
   // v2.2 zoom/pan: wheel + right-drag + (unselected) arrow keys. View-only: never stale, works while computing.
-  viewControls(t, view, mouseWorld, hovered);
+  viewControls(t, view, mouseWorld, hovered, zoomCeiling);
 
   // Selection ring (v2): over the drawn scene, only when the charge exists.
   if (t.state != efapp::TabState::Computing && t.selected >= 0 && static_cast<std::size_t>(t.selected) < t.scene.charges.size()) {
@@ -681,11 +687,13 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   }
 
   // v2.2 zoom buttons (anchor = the current centre: pure zoom); Reset view restores zoom 1 / centre origin.
+  // 261012-h25: the buttons share the canvas's zoom ceiling (canvasMin/Max hold the rect drawn this frame).
   {
     const float bw = (kEditorPanelWidth * env.k - 2 * ImGui::GetStyle().ItemSpacing.x) / 3.f;
-    if (ImGui::Button("Zoom -", ImVec2(bw, 0.f))) efapp::editor::zoomAt(t, 1.0 / 1.25, t.centre);
+    const double ceiling = efapp::editor::zoomCeiling(std::min(ui.canvasMax.x - ui.canvasMin.x, ui.canvasMax.y - ui.canvasMin.y), 100.0 * env.k);
+    if (ImGui::Button("Zoom -", ImVec2(bw, 0.f))) efapp::editor::zoomAt(t, 1.0 / 1.25, t.centre, ceiling);
     ImGui::SameLine();
-    if (ImGui::Button("Zoom +", ImVec2(bw, 0.f))) efapp::editor::zoomAt(t, 1.25, t.centre);
+    if (ImGui::Button("Zoom +", ImVec2(bw, 0.f))) efapp::editor::zoomAt(t, 1.25, t.centre, ceiling);
     ImGui::SameLine();
     if (ImGui::Button("Reset view", ImVec2(bw, 0.f))) efapp::editor::resetView(t);
   }
@@ -946,6 +954,12 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
       // v2.5 OPEN-01: the COLLECTION is itself a document file - opened from anywhere through the
       // native file dialogs, saved where the user chooses.
       if (ImGui::MenuItem("Open Collection...", efapp::shortcutLabel("O", env.mac).c_str())) ui.exportRequest = 10;
+      // 261012-h26 REC-01: the recently opened collection files, newest first; each opens like the picker.
+      if (ImGui::BeginMenu("Recent Collections", !ui.recentCollections.empty())) {
+        for (const RecentCollection& r : ui.recentCollections)
+          if (ImGui::MenuItem(r.label.c_str())) ui.openRecentPath = r.path;
+        ImGui::EndMenu();
+      }
       if (ImGui::MenuItem("New Collection...", nullptr, false, true)) ui.exportRequest = 12;
       if (ImGui::MenuItem("Save Collection", efapp::shortcutLabel("S", env.mac).c_str(), false, collectionOpen)) ui.saveCollectionRequest = true;
       if (ImGui::MenuItem("Save Collection As...", nullptr, false, collectionOpen)) ui.exportRequest = 11;

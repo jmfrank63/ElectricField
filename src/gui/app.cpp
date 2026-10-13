@@ -220,7 +220,16 @@ bool App::init(const AppOptions& opt, std::string& step, std::string& message) {
       refreshCollections();
       // 261012-h26: the recents list comes back (File > Recent Collections), even though no collection
       // is opened automatically.
-      recents_ = efapp::loadSessionFull(sessionPath_).recents;
+      // v2.6 REC-02: a legacy pointer (a `collection = <name>` line, no `recent` lines - pre-h26 shape)
+      // seeds that collection into the list; a fresh sandbox has no stored collection line, so nothing
+      // is invented. The key must resolve to an existing file: recents entries are full paths.
+      const efapp::SavedSession pointer = efapp::loadSessionFull(sessionPath_);
+      std::string seedKey;
+      if (pointer.hasCollection) {
+        const std::filesystem::path f = collectionFile(pointer.collection);
+        if (std::filesystem::exists(f)) seedKey = f.u8string();
+      }
+      recents_ = efapp::seedRecents(pointer.recents, seedKey);
     }
   }
   env_.options = &options_;
@@ -509,6 +518,12 @@ int App::runInteractive() {
   while (iterate()) {
   }
   // SES-01: persist the open tabs (charges + per-tab method) for the next start.
+  // v2.6 REC-02: session.ini stays a pure pointer. With a collection open the tabs go to
+  // Sessions/<name>.ini (saveSessionNow; it also keeps grid/autocalc, which the old inline dump
+  // dropped) - dumping them into the pointer here would rewrite it WITHOUT recents and blank the
+  // stored collection (the empty-recents-on-upgrade defect). Only collection-less preset tabs still
+  // migrate through the pointer (blank collection line -> nothing is seeded from it), and the pointer
+  // itself is rewritten below in every case so its recents are current at the next start.
   if (!sessionPath_.empty()) {
     std::vector<efapp::SavedTab> saved;
     for (const auto& tp : ws_.tabs()) {
@@ -521,8 +536,13 @@ int App::runInteractive() {
       for (const ef::Charge& c : tp->field.charges) s.charges.push_back(ef::PresetCharge{c.charge, c.position.X, c.position.Y});
       saved.push_back(std::move(s));
     }
-    std::string err;
-    if (!efapp::saveSession(sessionPath_, saved, err)) std::fprintf(stderr, "session: %s\n", err.c_str());
+    if (!currentCollection_.empty()) {
+      saveSessionNow();
+    } else if (!saved.empty()) {
+      std::string err;
+      if (!efapp::saveSession(sessionPath_, saved, std::string(), recents_, err)) std::fprintf(stderr, "session: %s\n", err.c_str());
+    }
+    writeSessionPointer();
   }
   return 0;
 }
@@ -1231,9 +1251,17 @@ void App::refreshCollections() {
 void App::writeSessionPointer() {
   // 261012-h26: also written with no collection open (collection line empty) so a recents change -
   // e.g. a dropped entry whose file vanished - persists outside a collection switch too.
+  // v2.6 REC-02: with no collection open, a previously stored collection name is preserved
+  // (read-modify-write) instead of being blanked - that name is what the startup seeding reads.
+  // The exists gate keeps a first-ever pointer write blank rather than inventing a collection.
   if (sessionPath_.empty()) return;
+  std::string collection = currentCollection_;
+  if (collection.empty() && std::filesystem::exists(sessionPath_)) {
+    const efapp::SavedSession prev = efapp::loadSessionFull(sessionPath_);
+    if (prev.hasCollection) collection = prev.collection;
+  }
   std::string err;
-  if (!efapp::saveSession(sessionPath_, {}, currentCollection_, recents_, err)) std::fprintf(stderr, "session: %s\n", err.c_str());
+  if (!efapp::saveSession(sessionPath_, {}, collection, recents_, err)) std::fprintf(stderr, "session: %s\n", err.c_str());
 }
 
 // 261012-h26: an opened collection file becomes the newest entry of the recents list (deduped, capped).

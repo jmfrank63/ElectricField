@@ -15,11 +15,14 @@ app.expect ";-2,3,0,25,3,Charge 2"
 # which carries name + size + id of the surviving charge through the ChargeSystem snapshot.
 editor.undo
 app.expect charges=1,0,0,0,1,My Charge
+# IN-05: the size is re-applied BEFORE the save so the collection file round-trip pins a NON-ZERO
+# sizePx on disk (the undo-only flow used to save size 0 and the file path went untested for 40).
+charge.size 0 40
 app.expect-error "0 or 2-120" charge.size 0 1
 app.expect-error "0 or 2-120" charge.size 0 121
 config.save-as "Identity Test"
 tab.close
 config.open "Identity Test"
 app.wait-done
-app.expect charges=1,0,0,0,1,My Charge
+app.expect charges=1,0,0,40,1,My Charge
 app.quit force

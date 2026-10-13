@@ -608,7 +608,7 @@ bool App::checkCanvas(unsigned serial, int w, int h, std::string& report) {
   // The reference is rendered by the SAME function ef-cli uses (efrender::renderSurface), with its own ImGui context, while the
   // GUI context (with its initialised backend) is live: this is also the in-process regression check for the context rule.
   std::string err;
-  const ef::View view = efapp::canvasView(static_cast<float>(cw), static_cast<float>(ch), k_);
+  ef::View view = efapp::canvasView(static_cast<float>(cw), static_cast<float>(ch), k_);
   view.styleScale = k_;  // v2.6 CR-01: the reference mirrors the canvas exactly (per-charge sizes device-scaled)
   SDL_Surface* ref = efrender::renderSurface(t->scene, efapp::scaledStyle(options_.draw, k_), view, err);
   if (!ref) {
@@ -1224,7 +1224,11 @@ std::string App::exportCollectionTo(const std::string& path) {
   for (const efapp::UserConfig& c : userConfigs_) {
     ef::ChargeSystem field;
     field.charges.reserve(c.charges.size());
-    for (const ef::PresetCharge& ch : c.charges) field.charges.push_back(ef::Charge{ch.charge, ef::Vec2{ch.x, ch.y}});
+    // CR-02: carry the identity fields explicitly (the same field naming as workspace.cpp) - a
+    // positional 2-field initializer silently dropped id/name/sizePx, so whole-collection PDF
+    // export ignored per-charge sizes entirely.
+    for (const ef::PresetCharge& ch : c.charges)
+      field.charges.push_back(ef::Charge{ch.charge, ef::Vec2{ch.x, ch.y}, ch.id, ch.name, ch.sizePx});
     // WR-04: the DEFAULT view scale (0 = legacy), spelled out so the export stays zoom-history
     // independent even if options_.compute ever carried a stamped scale.
     ef::ComputeParams params = options_.compute;

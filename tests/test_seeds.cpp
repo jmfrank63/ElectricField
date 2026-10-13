@@ -155,3 +155,41 @@ TEST_CASE("an empty charge system yields no seeds and zero expected lines") {
   CHECK(planSeeds(field, p).empty());
   CHECK(expectedLineCount(field, p) == 0);
 }
+
+// v2.6 phase 2: seed/hit radii adapt to the view ONLY above kRefPpu; at/below it every value is
+// exactly the legacy one, so the default view and ef-cli (which never sets viewScale) are bit-identical.
+TEST_CASE("zoom-adaptive radii: legacy at/below kRefPpu, clamped shrink above (v2.6 phase 2)") {
+  ComputeParams p;  // viewScale 0 = legacy
+  CHECK(p.seedRadius() == doctest::Approx(0.25));
+  CHECK(p.hitRadius() == doctest::Approx(25.0 / 1.5 / 100.0));
+  p.viewScale = 100.0;  // exactly the reference ppu: still legacy
+  CHECK(p.seedRadius() == doctest::Approx(0.25));
+  CHECK(p.hitRadius() == doctest::Approx(25.0 / 1.5 / 100.0));
+  CHECK(p.seedRadius() == doctest::Approx(p.chargeRadiusWorld()));
+
+  p.viewScale = 150.0;  // just above the reference: ~2 px seed circle (2/150), endpoints at chargeRadiusPx / 1.5 px
+  CHECK(p.seedRadius() == doctest::Approx(2.0 / 150.0));
+  CHECK(p.hitRadius() == doctest::Approx((25.0 / 1.5) / 150.0));
+
+  p.viewScale = 800.0;  // 2/800 is below the kMinSeedWorld floor: the seed floored, the hit still scales
+  CHECK(p.seedRadius() == doctest::Approx(ComputeParams::kMinSeedWorld));
+  CHECK(p.hitRadius() == doctest::Approx((25.0 / 1.5) / 800.0));
+
+  p.viewScale = 2000.0;  // both target radii are below the kMinSeedWorld floor: floored
+  CHECK(p.seedRadius() == doctest::Approx(ComputeParams::kMinSeedWorld));
+  CHECK(p.hitRadius() == doctest::Approx(ComputeParams::kMinSeedWorld));
+
+  p.viewScale = 2500.0;  // the new ceiling: the floored seed circle is exactly the drawn dot on screen
+  CHECK(p.seedRadius() == doctest::Approx(ComputeParams::kMinSeedWorld));
+  CHECK(p.seedRadius() * 2500.0 == doctest::Approx(25.0));
+
+  // planSeeds places the seeds on the adapted circle (planSeeds reads p.seedRadius()).
+  const ChargeSystem single = [] {
+    ChargeSystem f;
+    f.charges.push_back(Charge{1, Vec2{0, 0}});
+    return f;
+  }();
+  p.viewScale = 150.0;
+  for (const auto& s : planSeeds(single, p))
+    CHECK((s.point - single.charges[s.chargeIndex].position).Length() == doctest::Approx(2.0 / 150.0));
+}

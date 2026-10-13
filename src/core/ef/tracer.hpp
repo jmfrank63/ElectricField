@@ -38,6 +38,10 @@ struct PotentialLine : FieldLine {
 // the measured worst Debug+UBSan gap between polls is about 11 ms (Dormand-Prince); the relaxed atomic load costs nothing measurable.
 inline constexpr std::size_t kCancelStride = 1024;
 
+// v2.6 phase 2: an equipotential ring is posted only when its on-screen spacing along the line is at
+// least this many px (spacing dr = dV/|E|, on-screen dr * viewScale); sub-pixel rings render as a blob.
+inline constexpr double kRingPx = 1.25;
+
 // Hooks used by the tracers. Default = standalone (never cancelled, no equipotential jobs).
 struct NoHooks {
   bool cancelled() const noexcept { return false; }
@@ -79,6 +83,11 @@ inline bool shouldPostEquipotential(const ChargeSystem& field, const ComputePara
       oldPotential = std::floor(potential / p.potentialInterval) * p.potentialInterval;
     else
       oldPotential += sign(potential - oldPotential) * p.potentialInterval;
+    // Ring gate (v2.6 phase 2, after the label logic): |E(point)| * kRingPx > interval * viewScale means
+    // the next ring is less than kRingPx px away on screen - skip the post (the label still advances, so
+    // labels stay consecutive once spacing recovers). |E| is exact for multi-charge fields. Legacy
+    // (viewScale <= kRefPpu) never gates.
+    if (p.adapts() && field.E(point).Length() * kRingPx > p.potentialInterval * p.viewScale) return false;
     return true;
   }
   return false;

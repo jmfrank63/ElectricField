@@ -84,6 +84,55 @@ TEST_CASE("no equipotential jobs when equipotentials are off or for non-first se
   CHECK(h.children.empty());
 }
 
+// v2.6 phase 2 invariant: viewScale at/below kRefPpu posts EXACTLY the legacy jobs (same count, labels
+// and points) - the default view and ef-cli (which never sets viewScale) stay bit-identical.
+TEST_CASE("viewScale <= kRefPpu posts exactly the legacy equipotential jobs (ef-cli/parity invariant)") {
+  const ChargeSystem dipole = preset("dipole");
+  ComputeParams legacy;
+  const auto seeds = planSeeds(dipole, legacy);
+  REQUIRE(seeds[0].first);
+  CollectHooks hLegacy;
+  rk::Euler<Vec2> solver;
+  traceElectricLine(solver, dipole, legacy, seeds[0], hLegacy);
+  REQUIRE(hLegacy.children.size() > 20);
+
+  ComputeParams atRef = legacy;
+  atRef.viewScale = 100.0;  // exactly the reference ppu
+  CollectHooks hRef;
+  traceElectricLine(solver, dipole, atRef, seeds[0], hRef);
+  REQUIRE(hRef.children.size() == hLegacy.children.size());
+  for (std::size_t i = 0; i < hLegacy.children.size(); ++i) {
+    CHECK(hRef.children[i].label == hLegacy.children[i].label);
+    CHECK(hRef.children[i].start.X == hLegacy.children[i].start.X);
+    CHECK(hRef.children[i].start.Y == hLegacy.children[i].start.Y);
+  }
+}
+
+// v2.6 phase 2 ring gate: with |E| = 1/r^2 (single +1 charge at the origin), the on-screen spacing is
+// kRingPx px at r = sqrt(kRingPx / (interval * viewScale)) - no posts below it, posts allowed beyond.
+TEST_CASE("ring gate: sub-pixel equipotential spacing is not posted above kRefPpu (v2.6 phase 2)") {
+  ChargeSystem field;
+  field.charges.push_back(Charge{1, Vec2{0, 0}});
+  ComputeParams p;
+  p.potentialInterval = 0.1;
+  p.viewScale = 1000.0;
+  const double rGate = std::sqrt(ef::kRingPx / (p.potentialInterval * p.viewScale));
+  const double rBlock = 0.5 * rGate;  // well inside: |E| * kRingPx > interval * viewScale
+  const double rAllow = 2.0 * rGate;  // well outside: |E| * kRingPx < interval * viewScale
+
+  Seed s;
+  s.first = true;
+  s.charge = 1;
+  double oldPotential = 0;
+  CHECK_FALSE(shouldPostEquipotential(field, p, s, Vec2{rBlock, 0}, oldPotential));
+  CHECK(shouldPostEquipotential(field, p, s, Vec2{rAllow, 0}, oldPotential));
+
+  // Legacy never gates: the same blocked point posts once the label condition holds.
+  p.viewScale = 0;
+  oldPotential = 0;
+  CHECK(shouldPostEquipotential(field, p, s, Vec2{rBlock, 0}, oldPotential));
+}
+
 TEST_CASE("equipotential trace closes on itself and records the weight centre (CalculateEquipotential)") {
   const ChargeSystem dipole = preset("dipole");
   ComputeParams p;

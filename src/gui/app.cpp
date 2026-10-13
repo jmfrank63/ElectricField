@@ -520,10 +520,12 @@ int App::runInteractive() {
   // SES-01: persist the open tabs (charges + per-tab method) for the next start.
   // v2.6 REC-02: session.ini stays a pure pointer. With a collection open the tabs go to
   // Sessions/<name>.ini (saveSessionNow; it also keeps grid/autocalc, which the old inline dump
-  // dropped) - dumping them into the pointer here would rewrite it WITHOUT recents and blank the
-  // stored collection (the empty-recents-on-upgrade defect). Only collection-less preset tabs still
-  // migrate through the pointer (blank collection line -> nothing is seeded from it), and the pointer
-  // itself is rewritten below in every case so its recents are current at the next start.
+  // dropped) and the pointer is rewritten with the stored collection + current recents. The pointer
+  // rewrite is skipped exactly when tabs were dumped into it: the collection-less defensive path
+  // (no shipped path opens tabs without a collection) writes tabs + recents with a blank collection
+  // line, and rewriting the pointer after that dump would erase the tabs; the startup migration
+  // turns the dump back into Sessions/<collection>.ini + a pure pointer. With no tabs at all, only
+  // the pointer is refreshed so its recents are current at the next start.
   if (!sessionPath_.empty()) {
     std::vector<efapp::SavedTab> saved;
     for (const auto& tp : ws_.tabs()) {
@@ -538,11 +540,14 @@ int App::runInteractive() {
     }
     if (!currentCollection_.empty()) {
       saveSessionNow();
+      writeSessionPointer();  // pure pointer: the stored collection + recents
     } else if (!saved.empty()) {
       std::string err;
+      // The dump already carries the recents; a pointer rewrite here would erase the tabs it just wrote.
       if (!efapp::saveSession(sessionPath_, saved, std::string(), recents_, err)) std::fprintf(stderr, "session: %s\n", err.c_str());
+    } else {
+      writeSessionPointer();  // nothing to dump: refresh the pointer so its recents stay current
     }
-    writeSessionPointer();
   }
   return 0;
 }

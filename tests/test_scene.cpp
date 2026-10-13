@@ -279,6 +279,35 @@ TEST_CASE("renderScene draws SceneCharge.sizePx when set, style.chargeRadiusPx w
   CHECK(svg.find("r=\"25\"") != std::string::npos);
 }
 
+// v2.6 phase 3 (CR-01): per-charge sizePx is LOGICAL px and is scaled by view.styleScale, while
+// style.chargeRadiusPx arrives from the callers already device-scaled. At k=2 a custom-sized charge
+// and an inherited charge of the same logical value must produce the SAME drawn dot extent - the
+// exact defect F1 pinned (half-size dots on HiDPI displays). Every unscaled caller (styleScale 1,
+// the default) is byte-identical to the pre-CR-01 behaviour.
+TEST_CASE("renderScene scales per-charge sizePx by view.styleScale (v2.6 phase 3 CR-01, HiDPI)") {
+  FieldScene scene;
+  scene.charges.push_back(SceneCharge{Vec2{-2, 0}, +1, 25.f});  // custom: 25 LOGICAL px
+  scene.charges.push_back(SceneCharge{Vec2{2, 0}, -1, 0.f});    // inherited
+  ef::DrawStyle style;      // chargeRadiusPx 25 logical...
+  style.chargeRadiusPx = 50.f;  // ...pre-scaled by k=2, exactly what scaledStyle(base, 2) produces
+  View view{1024, 768, 200.};   // device ppu at k=2, zoom 1 (canvasView gives 100 * k)
+  view.styleScale = 2.f;        // what the GUI canvas / runExport stamp
+  Recorder rec;
+  renderScene(rec, scene, style, view);
+  REQUIRE(rec.circles.size() == 2);
+  CHECK(rec.circles[0].r == doctest::Approx(50.f));  // 25 logical * 2 = the sibling's extent
+  CHECK(rec.circles[1].r == doctest::Approx(50.f));  // inherited: the pre-scaled style radius
+  CHECK(rec.circles[0].color.b == 255);              // colours untouched
+  CHECK(rec.circles[1].color.r == 255);
+
+  // Default styleScale 1 (every core/exporter caller): raw sizePx, byte-identical to pre-CR-01.
+  Recorder unscaled;
+  renderScene(unscaled, scene, DrawStyle{}, View{1024, 768, 200.});
+  REQUIRE(unscaled.circles.size() == 2);
+  CHECK(unscaled.circles[0].r == doctest::Approx(25.f));
+  CHECK(unscaled.circles[1].r == doctest::Approx(25.f));
+}
+
 TEST_CASE("renderScene draws the grid between background and scene (v2.4 BUG-01)") {
   Recorder r;
   FieldScene scene;

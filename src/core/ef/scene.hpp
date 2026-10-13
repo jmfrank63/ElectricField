@@ -41,6 +41,11 @@ struct View {
   int heightPx = 768;
   double pixelsPerUnit = 100.;
   Vec2 centre{0, 0};
+  // v2.6 phase 3 (CR-01): the device/logical px ratio of the surface. Per-charge sizePx is stored
+  // LOGICAL px; renderScene scales it by this to device px. The default 1 keeps every unscaled
+  // caller (ef-cli, SVG/PDF/PNG exports with fitted views, tests) byte-identical; the GUI canvas
+  // and the matching export paths stamp their content scale k here.
+  float styleScale = 1.f;
 };
 
 struct ScenePath {

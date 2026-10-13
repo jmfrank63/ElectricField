@@ -609,6 +609,7 @@ bool App::checkCanvas(unsigned serial, int w, int h, std::string& report) {
   // GUI context (with its initialised backend) is live: this is also the in-process regression check for the context rule.
   std::string err;
   const ef::View view = efapp::canvasView(static_cast<float>(cw), static_cast<float>(ch), k_);
+  view.styleScale = k_;  // v2.6 CR-01: the reference mirrors the canvas exactly (per-charge sizes device-scaled)
   SDL_Surface* ref = efrender::renderSurface(t->scene, efapp::scaledStyle(options_.draw, k_), view, err);
   if (!ref) {
     SDL_DestroySurface(gui);
@@ -1145,7 +1146,8 @@ void App::runExport(const std::string& path) {
     exportFailed("The configuration is not finished.");  // defensive: the menu only enables a finished tab
     return;
   }
-  const ef::View view = efapp::canvasView(ui_.canvasMax.x - ui_.canvasMin.x, ui_.canvasMax.y - ui_.canvasMin.y, k_);
+  ef::View view = efapp::canvasView(ui_.canvasMax.x - ui_.canvasMin.x, ui_.canvasMax.y - ui_.canvasMin.y, k_);
+  view.styleScale = k_;  // v2.6 CR-01: the export shows the on-screen scene - per-charge sizes device-scaled
   const ef::DrawStyle style = efapp::scaledStyle(options_.draw, k_);
   std::string err;
   if (exportFormat_ == 1)

@@ -28,8 +28,9 @@ TEST_CASE("hitCharge: nearest within radius, -1 outside (EDIT-01)") {
   ef::ChargeSystem f;
   f.charges.push_back(ef::Charge{1, ef::Vec2{-2, 0}});
   f.charges.push_back(ef::Charge{-1, ef::Vec2{2, 0}});
-  // v2.6 phase 3: (pixelsPerUnit, defaultRadiusPx) device pairs. 25 px at 100 ppu + 0.05 slack = the
-  // old fixed 0.30 bound; 45 px at 100 ppu = the old 0.50 probe.
+  // v2.6 phase 3: (pixelsPerUnit, defaultRadiusPx) logical pairs (CR-01: the hit convention is the
+  // phase-2 logical space, so bounds are k-independent). 25 px at 100 ppu + 0.05 slack = the old
+  // fixed 0.30 bound; 45 px at 100 ppu = the old 0.50 probe.
   CHECK(efapp::editor::hitCharge(f, ef::Vec2{-1.9, 0.1}, 100.0, 25.0) == 0);
   CHECK(efapp::editor::hitCharge(f, ef::Vec2{2.2, 0.0}, 100.0, 25.0) == 1);
   CHECK(efapp::editor::hitCharge(f, ef::Vec2{0.0, 0.0}, 100.0, 25.0) == -1);  // midway: nothing near

@@ -18,9 +18,11 @@ namespace editor {
 // Selecting: the nearest charge within its own bound (world units). Each charge's bound is its
 // effective radius converted to world units plus a fixed slack:
 //   (sizePx > 0 ? sizePx : defaultRadiusPx) / pixelsPerUnit + kEditorHitSlack
-// `defaultRadiusPx` and `pixelsPerUnit` must be in the SAME (device) space: ui.cpp passes
-// view.pixelsPerUnit with defaultPx * k. At the defaults this is byte-identical to the old fixed
-// 0.30 bound (25 px / 100 ppu + 0.05). pixelsPerUnit <= 0 degenerates to 1.0. -1 = no hit.
+// v2.6 phase 3 (CR-01): defaultRadiusPx and pixelsPerUnit are LOGICAL px (the phase-2 convention:
+// ui.cpp passes 100 * zoom with the unscaled Options default), so bounds are display-scale-
+// independent and a per-charge sizePx needs no scaling either - all three live in the same logical
+// space at every k. At the defaults this is byte-identical to the old fixed 0.30 bound (25 px /
+// 100 ppu + 0.05). pixelsPerUnit <= 0 degenerates to 1.0. -1 = no hit.
 inline constexpr double kEditorHitSlack = 0.05;
 int hitCharge(const ef::ChargeSystem& field, ef::Vec2 world, double pixelsPerUnit, double defaultRadiusPx);
 

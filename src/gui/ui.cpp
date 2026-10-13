@@ -114,6 +114,7 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   t.zoom = std::min(t.zoom, zoomCeiling);
   view.pixelsPerUnit *= t.zoom;  // v2.2 zoom
   view.centre = t.centre;        // v2.2 pan
+  view.styleScale = env.k;       // v2.6 CR-01: per-charge sizePx is logical px; renderScene draws it device-scaled
   // v2.6 phase 2: arm the zoom-settle recalculation - the decision (Done-only, first-frame-safe,
   // regime-aware with the WR-01 epsilon band, WR-03 logical stamp) lives in editor::armViewRecalc so it
   // is doctested without ImGui. Checked before viewControls so this frame's wheel event re-arms cleanly
@@ -133,8 +134,10 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   const ImGuiIO& io = ImGui::GetIO();
   const ef::Vec2 mouseWorld = efapp::editor::snapPoint(t.grid, efapp::worldFromCanvas(view, p.x, p.y, io.MousePos.x, io.MousePos.y));
   // v2.6 phase 3: one hit test per frame, reused by the double-click guard, the click-select and the
-  // hover tooltip. Radius px and ppu in the SAME device space (defaultPx * env.k).
-  const int hoverIdx = (canEdit && hovered) ? efapp::editor::hitCharge(t.field, mouseWorld, view.pixelsPerUnit, dotPx * env.k) : -1;
+  // hover tooltip. CR-01: hit bounds live in the LOGICAL space (the phase-2 convention) - the ppu is
+  // the zoom-relative 100 * zoom (what armViewRecalc stamps) and the default radius is the unscaled
+  // Options value, so bounds are display-scale-independent and per-charge sizePx needs no scaling.
+  const int hoverIdx = (canEdit && hovered) ? efapp::editor::hitCharge(t.field, mouseWorld, 100.0 * t.zoom, dotPx) : -1;
   if (canEdit && hovered) {
     if (ImGui::IsMouseDoubleClicked(0)) {  // EDIT-13: double-click empty canvas adds a charge in one go
       if (hoverIdx < 0) {
@@ -186,11 +189,12 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   viewControls(t, view, mouseWorld, hovered, zoomCeiling);
 
   // Selection ring (v2): over the drawn scene, only when the charge exists. v2.6 phase 3: the ring
-  // follows the charge's effective radius (its own sizePx, else the style default).
+  // follows the charge's effective radius (its own sizePx scaled to device px, else the style default,
+  // which scaledStyle already delivers in device px - CR-01).
   if (t.state != efapp::TabState::Computing && t.selected >= 0 && static_cast<std::size_t>(t.selected) < t.scene.charges.size()) {
     const ef::SceneCharge& sc = t.scene.charges[static_cast<std::size_t>(t.selected)];
     const ef::Vec2 c = efapp::canvasFromWorld(view, p.x, p.y, sc.position);
-    const float ringRadius = (sc.sizePx > 0.f ? sc.sizePx : style.chargeRadiusPx) + 3.f * env.k;
+    const float ringRadius = (sc.sizePx > 0.f ? sc.sizePx * env.k : style.chargeRadiusPx) + 3.f * env.k;
     dl->AddCircle(ImVec2(static_cast<float>(c.X), static_cast<float>(c.Y)), ringRadius, rgba(0x42, 0x96, 0xFA), 0, 1.5f * env.k);
   }
 

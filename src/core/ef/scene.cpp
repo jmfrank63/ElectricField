@@ -292,7 +292,10 @@ void renderScene(Painter& painter, const FieldScene& scene, const DrawStyle& sty
   for (const auto& c : scene.charges) {
     const PointF center{static_cast<float>(cx + c.position.X * view.pixelsPerUnit), static_cast<float>(cy - c.position.Y * view.pixelsPerUnit)};
     // v2.6 phase 3: a charge with its own size draws at it; 0 inherits the style radius (draw-only).
-    const float radius = c.sizePx > 0.f ? c.sizePx : style.chargeRadiusPx;
+    // CR-01: sizePx is LOGICAL px - view.styleScale carries the device/logical ratio, and
+    // style.chargeRadiusPx arrives pre-scaled from the scaledStyle callers, so both branches are
+    // device px and a custom-sized charge matches an inherited one of the same logical value.
+    const float radius = c.sizePx > 0.f ? c.sizePx * view.styleScale : style.chargeRadiusPx;
     painter.fillCircle(center, radius, c.charge > 0 ? style.positiveCharge : style.negativeCharge);
   }
   painter.end();

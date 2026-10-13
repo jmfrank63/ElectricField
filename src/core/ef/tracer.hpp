@@ -39,7 +39,8 @@ struct PotentialLine : FieldLine {
 inline constexpr std::size_t kCancelStride = 1024;
 
 // v2.6 phase 2: an equipotential ring is posted only when its on-screen spacing along the line is at
-// least this many px (spacing dr = dV/|E|, on-screen dr * viewScale); sub-pixel rings render as a blob.
+// least this many logical px (spacing dr = dV/|E|, on-screen dr * viewScale; viewScale is the GUI's
+// zoom-relative logical scale); sub-pixel rings render as a blob.
 inline constexpr double kRingPx = 1.25;
 
 // Hooks used by the tracers. Default = standalone (never cancelled, no equipotential jobs).
@@ -160,9 +161,10 @@ PotentialLine traceEquipotential(Solver& solver, const ChargeSystem& field, cons
   detail::PerpendicularDirection functorV{&field};
   Vec2 point = startPoint;
   const double px = static_cast<double>(p.pixelsPerUnit);
-  // v2.6 phase 2: record ring anchors every ~8 device px at the TARGET view (legacy keeps the 100 px
-  // scale). The near-charge adapted rings are small on screen; at the legacy recording density they
-  // store 4-5 anchors and the bezier fit renders them as wild swoops instead of circles.
+  // v2.6 phase 2: record ring anchors every ~8 logical px at the TARGET view (legacy keeps the 100 px
+  // scale; viewScale is the GUI's zoom-relative logical scale). The near-charge adapted rings are
+  // small on screen; at the legacy recording density they store 4-5 anchors and the bezier fit renders
+  // them as wild swoops instead of circles.
   const double recordPx = p.adapts() ? p.viewScale : px;
 
   double t = 0;

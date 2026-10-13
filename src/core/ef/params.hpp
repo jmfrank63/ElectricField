@@ -14,8 +14,11 @@ struct ComputeParams {
   double potentialInterval = 0.1;
   unsigned numThreads = 4;            // Options::numThreads (Options.cpp:22)
   Method method = Method::Euler;
-  // v2.6 phase 2: device px per world unit the computation should adapt to (the GUI's 100 * k * zoom).
-  // 0/unset = legacy; ef-cli never sets it, so parity output is bit-identical.
+  // v2.6 phase 2: px per world unit the computation should adapt to, in LOGICAL px: the GUI stamps its
+  // zoom-relative scale (100 * zoom, display-scale-independent), so kRefPpu = 100 means "the default
+  // view at every DPI" and the px constants below (kSeedPx, the hit target, kRingPx) are logical px -
+  // the same space as DrawStyle::chargeRadiusPx. 0/unset = legacy; ef-cli never sets it, so parity
+  // output is bit-identical.
   double viewScale = 0;
 
   // Adaptation engages ONLY above the reference ppu: at/below it every radius is exactly the legacy value.
@@ -29,7 +32,8 @@ struct ComputeParams {
   // Charge radius in world units: chargeRadiusPx / pixelsPerUnit == 0.25 with the defaults (D-03).
   double chargeRadiusWorld() const { return chargeRadiusPx / static_cast<double>(pixelsPerUnit); }
   // r = chargeRadius / distanceUnitLength  (StartCalculating, FieldLinesCalculator.cpp:231);
-  // zoom-adapted above kRefPpu (the drawn dot must cover the floored seed circle: viewScale <= 25/0.01).
+  // zoom-adapted above kRefPpu (the drawn dot must cover the floored seed circle: viewScale <= 25/0.01
+  // with the default 25 px dot - the applied Options charge size caps the GUI's zoom ceiling instead).
   double seedRadius() const {
     if (!adapts()) return chargeRadiusWorld();
     return std::clamp(kSeedPx / viewScale, kMinSeedWorld, chargeRadiusWorld());

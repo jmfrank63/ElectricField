@@ -6,10 +6,11 @@ charge.name 0 "My Charge"
 charge.size 0 40
 app.expect charges=1,0,0,40,1,My Charge
 charge.add -2 3 0
-app.expect ";-2,3,0,0,2,Charge 2"
+# IN-01: charge.add freezes the Options default (25 in a fresh sandbox) exactly like the GUI add sites.
+app.expect ";-2,3,0,25,2,Charge 2"
 charge.remove 1
 charge.add -2 3 0
-app.expect ";-2,3,0,0,3,Charge 2"
+app.expect ";-2,3,0,25,3,Charge 2"
 # add/remove are not undoable (v2.5 history model): the undo restores the pre-size-edit snapshot,
 # which carries name + size + id of the surviving charge through the ChargeSystem snapshot.
 editor.undo

@@ -1820,7 +1820,11 @@ std::string App::command(const std::string& line) {
     long long v = 0;
     double x = 0, y = 0;
     if (!parseApiInt(tok[1], v) || !parseApiDouble(tok[2], x) || !parseApiDouble(tok[3], y)) return "error: charge.add needs <value> <x> <y>";
-    if (!efapp::editor::addCharge(*t, typedWorld(*t, x, y), static_cast<int>(v))) return "error: the tab is computing";
+    // IN-01: freeze the Options default exactly like the GUI add sites (SC3: the default applies to
+    // NEW charges) - an API-added charge no longer tracks later Options changes while its GUI-added
+    // siblings stay frozen. addCharge validates and would degrade an out-of-range default to 0.
+    if (!efapp::editor::addCharge(*t, typedWorld(*t, x, y), static_cast<int>(v), options_.draw.chargeRadiusPx))
+      return "error: the tab is computing";
     return "ok";
   }
   auto selectedOrArg = [&](std::string& err) -> int {

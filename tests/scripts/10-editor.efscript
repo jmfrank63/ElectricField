@@ -13,8 +13,9 @@ tab.esc
 app.expect stale=0
 app.expect charges=1,0,0
 charge.add 2 3 0
-# v2.6 phase 3: the dump shows charges=v,x,y,sizePx,id,displayName.
-app.expect "charges=1,0,0,0,1,Charge 1;2,3,0,0,2,Charge 2"
+# v2.6 phase 3: the dump shows charges=v,x,y,sizePx,id,displayName; IN-01: charge.add freezes the
+# Options default (25 in a fresh sandbox) like the GUI add sites.
+app.expect "charges=1,0,0,0,1,Charge 1;2,3,0,25,2,Charge 2"
 charge.sign 1
 app.expect -2,3,0
 charge.value 1 -7

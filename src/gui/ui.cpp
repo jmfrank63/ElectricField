@@ -115,31 +115,11 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   t.zoom = std::min(t.zoom, zoomCeiling);
   view.pixelsPerUnit *= t.zoom;  // v2.2 zoom
   view.centre = t.centre;        // v2.2 pan
-  // v2.6 phase 2: arm the zoom-settle recalculation. Only Done tabs, and never on the first frame
-  // (armedViewPpu starts 0); checked before viewControls so this frame's wheel event re-arms cleanly
-  // next frame. The stamped scale is the ZOOM-RELATIVE (logical) ppu, 100 * zoom - display-scale-
-  // independent, so kRefPpu = 100 identifies the default view at every DPI (WR-03: a device-ppu stamp
-  // would flip a HiDPI default view into the adapted regime on its first recalc) and the core's px
-  // constants stay logical, consistent with the logical dot radius. viewPpu tracks the live scale so
-  // an explicit Calculate stamps the same scale. A zoom that settles back into the regime the tab was
-  // last computed at (both sides at/below kRefPpu) would reproduce the identical calculation, so it
-  // disarms a pending recalc instead of arming one - zoom wiggling below the reference never locks
-  // the editor with a redundant computation.
-  if (t.state == efapp::TabState::Done && t.session == nullptr) {
-    double logicalPpu = 100.0 * t.zoom;
-    // WR-01: a settled ppu in (kRefPpu, kRefPpuEps] is the legacy regime (fp round-trip drift of a
-    // wheel factor). The stamp snaps down to kRefPpu, so both the guard below and any computation
-    // this tab later runs (zoom settle, edit recalc, F5 - they all stamp viewScale = viewPpu) are
-    // regime-stable; a value that drifted a hair above 100 computes legacy instead of collapsing the
-    // seed circle at the default view. adapts() itself stays strict.
-    if (logicalPpu > ef::ComputeParams::kRefPpu && logicalPpu <= ef::ComputeParams::kRefPpuEps)
-      logicalPpu = ef::ComputeParams::kRefPpu;
-    const bool sameRegime = logicalPpu <= ef::ComputeParams::kRefPpu &&
-                            (t.params.viewScale == 0 || t.params.viewScale <= ef::ComputeParams::kRefPpuEps);
-    if (t.armedViewPpu != 0 && logicalPpu != t.armedViewPpu) t.pendingViewRecalcAt = sameRegime ? -1.0 : -2;
-    t.viewPpu = logicalPpu;
-    t.armedViewPpu = logicalPpu;
-  }
+  // v2.6 phase 2: arm the zoom-settle recalculation - the decision (Done-only, first-frame-safe,
+  // regime-aware with the WR-01 epsilon band, WR-03 logical stamp) lives in editor::armViewRecalc so it
+  // is doctested without ImGui. Checked before viewControls so this frame's wheel event re-arms cleanly
+  // next frame; the stamp is the ZOOM-RELATIVE (logical) ppu, 100 * zoom.
+  efapp::editor::armViewRecalc(t, 100.0 * t.zoom);
   const ef::DrawStyle style = efapp::scaledStyle(env.drawStyle, env.k);  // user draw options (Phase 4), scaled for HiDPI
   {
     efrender::ImGuiPainter painter(dl, p);

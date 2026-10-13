@@ -78,6 +78,17 @@ bool pan(Tab& t, ef::Vec2 screenDeltaPx, double pixelsPerUnit);
 // Back to zoom 1 with the world origin at the canvas centre.
 bool resetView(Tab& t);
 
+// v2.6 phase 2 (WR-05): the GUI canvas's zoom-settle arming decision, extracted from the ImGui layer so
+// the arm -> viewRecalcTick -> calculate composition is doctested (deleting it used to pass every
+// suite). Call once per frame for a tab with the tab's ZOOM-RELATIVE (logical) ppu (100 * zoom). Done
+// tabs only (Done and no live session), and never on the first frame (armedViewPpu starts 0): a ppu
+// change either arms pendingViewRecalcAt = -2 - the pending recalculation would run in a DIFFERENT
+// regime than the last computation (returns true) - or disarms it (-1: the settle would reproduce the
+// identical legacy calculation). viewPpu/armedViewPpu are stamped on every call. A settled ppu in
+// (kRefPpu, kRefPpuEps] is the legacy regime (WR-01 fp round-trip drift) and snaps the stamp down to
+// kRefPpu; adapts() itself stays strict.
+bool armViewRecalc(Tab& t, double logicalPpu);
+
 }  // namespace editor
 
 }  // namespace efapp

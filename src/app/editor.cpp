@@ -251,5 +251,24 @@ bool resetView(Tab& t) {
   return true;
 }
 
+bool armViewRecalc(Tab& t, const double logicalPpu) {
+  if (t.state != TabState::Done || t.session != nullptr) return false;  // arming is a Done-tab activity
+  if (!(logicalPpu > 0.0) || !std::isfinite(logicalPpu)) return false;  // defensive: zoom is always clamped > 0
+  double ppu = logicalPpu;
+  // WR-01: a settled ppu a hair above the reference is the legacy regime - snap the stamp down so the
+  // guard and any compute this tab later runs (zoom settle, edit recalc, F5) stay regime-stable.
+  if (ppu > ef::ComputeParams::kRefPpu && ppu <= ef::ComputeParams::kRefPpuEps) ppu = ef::ComputeParams::kRefPpu;
+  const bool sameRegime = ppu <= ef::ComputeParams::kRefPpu &&
+                          (t.params.viewScale == 0 || t.params.viewScale <= ef::ComputeParams::kRefPpuEps);
+  bool armed = false;
+  if (t.armedViewPpu != 0 && ppu != t.armedViewPpu) {
+    t.pendingViewRecalcAt = sameRegime ? -1.0 : -2;
+    armed = !sameRegime;
+  }
+  t.viewPpu = ppu;
+  t.armedViewPpu = ppu;
+  return armed;
+}
+
 }  // namespace editor
 }  // namespace efapp

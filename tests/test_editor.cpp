@@ -320,6 +320,77 @@ TEST_CASE("viewRecalcTick with a real session completes the adapted computation 
   ws.closeAll();
 }
 
+// v2.6 phase 2 (WR-05): the drawCanvas arming decision as a pure helper. Previously deleting the arming
+// block in the GUI passed every suite (the verifier's behavior_unverified item) - these pins close that
+// gap: Done-only, first-frame-safe, inert re-frames, arm on a regime change, disarm on a legacy settle,
+// and the WR-01 epsilon band.
+TEST_CASE("armViewRecalc: the zoom-settle arming decision (v2.6 phase 2 WR-05)") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);
+  REQUIRE(t.state == efapp::TabState::Failed);
+  CHECK_FALSE(efapp::editor::armViewRecalc(t, 800.0));  // not Done: never arms, never stamps
+  CHECK(t.armedViewPpu == 0.0);
+  CHECK(t.pendingViewRecalcAt == -1.0);
+
+  t.state = efapp::TabState::Done;  // the arming unit runs on a finished tab; the compute itself is the next test
+  CHECK_FALSE(efapp::editor::armViewRecalc(t, 100.0));  // first frame (armedViewPpu 0): never arms
+  CHECK(t.armedViewPpu == doctest::Approx(100.0));
+  CHECK(t.viewPpu == doctest::Approx(100.0));
+  CHECK(t.pendingViewRecalcAt == -1.0);
+
+  CHECK_FALSE(efapp::editor::armViewRecalc(t, 100.0));  // identical re-frame (same zoom, any DPI): inert
+  CHECK(t.pendingViewRecalcAt == -1.0);
+
+  CHECK(efapp::editor::armViewRecalc(t, 800.0));  // zoom into the adapted regime: arms
+  CHECK(t.pendingViewRecalcAt == -2);
+  CHECK(t.viewPpu == doctest::Approx(800.0));
+  CHECK_FALSE(efapp::editor::armViewRecalc(t, 800.0));  // settled (redraws at the same zoom): no re-arm
+  CHECK(t.pendingViewRecalcAt == -2);
+
+  // Zoom back into the legacy regime: the settle would reproduce the legacy calculation - disarms.
+  CHECK_FALSE(efapp::editor::armViewRecalc(t, 100.0));
+  CHECK(t.pendingViewRecalcAt == -1.0);
+
+  // WR-01: a ppu a hair above the reference (fp round-trip drift of a wheel factor) is legacy - the
+  // stamp snaps down to kRefPpu EXACTLY, so no armed compute can land in the band.
+  CHECK_FALSE(efapp::editor::armViewRecalc(t, 100.0 * (1.0 + 5e-10)));
+  CHECK(t.viewPpu == 100.0);  // exact equality: snapped, not approximately 100
+  CHECK(t.pendingViewRecalcAt == -1.0);
+  CHECK(efapp::editor::armViewRecalc(t, 100.001));  // genuinely above the band: the adapted regime arms
+  CHECK(t.pendingViewRecalcAt == -2);
+}
+
+// v2.6 phase 2 (WR-05): the full GUI-side composition the verifier flagged as untested - arming through
+// the helper, the tick converting the marker, one fire with the stamped scale.
+TEST_CASE("armViewRecalc -> viewRecalcTick -> calculate: the zoom settle fires once with the stamped scale (v2.6 phase 2 WR-05)") {
+  std::vector<ef::ComputeParams> received;
+  efapp::Workspace ws{ef::ComputeParams{}, [&](const ef::ChargeSystem&, const ef::ComputeParams& p) -> std::unique_ptr<efapp::ISession> {
+    received.push_back(p);
+    throw std::runtime_error("no compute");  // instant Failed tab: session null, recalc paths reachable
+  }};
+  const unsigned s = ws.openEmpty();
+  efapp::Tab& t = *ws.find(s);
+  REQUIRE(received.size() == 1);
+  CHECK(received[0].viewScale == doctest::Approx(0.0));  // the first computation is legacy
+  t.state = efapp::TabState::Done;                       // it finished (simulated - the factory above throws)
+
+  CHECK_FALSE(efapp::editor::armViewRecalc(t, 100.0));  // first frame
+  CHECK(efapp::editor::armViewRecalc(t, 800.0));        // the user zooms and the wheel stops: armed
+  CHECK(t.pendingViewRecalcAt == -2);
+  ws.viewRecalcTick(100.0);                             // -2 becomes the deadline
+  CHECK_FALSE(efapp::editor::armViewRecalc(t, 800.0));  // redraws while pending are inert...
+  CHECK(t.pendingViewRecalcAt == doctest::Approx(100.0 + efapp::kAutoRecalcDelay));  // ...deadline intact
+  CHECK(received.size() == 1);
+  ws.viewRecalcTick(100.0 + efapp::kAutoRecalcDelay);   // due: fires exactly once
+  REQUIRE(received.size() == 2);
+  CHECK(received[1].viewScale == doctest::Approx(800.0));
+  CHECK(t.params.viewScale == doctest::Approx(800.0));
+  CHECK(t.pendingViewRecalcAt < 0);                     // disarmed by the fire
+  CHECK_FALSE(t.stale);
+  CHECK_FALSE(t.dirty);
+  CHECK(t.undo.empty());
+}
+
 TEST_CASE("dirty tracking and anyDirty (v2.2 leave prompt)") {
   ThrowFactory f;
   efapp::Tab& t = dipoleTab(f);

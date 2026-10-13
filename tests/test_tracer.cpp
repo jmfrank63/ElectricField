@@ -150,6 +150,36 @@ TEST_CASE("equipotential trace closes on itself and records the weight centre (C
   for (const auto& pt : line.points) CHECK(std::abs(dipole.Potential(pt) - dipole.Potential(start)) < 0.05);
 }
 
+// v2.6 phase 2 (WR-05): the adapted ring ANCHOR density - a regression of recordPx (tracer.hpp) back to
+// the legacy density passed every other suite (the sampling proof samples line ink, not ring shape).
+// The ring PATH does not depend on the params (same solver, same steps), so the adapted trace is the
+// same loop recorded ~8x denser: anchor count pins the scaling two-sided, and every recorded segment
+// respects addPoint's >= 8 px thinning threshold AT THE TARGET VIEW.
+TEST_CASE("adapted rings record anchors at the target view density (v2.6 phase 2 WR-05)") {
+  const ChargeSystem dipole = preset("dipole");
+  rk::Euler<Vec2> solver;
+  CollectHooks h;
+  const Vec2 start(-2 + 1.0, 0.0);  // a small closed loop around the + charge (as in the closure test)
+
+  ComputeParams legacy;
+  const PotentialLine a = traceEquipotential(solver, dipole, legacy, start, 0.7, h);
+  REQUIRE(a.points.size() > 10);
+  REQUIRE(a.points.front() == a.points.back());  // closed
+
+  ComputeParams adapted;
+  adapted.viewScale = 800.0;
+  const PotentialLine b = traceEquipotential(solver, dipole, adapted, start, 0.7, h);
+  REQUIRE(b.points.size() > 10);
+  REQUIRE(b.points.front() == b.points.back());
+  CHECK(b.potential == a.potential);
+  // ~8x denser (8 px anchors at 800 vs 8 px at 100): strictly more, with slack for step quantisation
+  CHECK(b.points.size() > 4 * a.points.size());
+  // thinning contract at the target view: recorded segments are >= 8 target-view px (the loop closure
+  // pushes startPoint again, so the last - closing - segment is exempt)
+  for (std::size_t i = 1; i + 1 < b.points.size(); ++i)
+    CHECK((b.points[i] - b.points[i - 1]).Length() * adapted.viewScale >= 8.0 - 1e-9);
+}
+
 TEST_CASE("cancel flag is polled: a stopped tracer returns after at most one stride and reports cancelled") {
   const ChargeSystem dipole = preset("dipole");
   ComputeParams p;

@@ -8,21 +8,21 @@ last_activity: 2026-10-13
 last_activity_desc: Milestone v2.6 created from owner feedback (5 items)
 progress:
   total_phases: 3
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
-  percent: 33
-stopped_at: Phase 1 complete, starting Phase 2
-current_phase: 2
-current_phase_name: Zoom-Adaptive Calculation
+  completed_phases: 2
+  total_plans: 2
+  completed_plans: 2
+  percent: 66
+stopped_at: Phase 2 complete, starting Phase 3
+current_phase: 3
+current_phase_name: Charge Identity & Per-Charge Size
 ---
 
 ## Current Position
 
-Phase: 1 complete (Collections UX Fixes) — commits 6c1fbd6..05e7d9d
-Plan: 01-01
-Status: Verified (passed, human items auto-accepted per standing instruction) + reviewed (5 findings fixed)
-Last activity: 2026-10-13 — Phase 1 done
+Phase: 2 complete (Zoom-Adaptive Calculation) — commits f6ad731..e18a961
+Plan: 02-01
+Status: Verified (passed, human items auto-accepted) + reviewed (7 findings fixed)
+Last activity: 2026-10-13 — Phase 2 done
 
 ## Operator Next Steps
 

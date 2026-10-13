@@ -61,9 +61,11 @@ preserved in history and on the `v1.0` tag.
   **Calculate (F5)** - with a per-tab integration method selector in the panel and an optional
   **Continuous calculation** checkbox that recomputes automatically after every edit.
 - **Zoom and pan**: the mouse wheel zooms at the cursor, the panel's Zoom - / Zoom + / Reset view buttons
-  are always at hand, right-drag pans, and the arrow keys pan whenever no charge is selected. Zooming in
-  is limited to views of at least 1 world unit across the smaller canvas side - the calculation starts at
-  the seed circle 0.25 world units from each charge, so a smaller view around it would be an empty spot.
+  are always at hand, right-drag pans, and the arrow keys pan whenever no charge is selected. The
+  calculation adapts to the view: when you zoom in, the field lines hug the charges (the seed circle
+  shrinks to a couple of pixels on screen, floored for numerics) and a settled zoom recalculates
+  automatically - no white disk is left around them. The zoom-in ceiling is now about 25x at 100% scale
+  (12.5x on a 2x HiDPI display): the drawn charge dot covers the floored seed circle up to that limit.
 - **Your workspace comes back**: the open tabs - including each tab's calculation method, continuous
   calculation, grid settings and any charge edits - are stored per collection when you quit
   (`Sessions\<Collection>.ini`) and restored when you open the collection again. If tabs have changes

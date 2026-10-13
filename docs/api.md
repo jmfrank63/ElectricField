@@ -101,7 +101,7 @@ REC-02).
 ### View & grid
 | Command | Effect |
 |---|---|
-| `view.zoom <factor>` / `view.pan <dpx> <dpy>` / `view.reset` | view transform (pan in device pixels); zoom-in is capped like in the UI so at least 1 world unit stays visible across the canvas's smaller side (the uncalculated seed disk around a charge would fill it) |
+| `view.zoom <factor>` / `view.pan <dpx> <dpy>` / `view.reset` | view transform (pan in device pixels); zoom-in is capped like in the UI by the adapted-calculation limit, about 25x at 100% scale - the calculation adapts to the zoom (lines hug the charges) and a settled zoom recalculates automatically, including a zoom made through this command |
 | `grid.set active\|visible\|polar\|intersections on\|off` | grid flags, independently settable; `intersections` = show only the lattice points (v2.5) |
 | `grid.set origin <x> <y>` / `grid.set spacing <s>` / `grid.set angle <a>` | grid geometry |
 

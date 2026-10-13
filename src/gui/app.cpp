@@ -1135,7 +1135,10 @@ void App::exportStep() {
   }
 }
 
-// The export equals the tab: the cached scene, the current draw options and exactly the on-screen canvas view.
+// The export equals the tab: the cached scene, the current draw options and exactly the on-screen canvas
+// view. The cached scene is kept BY DESIGN (WR-04): the interactive export shows what is on screen, so
+// an adapted (zoom-settle) scene renders as adapted. The deterministic exports are the command paths
+// below, which recompute synchronously with legacy params.
 void App::runExport(const std::string& path) {
   const efapp::Tab* t = ws_.find(exportSerial_);
   if (!t || t->state != efapp::TabState::Done) {
@@ -1190,8 +1193,23 @@ std::string App::exportConfigurationTo(const std::string& path) {
   const efapp::Tab* t = ws_.find(ui_.activeSerial);
   if (!t) return "error: no active tab";
   if (t->state != efapp::TabState::Done) return "error: the active configuration is still computing";
+  // WR-04: the cached scene may be view-adapted (a zoom-settle recalc stamps viewScale), which would
+  // make the export depend on the tab's zoom history. The command/script exports must be deterministic,
+  // so recompute synchronously with the tab's params and the DEFAULT view scale (0 = legacy) instead of
+  // rendering the cache. wait() is fine here: the command path is offline (a script / quick action,
+  // already user-visible-latency), not the frame loop.
+  ef::ChargeSystem field;
+  field.charges.reserve(t->field.charges.size());
+  for (const ef::Charge& c : t->field.charges) field.charges.push_back(c);
+  ef::ComputeParams params = t->params;
+  params.viewScale = 0;
+  ef::ComputeSession session(std::move(field), params);
+  if (session.wait().failed) return "error: the computation failed";
+  ef::FieldResult result;
+  if (!session.takeResult(result)) return "error: no result for the active configuration";
+  const ef::FieldScene scene = ef::buildScene(t->field, result);
   const ef::DrawStyle style = options_.draw;
-  return writeBinaryFile(path, ef::renderPdf(t->scene, style, fittedView(t->scene.charges, 1024, 768)));
+  return writeBinaryFile(path, ef::renderPdf(scene, style, fittedView(scene.charges, 1024, 768)));
 }
 
 // One PDF with one page per configuration (the whole collection, EXP-03). Each page is computed
@@ -1205,7 +1223,11 @@ std::string App::exportCollectionTo(const std::string& path) {
     ef::ChargeSystem field;
     field.charges.reserve(c.charges.size());
     for (const ef::PresetCharge& ch : c.charges) field.charges.push_back(ef::Charge{ch.charge, ef::Vec2{ch.x, ch.y}});
-    ef::ComputeSession session(field, options_.compute);
+    // WR-04: the DEFAULT view scale (0 = legacy), spelled out so the export stays zoom-history
+    // independent even if options_.compute ever carried a stamped scale.
+    ef::ComputeParams params = options_.compute;
+    params.viewScale = 0;
+    ef::ComputeSession session(field, params);  // by value: `field` builds the page's scene below
     if (session.wait().failed) return "error: the computation of '" + c.name + "' failed";
     ef::FieldResult result;
     if (!session.takeResult(result)) return "error: no result for '" + c.name + "'";

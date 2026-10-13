@@ -223,3 +223,36 @@ TEST_CASE("zoom-adapted computation: field lines hug the charge at ppu 800 (rend
   SDL_DestroySurface(legacy);
   SDL_DestroySurface(adapted);
 }
+
+// v2.6 phase 2 (WR-04): the command/script exports (exportConfigurationTo / exportCollectionTo) recompute
+// synchronously with the DEFAULT view scale instead of rendering the tab's cached scene - after a zoom
+// settle the cache is view-adapted, so exports would depend on the tab's zoom history. Doctested at the
+// compute level (the App paths are ImGui-bound): two fresh legacy computes are bit-identical regardless
+// of history, and neither equals the zoomed cache.
+TEST_CASE("legacy recompute is zoom-history independent (the export recompute contract, WR-04)") {
+  const ef::ChargeSystem field = ef::makeSystem(ef::presets().at(1));  // two equal + charges: electric lines record points
+  const auto compute = [&field](double viewScale) {
+    ef::ComputeParams p = lightParams();
+    p.viewScale = viewScale;
+    ef::ComputeSession s(field, p);
+    REQUIRE_FALSE(s.wait().failed);
+    ef::FieldResult r;
+    REQUIRE(s.takeResult(r));
+    return r;
+  };
+  const ef::FieldResult zoomed = compute(800.0);  // what a zoom-settle recalc leaves in the tab's cache
+  const ef::FieldResult fresh1 = compute(0.0);    // the export recompute: the DEFAULT view scale
+  const ef::FieldResult fresh2 = compute(0.0);    // ...from any zoom history: the same output
+  REQUIRE(fresh1.electric.size() > 0);
+  REQUIRE(fresh1.potential.size() > 0);
+  CHECK(fresh2.electric.size() == fresh1.electric.size());
+  CHECK(fresh2.potential.size() == fresh1.potential.size());
+  CHECK(fresh2.electric[0].points.size() == fresh1.electric[0].points.size());
+  CHECK(fresh2.electric[0].points.front().X == fresh1.electric[0].points.front().X);  // deterministic (D-04)
+  CHECK(fresh2.electric[0].points.front().Y == fresh1.electric[0].points.front().Y);
+  CHECK(fresh2.potential[0].potential == fresh1.potential[0].potential);
+  // the zoomed cache really differs from the legacy result (adapted seed circle 0.02 vs the legacy
+  // 0.25 world from the charge): the recompute is not silently a no-op
+  CHECK((zoomed.electric[0].points.front() - field.charges[0].position).Length() * 5.0 <
+        (fresh1.electric[0].points.front() - field.charges[0].position).Length());
+}

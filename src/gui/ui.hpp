@@ -71,8 +71,10 @@ struct UiState {
   char tabNameBuf[128] = "";
   unsigned tabNameBufSerial = 0;
   // v2.6 phase 3: the selected charge's name buffer (the tabNameBuf pattern, keyed on the active tab
-  // AND the selection - it re-syncs whenever either changes).
-  char chargeNameBuf[128] = "";
+  // AND the selection - it re-syncs whenever either changes). IN-03: 256 bytes with UTF-8-safe
+  // truncation on copy, so a long API-set name is never cut mid-code point (128 silently truncated
+  // at 127 bytes AND at an arbitrary byte).
+  char chargeNameBuf[256] = "";
   unsigned chargeNameBufSerial = 0;
   int chargeNameBufSelected = -1;
   int exportRequest = 0;     // File > Export / dialog kinds (consumed by App::frame): 1 = PNG, 2 = SVG, 3 = PDF

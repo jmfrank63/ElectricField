@@ -823,7 +823,7 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     // disabled context so the user sees what the tooltip will say) and its own drawn size. Both edits
     // are dirty-only in the core: the drawn lines never depend on them, so no recalculation hint.
     if (ui.chargeNameBufSerial != t.serial || ui.chargeNameBufSelected != t.selected) {
-      std::snprintf(ui.chargeNameBuf, sizeof(ui.chargeNameBuf), "%s", c.name.c_str());
+      std::snprintf(ui.chargeNameBuf, sizeof(ui.chargeNameBuf), "%s", efapp::ini::utf8Clamp(c.name, sizeof(ui.chargeNameBuf) - 1).c_str());  // IN-03
       ui.chargeNameBufSerial = t.serial;
       ui.chargeNameBufSelected = t.selected;
     }
@@ -834,7 +834,7 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     // charge.name is never clobbered by the next keystroke committing stale buffer text. While the
     // user is typing (IsItemActive) the in-progress text wins; every edit already committed above.
     if (!ImGui::IsItemActive() && c.name != ui.chargeNameBuf) {
-      std::snprintf(ui.chargeNameBuf, sizeof(ui.chargeNameBuf), "%s", c.name.c_str());
+      std::snprintf(ui.chargeNameBuf, sizeof(ui.chargeNameBuf), "%s", efapp::ini::utf8Clamp(c.name, sizeof(ui.chargeNameBuf) - 1).c_str());  // IN-03
       ui.chargeNameBufSerial = t.serial;
       ui.chargeNameBufSelected = t.selected;
     }

@@ -1,6 +1,7 @@
 // v2 Phase 1 (CFG-01..03): the user configuration file model - ini round-trip, skip rules, dedupe and the
 // Save As decision core. No SDL/ImGui.
 #include "app/configs.hpp"
+#include "app/ini_text.hpp"  // IN-03: utf8Clamp
 
 #include <filesystem>
 
@@ -206,6 +207,26 @@ TEST_CASE("the charge id bound matches the assignment ceiling (WR-02)") {
   REQUIRE(r.value.size() == 1);
   REQUIRE(r.value[0].charges.size() == 1);
   CHECK(r.value[0].charges[0].id == ef::kMaxChargeId);
+}
+
+// IN-03: the panel copy helper truncates on a UTF-8 code point boundary, never mid-sequence.
+TEST_CASE("utf8Clamp cuts on code point boundaries only (IN-03)") {
+  using efapp::ini::utf8Clamp;
+  CHECK(utf8Clamp("", 8).empty());
+  CHECK(utf8Clamp("Pad", 8) == "Pad");          // fits: untouched
+  CHECK(utf8Clamp("Pad", 3) == "Pad");          // exact fit: untouched
+  CHECK(utf8Clamp("Padding", 4) == "Padd");     // ASCII: hard cut
+  // 'Größer' = G r ö(2 bytes) ß(2 bytes) e r = 8 bytes; a 3-byte cut would split the ö.
+  CHECK(utf8Clamp("Größer", 3) == "Gr");        // back over the continuation byte AND the lead byte
+  CHECK(utf8Clamp("Größer", 4) == "Grö");       // the cut lands between ö and ß: keep the ö
+  CHECK(utf8Clamp("Größer", 6) == "Größ");      // ß complete at byte 6
+  CHECK(utf8Clamp("Größer", 8) == "Größer");    // full fit
+  // A 4-byte emoji (U+1F600 = F0 9F 98 80) never survives as a fragment.
+  CHECK(utf8Clamp("a\xF0\x9F\x98\x80", 2) == "a");
+  CHECK(utf8Clamp("a\xF0\x9F\x98\x80", 5) == "a\xF0\x9F\x98\x80");
+  // The panel use: a 300-byte name clamps into a 255-byte buffer on a boundary.
+  const std::string longName(300, 'x');
+  CHECK(utf8Clamp(longName, 255).size() == 255);
 }
 
 TEST_CASE("upsertUserConfig: trim, reserved names, in-place overwrite, append (CFG-03, D-04)") {

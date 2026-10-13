@@ -4,6 +4,7 @@
 #include <cctype>
 #include <algorithm>
 #include <optional>
+#include <sstream>
 #include <string>
 
 namespace efapp {
@@ -54,6 +55,16 @@ inline std::vector<std::string> splitCsv(const std::string& value) {
   std::string part;
   while (std::getline(vs, part, ',')) parts.push_back(trim(part));
   return parts;
+}
+
+// IN-03: the longest prefix of s that fits maxBytes without splitting a UTF-8 code point. Continuation
+// bytes are 0b10xxxxxx; backing up over them (and stopping on the lead byte) leaves the cut exactly on
+// a boundary. ASCII passes through unchanged.
+inline std::string utf8Clamp(const std::string& s, std::size_t maxBytes) {
+  if (s.size() <= maxBytes) return s;
+  std::size_t cut = maxBytes;
+  while (cut > 0 && (static_cast<unsigned char>(s[cut]) & 0xC0) == 0x80) --cut;
+  return s.substr(0, cut);
 }
 
 }  // namespace ini

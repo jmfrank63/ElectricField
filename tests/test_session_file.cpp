@@ -81,6 +81,73 @@ TEST_CASE("invalid content is skipped and counted; foreign sections ignored (SES
   CHECK(r.value.empty());  // foreign section ignored
 }
 
+// v2.6 phase 3: the session file writes the same extended 6-field charge line as the collections
+// (symmetric grammar, pinned decision): `charge = value, x, y, sizePx, id, name`, names comma-free
+// raw UTF-8, empty name as a trailing empty field.
+TEST_CASE("extended 6-field charge lines round-trip size, id and name losslessly (v2.6 phase 3)") {
+  std::vector<efapp::SavedTab> tabs;
+  efapp::SavedTab t = sample();
+  t.charges = {{1, -2.0, 0.0, 40.0f, 1, "My Charge"}, {-1, 2.0, 0.0, 0.0f, 2, "Größerer Test"}, {2, 0.5, -0.25, 3.0f, 3, "Has, Comma"}};
+  tabs.push_back(t);
+  const std::string text = efapp::serializeSession(tabs);
+  const efapp::ParsedSession r = efapp::parseSession(text);
+  CHECK(r.skippedTabs == 0);
+  CHECK(r.skippedCharges == 0);
+  REQUIRE(r.value.size() == 1);
+  REQUIRE(r.value[0].charges.size() == 3);
+  CHECK(r.value[0].charges[0].sizePx == doctest::Approx(40.0));
+  CHECK(r.value[0].charges[0].id == 1);
+  CHECK(r.value[0].charges[0].name == "My Charge");
+  CHECK(r.value[0].charges[1].sizePx == 0.0f);
+  CHECK(r.value[0].charges[1].id == 2);
+  CHECK(r.value[0].charges[1].name == "Größerer Test");  // non-ASCII passes through byte-for-byte
+  CHECK(r.value[0].charges[2].id == 3);
+  CHECK(r.value[0].charges[2].name == "Has Comma");  // the model's ',' came back stripped
+
+  // serialize -> parse -> serialize is stable (the second write is byte-identical to the first).
+  CHECK(efapp::serializeSession(r.value, "Original") == efapp::serializeSession(tabs, "Original"));
+}
+
+TEST_CASE("empty name trailing field and legacy/skip arities in the session file (v2.6 phase 3)") {
+  // An empty name writes a trailing empty field and parses back empty.
+  std::vector<efapp::SavedTab> tabs;
+  efapp::SavedTab t = sample();
+  t.charges = {{1, 0, 0, 0.0f, 1, ""}};
+  tabs.push_back(t);
+  const std::string text = efapp::serializeSession(tabs);
+  CHECK(text.find("charge = 1, 0, 0, 0, 1, \n") != std::string::npos);
+  const efapp::ParsedSession r = efapp::parseSession(text);
+  REQUIRE(r.value.size() == 1);
+  REQUIRE(r.value[0].charges.size() == 1);
+  CHECK(r.value[0].charges[0].id == 1);
+  CHECK(r.value[0].charges[0].name.empty());
+
+  // Legacy 3-field lines keep parsing with defaults; 4/5-field lines are skipped and counted.
+  const std::string mixed = "[tab \"T\"]\n"
+                            "charge = 1, 0, 0\n"
+                            "charge = 2, 1, 1, 25\n"
+                            "charge = 2, 1, 1, 25, 7\n"
+                            "charge = -1, 2, 2, 10, 4, Named\n";
+  const efapp::ParsedSession m = efapp::parseSession(mixed);
+  CHECK(m.skippedCharges == 2);
+  REQUIRE(m.value.size() == 1);
+  REQUIRE(m.value[0].charges.size() == 2);
+  CHECK(m.value[0].charges[0].sizePx == 0.0f);
+  CHECK(m.value[0].charges[0].id == 0);
+  CHECK(m.value[0].charges[0].name.empty());
+  CHECK(m.value[0].charges[1].sizePx == doctest::Approx(10.0));
+  CHECK(m.value[0].charges[1].id == 4);
+  CHECK(m.value[0].charges[1].name == "Named");
+
+  // Pre-v2.6 files (3-field lines) still parse exactly as before.
+  const efapp::ParsedSession legacy = efapp::parseSession("[tab \"Dipole 1\"]\ncharge = 1, -2, 0\ncharge = -1, 2, 0\n");
+  CHECK(legacy.skippedCharges == 0);
+  REQUIRE(legacy.value.size() == 1);
+  REQUIRE(legacy.value[0].charges.size() == 2);
+  CHECK(legacy.value[0].charges[1].charge == -1);
+  CHECK(legacy.value[0].charges[1].id == 0);
+}
+
 TEST_CASE("file round-trip and missing-file default (SES-01)") {
   const auto tmp = std::filesystem::temp_directory_path() / "ef-test-session";
   std::filesystem::create_directories(tmp);

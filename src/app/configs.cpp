@@ -1,6 +1,7 @@
 #include "app/configs.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <sstream>
@@ -44,10 +45,15 @@ std::string serializeConfigs(const std::vector<UserConfig>& configs) {
     name.erase(std::remove(name.begin(), name.end(), '"'), name.end());  // names cannot contain the delimiter
     os << "\n[configuration \"" << name << "\"]\n";
     for (const ef::PresetCharge& ch : c.charges) {
-      char x[32], y[32];
+      char x[32], y[32], s[32];
       std::snprintf(x, sizeof(x), "%.10g", ch.x);
       std::snprintf(y, sizeof(y), "%.10g", ch.y);
-      os << "charge = " << ch.charge << ", " << x << ", " << y << '\n';
+      std::snprintf(s, sizeof(s), "%.10g", static_cast<double>(ch.sizePx));
+      // v2.6 phase 3: charge = value, x, y, sizePx, id, name. Names are comma-free (the ',' is the field
+      // separator) and stored raw UTF-8; the derived "Charge N" display name is never persisted.
+      std::string chargeName = ch.name;
+      chargeName.erase(std::remove(chargeName.begin(), chargeName.end(), ','), chargeName.end());
+      os << "charge = " << ch.charge << ", " << x << ", " << y << ", " << s << ", " << ch.id << ", " << chargeName << '\n';
     }
   }
   return os.str();
@@ -94,17 +100,32 @@ ParsedConfigs parseConfigs(const std::string& text) {
         if (inSection) ++r.skippedCharges;
         continue;
       }
-      // split the value part on commas: value, x, y
+      // split the value part on commas: value, x, y (legacy) or value, x, y, sizePx, id, name (v2.6 phase 3);
+      // exactly 3 or exactly 6 fields - anything else is a skipped charge, never fatal
       const std::string v = t.substr(eq + 1);
       const std::vector<std::string> parts = splitCsv(v);
+      // The writer emits an empty name as a trailing empty field ("..., 3, "); the line trim swallows
+      // its space, so an explicit trailing comma re-adds the empty final field (still 3-or-6 arity).
+      std::vector<std::string> fields = parts;
+      if (!v.empty() && v.back() == ',') fields.push_back(std::string());
       int value = 0;
       double x = 0, y = 0;
-      if (inSection && parts.size() == 3 && ini::parseIntBounded(parts[0], -1000000, 1000000, value) && ini::parseDouble(parts[1], x) &&
-          ini::parseDouble(parts[2], y)) {
-        cur.charges.push_back(ef::PresetCharge{value, x, y});
-      } else {
-        ++r.skippedCharges;
+      bool parsed = false;
+      if (inSection && (fields.size() == 3 || fields.size() == 6) && ini::parseIntBounded(fields[0], -1000000, 1000000, value) &&
+          ini::parseDouble(fields[1], x) && ini::parseDouble(fields[2], y)) {
+        if (fields.size() == 3) {
+          cur.charges.push_back(ef::PresetCharge{value, x, y});  // legacy: sizePx 0, id 0, derived name
+          parsed = true;
+        } else {
+          double sizePx = 0;
+          int id = 0;
+          if (ini::parseDouble(fields[3], sizePx) && ini::parseIntBounded(fields[4], 0, 1000000000, id)) {
+            cur.charges.push_back(ef::PresetCharge{value, x, y, static_cast<float>(sizePx), static_cast<std::uint64_t>(id), fields[5]});
+            parsed = true;
+          }
+        }
       }
+      if (!parsed) ++r.skippedCharges;
       continue;
     }
     // any other line outside the known grammar is ignored

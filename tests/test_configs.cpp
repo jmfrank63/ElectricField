@@ -94,6 +94,66 @@ TEST_CASE("missing and unreadable files yield an empty list, never an error (CFG
   CHECK(efapp::loadConfigs(tmp).empty());
 }
 
+// v2.6 phase 3: the extended 6-field charge line `charge = value, x, y, sizePx, id, name`. Names are
+// comma-free (',' stripped on write), stored as raw UTF-8 bytes, and the derived "Charge N" display
+// name is never persisted - the model's empty name writes a trailing empty field.
+TEST_CASE("extended 6-field charge lines round-trip size, id and name losslessly (v2.6 phase 3)") {
+  const std::vector<efapp::UserConfig> configs = {
+      {"Identity",
+       {{1, -2.0, 0.0, 40.0f, 1, "My Charge"},
+        {-1, 2.5, 0.125, 0.0f, 2, "Größerer Test"},
+        {2, 0.0, 0.0, 2.0f, 3, "Has, Comma"}}},
+  };
+  const std::string text = efapp::serializeConfigs(configs);
+  const efapp::ParsedConfigs r = efapp::parseConfigs(text);
+  CHECK(r.skippedSections == 0);
+  CHECK(r.skippedCharges == 0);
+  CHECK(r.duplicateNames == 0);
+  REQUIRE(r.value.size() == 1);
+  REQUIRE(r.value[0].charges.size() == 3);
+  CHECK(r.value[0].charges[0].sizePx == doctest::Approx(40.0));
+  CHECK(r.value[0].charges[0].id == 1);
+  CHECK(r.value[0].charges[0].name == "My Charge");
+  CHECK(r.value[0].charges[1].sizePx == 0.0f);  // 0 = inherit the Options default, survives as 0
+  CHECK(r.value[0].charges[1].id == 2);
+  CHECK(r.value[0].charges[1].name == "Größerer Test");  // non-ASCII passes through byte-for-byte
+  CHECK(r.value[0].charges[2].id == 3);
+  CHECK(r.value[0].charges[2].name == "Has Comma");  // the model's ',' came back stripped
+
+  // serialize -> parse -> serialize is stable (the second write is byte-identical to the first).
+  CHECK(efapp::serializeConfigs(r.value) == text);
+}
+
+TEST_CASE("an empty name writes a trailing empty field and parses back empty (v2.6 phase 3)") {
+  const std::vector<efapp::UserConfig> configs = {{"E", {{1, 0, 0, 0.0f, 1, ""}}}};
+  const std::string text = efapp::serializeConfigs(configs);
+  CHECK(text.find("charge = 1, 0, 0, 0, 1, \n") != std::string::npos);
+  const efapp::ParsedConfigs r = efapp::parseConfigs(text);
+  REQUIRE(r.value.size() == 1);
+  REQUIRE(r.value[0].charges.size() == 1);
+  CHECK(r.value[0].charges[0].id == 1);
+  CHECK(r.value[0].charges[0].name.empty());
+  CHECK(r.value[0].charges[0].sizePx == 0.0f);
+}
+
+TEST_CASE("legacy 3-field lines parse with defaults; 4/5-field lines are skipped and counted (v2.6 phase 3)") {
+  const std::string text = "[configuration \"Mixed\"]\n"
+                           "charge = 1, 0, 0\n"                  // legacy: no size, no identity
+                           "charge = 2, 1, 1, 25\n"              // 4 fields: skipped (all-or-nothing after y)
+                           "charge = 2, 1, 1, 25, 7\n"           // 5 fields: skipped
+                           "charge = -1, 2, 2, 10, 4, Named\n";  // extended
+  const efapp::ParsedConfigs r = efapp::parseConfigs(text);
+  CHECK(r.skippedCharges == 2);
+  REQUIRE(r.value.size() == 1);
+  REQUIRE(r.value[0].charges.size() == 2);
+  CHECK(r.value[0].charges[0].sizePx == 0.0f);
+  CHECK(r.value[0].charges[0].id == 0);
+  CHECK(r.value[0].charges[0].name.empty());
+  CHECK(r.value[0].charges[1].sizePx == doctest::Approx(10.0));
+  CHECK(r.value[0].charges[1].id == 4);
+  CHECK(r.value[0].charges[1].name == "Named");
+}
+
 TEST_CASE("file round-trip through a real path (CFG-01)") {
   const auto tmp = std::filesystem::temp_directory_path() / "ef-test-configs";
   std::filesystem::create_directories(tmp);

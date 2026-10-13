@@ -1,6 +1,7 @@
 #include "app/session_file.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <sstream>
@@ -60,10 +61,14 @@ std::string serializeSession(const std::vector<SavedTab>& tabs, const std::strin
     os << "grid = " << (t.grid.active ? 1 : 0) << ',' << (t.grid.visible ? 1 : 0) << ',' << (t.grid.polar ? 1 : 0) << ',' << (t.grid.intersectionsOnly ? 1 : 0) << ',' << gx << ','
        << gy << ',' << gs << ',' << ga << '\n';
     for (const ef::PresetCharge& c : t.charges) {
-      char x[32], y[32];
+      char x[32], y[32], s[32];
       std::snprintf(x, sizeof(x), "%.10g", c.x);
       std::snprintf(y, sizeof(y), "%.10g", c.y);
-      os << "charge = " << c.charge << ", " << x << ", " << y << '\n';
+      std::snprintf(s, sizeof(s), "%.10g", static_cast<double>(c.sizePx));
+      // v2.6 phase 3: the same 6-field line as the collections (symmetric grammar); names comma-free UTF-8.
+      std::string chargeName = c.name;
+      chargeName.erase(std::remove(chargeName.begin(), chargeName.end(), ','), chargeName.end());
+      os << "charge = " << c.charge << ", " << x << ", " << y << ", " << s << ", " << c.id << ", " << chargeName << '\n';
     }
   }
   return os.str();
@@ -144,14 +149,31 @@ ParsedSession parseSession(const std::string& text) {
     } else if (key == "method") {
       if (inTab) cur.method = ini::toLower(value);
     } else if (key == "charge") {
+      // value, x, y (legacy) or value, x, y, sizePx, id, name (v2.6 phase 3) - exactly 3 or exactly 6
+      // fields, symmetric with the collection parser; anything else is a skipped charge.
       const std::vector<std::string> parts = ini::splitCsv(value);
+      // The writer emits an empty name as a trailing empty field ("..., 3, "); the line trim swallows
+      // its space, so an explicit trailing comma re-adds the empty final field (still 3-or-6 arity).
+      std::vector<std::string> fields = parts;
+      if (!value.empty() && value.back() == ',') fields.push_back(std::string());
       int v = 0;
       double x = 0, y = 0;
-      if (inTab && parts.size() == 3 && ini::parseIntBounded(parts[0], -1000000, 1000000, v) && ini::parseDouble(parts[1], x) &&
-          ini::parseDouble(parts[2], y))
-        cur.charges.push_back(ef::PresetCharge{v, x, y});
-      else if (inTab)
-        ++r.skippedCharges;
+      bool parsed = false;
+      if (inTab && (fields.size() == 3 || fields.size() == 6) && ini::parseIntBounded(fields[0], -1000000, 1000000, v) &&
+          ini::parseDouble(fields[1], x) && ini::parseDouble(fields[2], y)) {
+        if (fields.size() == 3) {
+          cur.charges.push_back(ef::PresetCharge{v, x, y});  // legacy: sizePx 0, id 0, derived name
+          parsed = true;
+        } else {
+          double sizePx = 0;
+          int id = 0;
+          if (ini::parseDouble(fields[3], sizePx) && ini::parseIntBounded(fields[4], 0, 1000000000, id)) {
+            cur.charges.push_back(ef::PresetCharge{v, x, y, static_cast<float>(sizePx), static_cast<std::uint64_t>(id), fields[5]});
+            parsed = true;
+          }
+        }
+      }
+      if (!parsed && inTab) ++r.skippedCharges;
     }
   }
   closeTab();

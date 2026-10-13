@@ -1262,6 +1262,8 @@ void App::writeSessionPointer() {
   if (sessionPath_.empty()) return;
   std::string collection = currentCollection_;
   if (collection.empty() && std::filesystem::exists(sessionPath_)) {
+    std::ifstream probe(sessionPath_, std::ios::binary);
+    if (!probe) return;  // exists but unreadable: leave the file as-is rather than blank the stored collection line (loadSessionFull would silently default)
     const efapp::SavedSession prev = efapp::loadSessionFull(sessionPath_);
     if (prev.hasCollection) collection = prev.collection;
   }

@@ -119,7 +119,11 @@ ParsedConfigs parseConfigs(const std::string& text) {
         } else {
           double sizePx = 0;
           int id = 0;
-          if (ini::parseDouble(fields[3], sizePx) && ini::parseIntBounded(fields[4], 0, 1000000000, id)) {
+          // WR-01: the extended size field obeys the same contract as every mutator - 0 (inherit)
+          // or 2..120 px. Anything else (1e30, -5, 0<x<2) is a malformed line: skipped and counted
+          // like an arity failure, never silently degraded into the model.
+          if (ini::parseDouble(fields[3], sizePx) && (sizePx == 0 || (sizePx >= 2 && sizePx <= 120)) &&
+              ini::parseIntBounded(fields[4], 0, 1000000000, id)) {
             cur.charges.push_back(ef::PresetCharge{value, x, y, static_cast<float>(sizePx), static_cast<std::uint64_t>(id), fields[5]});
             parsed = true;
           }

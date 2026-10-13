@@ -139,6 +139,22 @@ TEST_CASE("empty name trailing field and legacy/skip arities in the session file
   CHECK(m.value[0].charges[1].id == 4);
   CHECK(m.value[0].charges[1].name == "Named");
 
+  // WR-01: the extended size field obeys the mutator contract - 0 (inherit) or 2..120 px; anything
+  // else is a malformed line, skipped and counted, symmetric with the collection parser.
+  const std::string sizes = "[tab \"Sizes\"]\n"
+                            "charge = 1, 0, 0, 0, 1, Zero\n"       // 0 = inherit: legal
+                            "charge = 1, 1, 0, 2, 2, Floor\n"      // the 2 px floor: legal
+                            "charge = 1, 2, 0, 120, 3, Ceiling\n"  // the 120 px ceiling: legal
+                            "charge = 1, 3, 0, -5, 4, Negative\n"  // negative: malformed
+                            "charge = 1, 4, 0, 1e30, 5, Huge\n";   // screen-filling dot: malformed
+  const efapp::ParsedSession s = efapp::parseSession(sizes);
+  CHECK(s.skippedCharges == 2);
+  REQUIRE(s.value.size() == 1);
+  REQUIRE(s.value[0].charges.size() == 3);
+  CHECK(s.value[0].charges[0].sizePx == 0.0f);
+  CHECK(s.value[0].charges[1].sizePx == doctest::Approx(2.0));
+  CHECK(s.value[0].charges[2].sizePx == doctest::Approx(120.0));
+
   // Pre-v2.6 files (3-field lines) still parse exactly as before.
   const efapp::ParsedSession legacy = efapp::parseSession("[tab \"Dipole 1\"]\ncharge = 1, -2, 0\ncharge = -1, 2, 0\n");
   CHECK(legacy.skippedCharges == 0);

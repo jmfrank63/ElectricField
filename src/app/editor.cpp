@@ -219,6 +219,19 @@ bool setChargeSize(Tab& t, std::size_t index, float sizePx) {
   return true;
 }
 
+// WR-04: the physics slice of a ChargeSystem - the only part the drawn lines depend on. Names,
+// sizes and ids are excluded: undoing them leaves the lines correct, so the tab must not claim
+// "the lines show the previous calculation". Exact == comparisons, the same convention moveCharge
+// and commitDrag use for no-op detection.
+bool samePhysics(const ef::ChargeSystem& a, const ef::ChargeSystem& b) {
+  if (a.charges.size() != b.charges.size()) return false;
+  for (std::size_t i = 0; i < a.charges.size(); ++i)
+    if (a.charges[i].charge != b.charges[i].charge || a.charges[i].position.X != b.charges[i].position.X ||
+        a.charges[i].position.Y != b.charges[i].position.Y)
+      return false;
+  return true;
+}
+
 bool undo(Tab& t) {
   if (!editable(t) || t.undo.empty()) return false;
   t.redo.push_back({t.field, t.params.method});
@@ -230,7 +243,9 @@ bool undo(Tab& t) {
   t.pendingRecalcAt = -2;
   syncAllScene(t);
   if (t.selected >= static_cast<int>(t.field.charges.size())) t.selected = -1;
-  t.stale = true;
+  // WR-04: stale only when the restored PHYSICS differs from the computed charges the lines show.
+  // Undoing a name/size-only edit restores byte-identical physics: no false "press Calculate" state.
+  t.stale = !samePhysics(t.field, t.computed);
   t.dirty = true;
   return true;
 }
@@ -246,7 +261,7 @@ bool redo(Tab& t) {
   t.pendingRecalcAt = -2;
   syncAllScene(t);
   if (t.selected >= static_cast<int>(t.field.charges.size())) t.selected = -1;
-  t.stale = true;
+  t.stale = !samePhysics(t.field, t.computed);  // WR-04: same rule as undo
   t.dirty = true;
   return true;
 }

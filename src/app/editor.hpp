@@ -69,7 +69,9 @@ bool setChargeName(Tab& t, std::size_t index, const std::string& name);
 bool setChargeSize(Tab& t, std::size_t index, float sizePx);
 
 // v2.3 EDIT-12: history. Every successful charge/method mutation records the pre-state (capped);
-// undo/redo restore it. Both refuse while the tab is computing.
+// undo/redo restore it. Both refuse while the tab is computing. WR-04: stale is set only when the
+// restored PHYSICS (charge count/values/positions) differs from `computed` - undoing a name/size-
+// only edit keeps the tab clean (no "press Calculate" hint, no pointless recalculation).
 inline constexpr std::size_t kHistoryLimit = 100;
 bool undo(Tab& t);
 bool redo(Tab& t);

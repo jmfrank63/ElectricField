@@ -788,6 +788,39 @@ TEST_CASE("undo/redo restore name+size+id together through the ChargeSystem snap
   CHECK(t.field.charges[0].sizePx == 60.0f);
 }
 
+// WR-04: stale after undo/redo only when the restored PHYSICS (count/values/positions) differs from
+// `computed` - the charges the drawn lines came from. A name/size-only undo restores byte-identical
+// physics: the tab stays clean, no false "press Calculate" hint, no pointless recalculation.
+TEST_CASE("undo/redo set stale only on a physical change (WR-04)") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);  // computed == field (the spawn state the first compute would run with)
+
+  // Kind 1 - non-physical undo: name and size edits are dirty-only, their undo must not mark stale.
+  CHECK(efapp::editor::setChargeName(t, 0, "Alpha"));
+  CHECK(efapp::editor::setChargeSize(t, 0, 60.f));
+  CHECK_FALSE(t.stale);  // the edits themselves never invalidate the lines
+  CHECK(efapp::editor::undo(t));  // undo the size edit
+  CHECK_FALSE(t.stale);           // physics byte-identical to computed: no false hint
+  CHECK(efapp::editor::undo(t));  // undo the name edit
+  CHECK_FALSE(t.stale);
+  CHECK(t.dirty);  // collection-visible state did change
+  CHECK(efapp::editor::redo(t));  // non-physical redo: clean too
+  CHECK_FALSE(t.stale);
+
+  // Kind 2 - physical undo: the restored charges differ from computed -> stale, the F5 hint is real.
+  CHECK(efapp::editor::moveCharge(t, 0, ef::Vec2{-1, 0}));
+  CHECK(t.stale);
+  CHECK(efapp::editor::undo(t));  // back to the computed state: the lines are correct again
+  CHECK_FALSE(t.stale);
+  CHECK(efapp::editor::redo(t));  // forward to the moved state: differs from computed again
+  CHECK(t.stale);
+
+  // Undoing back onto the computed state from a chain of mixed edits stays clean as well.
+  CHECK(efapp::editor::setChargeName(t, 1, "B"));
+  CHECK(efapp::editor::undo(t));  // the name undo (physics unchanged: still moved -> stale)
+  CHECK(t.stale);
+}
+
 TEST_CASE("chargeDisplayName derives \"Charge N\" only when the name is empty (v2.6 phase 3)") {
   ef::Charge unnamed;
   CHECK(efapp::editor::chargeDisplayName(unnamed, 0) == "Charge 1");

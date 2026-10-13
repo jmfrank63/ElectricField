@@ -335,6 +335,16 @@ void chooserModal(UiState& ui, const UiEnv& env) {
   ImGui::Dummy(ImVec2(0.f, 32.f * env.k - ImGui::GetStyle().ItemSpacing.y));
 
   const ImGuiStyle& st = ImGui::GetStyle();
+  // v2.6 COL-10: a visible removal entry point (the right-click-only path was never found). It reuses
+  // the right-click's confirmation flow verbatim; only a configuration row enables it - the last row
+  // is "Empty Configuration", and a real BeginDisabled keeps keyboard nav off the button.
+  const bool cfgSelected = ui.chooserSel >= 0 && static_cast<std::size_t>(ui.chooserSel) < cfgCount;
+  ImGui::BeginDisabled(!cfgSelected);
+  if (ImGui::Button("Remove...")) {
+    ui.removeConfigName = ui.userConfigs[ui.chooserSel].name;
+    ui.removeConfigOpen = true;
+  }
+  ImGui::EndDisabled();
   const float w1 = ImGui::CalcTextSize("Open Configuration").x + 2 * st.FramePadding.x;
   const float w2 = ImGui::CalcTextSize("Close Chooser").x + 2 * st.FramePadding.x;
   ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - (w1 + 8.f * env.k + w2));

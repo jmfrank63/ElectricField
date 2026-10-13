@@ -830,6 +830,14 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 50.f * env.k);
     if (ImGui::InputText("##chargename", ui.chargeNameBuf, sizeof(ui.chargeNameBuf)))
       efapp::editor::setChargeName(t, at, std::string(ui.chargeNameBuf));  // strips ',', empty allowed
+    // IN-02: while the field is NOT being edited it mirrors the model, so an undo/redo or a scripted
+    // charge.name is never clobbered by the next keystroke committing stale buffer text. While the
+    // user is typing (IsItemActive) the in-progress text wins; every edit already committed above.
+    if (!ImGui::IsItemActive() && c.name != ui.chargeNameBuf) {
+      std::snprintf(ui.chargeNameBuf, sizeof(ui.chargeNameBuf), "%s", c.name.c_str());
+      ui.chargeNameBufSerial = t.serial;
+      ui.chargeNameBufSelected = t.selected;
+    }
     ImGui::SameLine(0.f, 6.f * env.k);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Name");

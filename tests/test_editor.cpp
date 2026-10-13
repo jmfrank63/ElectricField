@@ -200,16 +200,17 @@ TEST_CASE("flipSign and the view controls (v2.2 EDIT-09, ZOOM/PAN)") {
   CHECK_FALSE(v.dirty);
 }
 
-// 261012-h25: zoom-in is capped so at least kMinViewWorld world units stay visible across the canvas's
-// smaller side - the uncalculated seed disk (0.25 world units around each charge) must never fill the view.
-TEST_CASE("zoom ceiling: one world unit stays visible (261012-h25)") {
-  // zoomCeiling = smaller canvas side / base pixels-per-unit, clamped to [kZoomMin, kZoomMax].
-  CHECK(efapp::editor::zoomCeiling(768.0, 100.0) == doctest::Approx(7.68));
-  CHECK(efapp::editor::zoomCeiling(1024.0, 200.0) == doctest::Approx(5.12));   // HiDPI base (2x) halves the ceiling
-  CHECK(efapp::editor::zoomCeiling(5000.0, 100.0) == doctest::Approx(efapp::editor::kZoomMax));  // huge canvas: static cap
-  CHECK(efapp::editor::zoomCeiling(50.0, 100.0) == doctest::Approx(0.5));      // tiny canvas: ceiling below 1 zoom
-  CHECK(efapp::editor::zoomCeiling(3.0, 100.0) == doctest::Approx(efapp::editor::kZoomMin));     // degenerate: floor wins
-  CHECK(efapp::editor::zoomCeiling(0.0, 100.0) == doctest::Approx(efapp::editor::kZoomMax));     // nothing measured yet
+// v2.6 phase 2: zoom-in is capped by the adapted-calculation limit - the drawn dot (25 px) must cover
+// the floored seed circle (0.01 world): kMaxPpu = 2500 ppu. The h25 canvas-min-side rule is superseded
+// (the seed/hit radii adapt to the view now); minCanvasPx keeps its parameter slot only.
+TEST_CASE("zoom ceiling: the adapted-calculation limit (v2.6 phase 2)") {
+  // zoomCeiling = kMaxPpu / base pixels-per-unit, clamped to [kZoomMin, kZoomMax].
+  CHECK(efapp::editor::zoomCeiling(768.0, 100.0) == doctest::Approx(25.0));
+  CHECK(efapp::editor::zoomCeiling(1024.0, 200.0) == doctest::Approx(12.5));   // HiDPI base (2x) halves the ceiling
+  CHECK(efapp::editor::zoomCeiling(50.0, 100.0) == doctest::Approx(25.0));     // the canvas size no longer bounds zoom-in
+  CHECK(efapp::editor::zoomCeiling(5000.0, 100.0) == doctest::Approx(25.0));   // ...nor does a huge one
+  CHECK(efapp::editor::zoomCeiling(768.0, 100000.0) == doctest::Approx(efapp::editor::kZoomMin));  // extreme base: floor wins
+  CHECK(efapp::editor::zoomCeiling(0.0, 100.0) == doctest::Approx(efapp::editor::kZoomMax));     // degenerate: static cap
   CHECK(efapp::editor::zoomCeiling(-5.0, 100.0) == doctest::Approx(efapp::editor::kZoomMax));
   CHECK(efapp::editor::zoomCeiling(768.0, 0.0) == doctest::Approx(efapp::editor::kZoomMax));
 
@@ -217,15 +218,15 @@ TEST_CASE("zoom ceiling: one world unit stays visible (261012-h25)") {
   efapp::Tab& t = dipoleTab(f);
   // The ceiling caps zoom-in; the anchor rule still applies at the clamped value (centre unmoved when
   // the anchor is the centre, as the panel buttons do).
-  CHECK(efapp::editor::zoomAt(t, 100.0, ef::Vec2{0, 0}, 7.68));
-  CHECK(t.zoom == doctest::Approx(7.68));
+  CHECK(efapp::editor::zoomAt(t, 100.0, ef::Vec2{0, 0}, 25.0));
+  CHECK(t.zoom == doctest::Approx(25.0));
   CHECK(t.centre.X == doctest::Approx(0.0));
   // A caller-supplied ceiling above the static cap is itself capped...
   CHECK(efapp::editor::zoomAt(t, 10.0, ef::Vec2{0, 0}, 500.0));
   CHECK(t.zoom == doctest::Approx(efapp::editor::kZoomMax));
   // ...and zooming out is never blocked by the ceiling.
   efapp::editor::resetView(t);
-  CHECK(efapp::editor::zoomAt(t, 0.01, ef::Vec2{0, 0}, 7.68));
+  CHECK(efapp::editor::zoomAt(t, 0.01, ef::Vec2{0, 0}, 25.0));
   CHECK(t.zoom == doctest::Approx(efapp::editor::kZoomMin));
   // The ceiling never marks the tab stale or dirty (view-only).
   CHECK_FALSE(t.stale);

@@ -222,7 +222,9 @@ double arrowStep(const GridSettings& g) { return g.active && g.spacing > 0.0 ? g
 double zoomCeiling(const double minCanvasPx, const double pixelsPerUnitBase) {
   if (!(minCanvasPx > 0.0) || !std::isfinite(minCanvasPx) || !(pixelsPerUnitBase > 0.0) || !std::isfinite(pixelsPerUnitBase))
     return kZoomMax;
-  return std::clamp(minCanvasPx / pixelsPerUnitBase, kZoomMin, kZoomMax);
+  // v2.6 phase 2: the ceiling derives from the adapted calculation (kMaxPpu over the base scale), not
+  // from the canvas's smaller side any more; the degenerate-input guard keeps its shape.
+  return std::clamp(kMaxPpu / pixelsPerUnitBase, kZoomMin, kZoomMax);
 }
 
 bool zoomAt(Tab& t, const double factor, const ef::Vec2 anchor, const double zoomMax) {

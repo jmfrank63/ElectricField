@@ -1870,8 +1870,8 @@ std::string App::command(const std::string& line) {
     if (!t) return e;
     double f = 0;
     if (!parseApiDouble(tok[1], f) || f <= 0) return "error: invalid zoom factor";
-    // 261012-h25: the same ceiling as the UI - the canvas's smaller side shows at least kMinViewWorld
-    // world units. Before the first frame has measured the canvas the static kZoomMax still applies
+    // v2.6 phase 2: the same ceiling as the UI - the adapted-calculation limit (kMaxPpu over the base
+    // scale). Before the first frame has measured the canvas the static kZoomMax still applies
     // (the first drawn frame re-clamps the stored zoom).
     const float minSide = std::min(ui_.canvasMax.x - ui_.canvasMin.x, ui_.canvasMax.y - ui_.canvasMin.y);
     efapp::editor::zoomAt(*t, f, t->centre, efapp::editor::zoomCeiling(minSide, 100.0 * efapp::clampScale(k_)));

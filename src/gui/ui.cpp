@@ -105,9 +105,9 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   ImDrawList* dl = ImGui::GetWindowDrawList();
 
   ef::View view = efapp::canvasView(avail.x, avail.y, env.k);
-  // 261012-h25: the zoom ceiling from the canvas size, applied to the stored zoom every frame - a window
-  // shrunk after a deep zoom re-clamps it here, so the view never shows less than kMinViewWorld world
-  // units across the smaller side (the uncalculated seed disk around a charge would fill it).
+  // The zoom ceiling from the adapted-calculation limit (v2.6: kMaxPpu over the base scale; the h25
+  // canvas-min-side rule is superseded since the seed/hit radii adapt to the view), applied to the
+  // stored zoom every frame - a window shrunk after a deep zoom re-clamps it here.
   const double zoomCeiling = efapp::editor::zoomCeiling(std::min(avail.x, avail.y), view.pixelsPerUnit);
   t.zoom = std::min(t.zoom, zoomCeiling);
   view.pixelsPerUnit *= t.zoom;  // v2.2 zoom

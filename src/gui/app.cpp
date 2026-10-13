@@ -225,6 +225,8 @@ bool App::init(const AppOptions& opt, std::string& step, std::string& message) {
       // is invented. The key must resolve to an existing file: recents entries are full paths.
       const efapp::SavedSession pointer = efapp::loadSessionFull(sessionPath_);
       std::string seedKey;
+      // Boundary: name-only pointers (v2.2) resolve under Collections\ - a same-stem collection opened
+      // from another path is not re-seeded, and a same-stem twin under Collections\ is seeded instead.
       if (pointer.hasCollection) {
         const std::filesystem::path f = collectionFile(pointer.collection);
         if (std::filesystem::exists(f)) seedKey = f.u8string();

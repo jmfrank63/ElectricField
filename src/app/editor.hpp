@@ -5,6 +5,8 @@
 // has a live session (computing): editing is a Done/Failed activity. Recomputation happens exclusively
 // through Workspace::calculate.
 #include <cstddef>
+#include <cstdint>
+#include <string>
 
 #include "app/workspace.hpp"
 #include "ef/vec2.hpp"
@@ -20,8 +22,16 @@ int hitCharge(const ef::ChargeSystem& field, ef::Vec2 world, double radius);
 // charge, nothing selected). Positions are clamped to [-1e5, 1e5] world units.
 
 bool moveCharge(Tab& t, std::size_t index, ef::Vec2 world);
-// Appends a charge at `world`, selects it, marks stale.
-bool addCharge(Tab& t, ef::Vec2 world, int value);
+// v2.6 phase 3: charge identity. nextChargeId is the pure "max over the system + 1" (empty -> 1);
+// assignChargeIds fills ONLY the id == 0 charges, monotonically (persisted ids are never touched).
+// makeSystem stays field-carrying (id 0) so the ef-cli parity output is untouched.
+std::uint64_t nextChargeId(const ef::ChargeSystem& field);
+void assignChargeIds(ef::ChargeSystem& field);
+// Appends a charge at `world`, selects it, marks stale. Assigns the id itself (max over the system,
+// and never below the tab's high-water mark: a removed charge's id is not reused) and stores
+// `defaultSizePx` after validating (0 or 2..120 px; anything else degrades to 0 = inherit the
+// Options default - the caller passes it).
+bool addCharge(Tab& t, ef::Vec2 world, int value, float defaultSizePx = 0.f);
 // Removes the selected charge; refuses when it is the last one (EDIT-04: at least one charge remains).
 bool removeSelected(Tab& t);
 // Nudges the selected charge by `delta` (arrow keys; the caller owns the step size incl. Shift).

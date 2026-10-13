@@ -13,7 +13,7 @@ FieldScene buildScene(const ChargeSystem& field, const FieldResult& result) {
   s.potential.reserve(result.potential.size());
   for (const auto& l : result.potential)
     s.potential.push_back(ScenePath{l.points, l.points.size() > 1 && l.points.front() == l.points.back()});
-  for (const auto& c : field.charges) s.charges.push_back(SceneCharge{c.position, c.charge});
+  for (const auto& c : field.charges) s.charges.push_back(SceneCharge{c.position, c.charge, c.sizePx});
   return s;
 }
 
@@ -291,7 +291,9 @@ void renderScene(Painter& painter, const FieldScene& scene, const DrawStyle& sty
   const double cy = view.heightPx / 2.0 + view.centre.Y * view.pixelsPerUnit;
   for (const auto& c : scene.charges) {
     const PointF center{static_cast<float>(cx + c.position.X * view.pixelsPerUnit), static_cast<float>(cy - c.position.Y * view.pixelsPerUnit)};
-    painter.fillCircle(center, style.chargeRadiusPx, c.charge > 0 ? style.positiveCharge : style.negativeCharge);
+    // v2.6 phase 3: a charge with its own size draws at it; 0 inherits the style radius (draw-only).
+    const float radius = c.sizePx > 0.f ? c.sizePx : style.chargeRadiusPx;
+    painter.fillCircle(center, radius, c.charge > 0 ? style.positiveCharge : style.negativeCharge);
   }
   painter.end();
 }

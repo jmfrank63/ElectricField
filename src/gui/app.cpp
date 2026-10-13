@@ -538,7 +538,7 @@ int App::runInteractive() {
       s.source = tp->sourceConfig;  // h22: the tab's configuration provenance survives the restart
       s.method = std::string(ef::info(tp->params.method).name);
       s.charges.reserve(tp->field.charges.size());
-      for (const ef::Charge& c : tp->field.charges) s.charges.push_back(ef::PresetCharge{c.charge, c.position.X, c.position.Y});
+      for (const ef::Charge& c : tp->field.charges) s.charges.push_back(ef::toPresetCharge(c));
       saved.push_back(std::move(s));
     }
     if (!currentCollection_.empty()) {
@@ -1368,7 +1368,7 @@ void App::saveSessionNow() {
     s.autoRecalc = tp->autoRecalc;
     s.grid = tp->grid;
     s.charges.reserve(tp->field.charges.size());
-    for (const ef::Charge& c : tp->field.charges) s.charges.push_back(ef::PresetCharge{c.charge, c.position.X, c.position.Y});
+    for (const ef::Charge& c : tp->field.charges) s.charges.push_back(ef::toPresetCharge(c));
     saved.push_back(std::move(s));
   }
   std::string err;
@@ -1389,7 +1389,7 @@ void App::mergeDirtyTabsInto(std::vector<efapp::UserConfig>& configs) {
     efapp::UserConfig& c = configs[static_cast<std::size_t>(at)];
     c.charges.clear();
     c.charges.reserve(t.field.charges.size());
-    for (const ef::Charge& ch : t.field.charges) c.charges.push_back(ef::PresetCharge{ch.charge, ch.position.X, ch.position.Y});
+    for (const ef::Charge& ch : t.field.charges) c.charges.push_back(ef::toPresetCharge(ch));
     t.dirty = false;
   }
 }
@@ -1460,7 +1460,7 @@ std::string App::saveConfigurationAs(const std::string& name) {
   efapp::UserConfig candidate;
   candidate.name = name;
   candidate.charges.reserve(t->field.charges.size());
-  for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::PresetCharge{c.charge, c.position.X, c.position.Y});
+  for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::toPresetCharge(c));
   if (efapp::upsertUserConfig(userConfigs_, candidate, reserved) != efapp::UpsertResult::OK) return "error: invalid or reserved name";
   std::string err;
   if (!efapp::saveConfigs(currentCollectionPath_, userConfigs_, err)) return "error: " + err;
@@ -1488,7 +1488,7 @@ std::string App::saveConfiguration() {
   efapp::UserConfig candidate;
   candidate.name = efapp::baseTitle(t->title);
   candidate.charges.reserve(t->field.charges.size());
-  for (const ef::Charge& ch : t->field.charges) candidate.charges.push_back(ef::PresetCharge{ch.charge, ch.position.X, ch.position.Y});
+  for (const ef::Charge& ch : t->field.charges) candidate.charges.push_back(ef::toPresetCharge(ch));
   const efapp::SaveIntoResult r = efapp::saveIntoUserConfig(userConfigs_, t->sourceConfig, candidate, reserved);
   switch (r) {
     case efapp::SaveIntoResult::EMPTY_NAME: return "error: the configuration name is empty";

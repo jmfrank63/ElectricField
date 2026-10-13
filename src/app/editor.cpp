@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace efapp {
 namespace editor {
@@ -16,13 +17,14 @@ void syncScene(Tab& t, std::size_t index) {
   if (index < t.scene.charges.size()) {
     t.scene.charges[index].position = t.field.charges[index].position;
     t.scene.charges[index].charge = t.field.charges[index].charge;
+    t.scene.charges[index].sizePx = t.field.charges[index].sizePx;
   }
 }
 
 // Rebuilds the whole charge mirror (undo/redo/revert change several charges at once). Lines are untouched.
 void syncAllScene(Tab& t) {
   t.scene.charges.clear();
-  for (const auto& c : t.field.charges) t.scene.charges.push_back(ef::SceneCharge{c.position, c.charge});
+  for (const auto& c : t.field.charges) t.scene.charges.push_back(ef::SceneCharge{c.position, c.charge, c.sizePx});
 }
 
 // EDIT-12: push the pre-mutation state (charges + method) onto the undo stack; a new branch clears redo.
@@ -39,6 +41,18 @@ ef::Vec2 clamped(ef::Vec2 v) {
 }
 
 }  // namespace
+
+std::uint64_t nextChargeId(const ef::ChargeSystem& field) {
+  std::uint64_t maxId = 0;
+  for (const auto& c : field.charges)
+    if (c.id > maxId) maxId = c.id;
+  return maxId + 1;  // empty system -> 1
+}
+
+void assignChargeIds(ef::ChargeSystem& field) {
+  for (auto& c : field.charges)
+    if (c.id == 0) c.id = nextChargeId(field);  // each assignment raises the max: monotonic within the call
+}
 
 int hitCharge(const ef::ChargeSystem& field, ef::Vec2 world, const double radius) {
   int best = -1;
@@ -101,10 +115,16 @@ void commitDrag(Tab& t) {
   t.redo.clear();  // a new edit branch invalidates redo
 }
 
-bool addCharge(Tab& t, ef::Vec2 world, int value) {
+bool addCharge(Tab& t, ef::Vec2 world, int value, float defaultSizePx) {
   if (!editable(t)) return false;
-  t.field.charges.push_back(ef::Charge{value, clamped(world)});
-  t.scene.charges.push_back(ef::SceneCharge{clamped(world), value});
+  const ef::Vec2 at = clamped(world);
+  // Identity is model logic: max over the system, and never below the tab's high-water mark, so a
+  // removed charge's id is not reused (the watermark deliberately survives undo/redo snapshots).
+  const std::uint64_t id = std::max(nextChargeId(t.field), t.chargeIdWater + 1);
+  t.chargeIdWater = id;
+  const float sizePx = defaultSizePx == 0.f || (defaultSizePx >= 2.f && defaultSizePx <= 120.f) ? defaultSizePx : 0.f;
+  t.field.charges.push_back(ef::Charge{value, at, id, std::string(), sizePx});
+  t.scene.charges.push_back(ef::SceneCharge{at, value, sizePx});
   t.selected = static_cast<int>(t.field.charges.size()) - 1;
   t.stale = true;
   t.dirty = true;

@@ -1,5 +1,7 @@
 #pragma once
 #include <cmath>
+#include <cstdint>
+#include <string>
 #include <vector>
 
 #include "ef/params.hpp"
@@ -10,6 +12,13 @@ namespace ef {
 struct Charge {
   int charge = 1;
   Vec2 position;
+
+  // v2.6 phase 3: identity + per-charge draw state. Trailing members with defaults keep every existing
+  // aggregate init compiling (id 0 = unassigned, name "" = derived display "Charge N", sizePx 0 =
+  // inherit the Options charge size). Draw-only: the field/potential math never reads them.
+  std::uint64_t id = 0;
+  std::string name{};
+  float sizePx = 0.f;
 
   double Potential(const Vec2& pos) const { return charge / (pos - position).Length(); }  // Charge.h:31
   Vec2 E(const Vec2& pos) const {                                                          // Charge.h:37

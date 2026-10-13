@@ -3,6 +3,7 @@
 // Std-only (same strict flags as the core): unit-testable with doctest, no SDL / ImGui. All calls on the UI thread.
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <limits>
 #include <map>
@@ -58,6 +59,10 @@ struct Tab {
   int selected = -1;              // editor (v2): index into field.charges, -1 = nothing selected
   bool stale = false;             // editor (v2): charges edited after the drawn lines were computed
   bool dirty = false;             // v2.2: charges edited since the tab was opened / last saved to a collection
+  // v2.6 phase 3: the highest charge id ever assigned on this tab. Ids are never reused - not even a
+  // just-removed charge's id - and the watermark deliberately lives OUTSIDE the history snapshots, so
+  // undo/redo cannot resurrect a retired id.
+  std::uint64_t chargeIdWater = 0;
   // View state (v2.2 zoom/pan): device px = centre-anchored transform, pixelsPerUnit *= zoom. View changes
   // are never stale edits (they do not touch the computation).
   double zoom = 1.0;              // 1 = 100 px per world unit (at k = 1); clamped to [0.05, 40], and zoom-in is

@@ -497,7 +497,7 @@ void saveAsModal(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
     efapp::UserConfig candidate;
     candidate.name = ui.saveAsName;
     candidate.charges.reserve(t->field.charges.size());
-    for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::PresetCharge{c.charge, c.position.X, c.position.Y});
+    for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::toPresetCharge(c));
     // Check on a scratch copy: upsert is the single decision core (also used by App::frame for the real write).
     std::vector<efapp::UserConfig> scratch = ui.userConfigs;
     const efapp::UpsertResult res = efapp::upsertUserConfig(scratch, candidate, reserved);
@@ -525,7 +525,7 @@ void saveAsModal(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
       efapp::UserConfig candidate;
       candidate.name = ui.saveAsName;
       candidate.charges.reserve(t->field.charges.size());
-      for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::PresetCharge{c.charge, c.position.X, c.position.Y});
+      for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::toPresetCharge(c));
       ui.saveAsApply = candidate;
       ImGui::CloseCurrentPopup();
       close = true;

@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "app/ui_logic.hpp"
+#include "app/editor.hpp"
 #include "ef/seeds.hpp"
 
 namespace efapp {
@@ -37,7 +38,10 @@ SessionFactory defaultSessionFactory() {
 unsigned Workspace::open(std::size_t presetIndex) {
   const ef::Preset& p = ef::presets().at(presetIndex);
   const unsigned number = ++counters_[presetIndex];
-  return spawn(presetIndex, number, std::string(p.displayName) + " " + std::to_string(number), ef::makeSystem(p), std::string(p.displayName));
+  // v2.6 phase 3: presets get ids 1..N on open (makeSystem itself stays field-carrying for ef-cli parity).
+  ef::ChargeSystem field = ef::makeSystem(p);
+  editor::assignChargeIds(field);
+  return spawn(presetIndex, number, std::string(p.displayName) + " " + std::to_string(number), std::move(field), std::string(p.displayName));
 }
 
 unsigned Workspace::openUser(const std::string& name, const std::vector<ef::PresetCharge>& charges) {
@@ -48,7 +52,8 @@ unsigned Workspace::openUser(const std::string& name, const std::vector<ef::Pres
   const std::string trimmed = trim(name);
   ef::ChargeSystem field;
   field.charges.reserve(charges.size());
-  for (const ef::PresetCharge& c : charges) field.charges.push_back(ef::Charge{c.charge, ef::Vec2{c.x, c.y}});
+  for (const ef::PresetCharge& c : charges) field.charges.push_back(ef::Charge{c.charge, ef::Vec2{c.x, c.y}, c.id, c.name, c.sizePx});
+  editor::assignChargeIds(field);  // file-provided ids are preserved; only id == 0 charges get assigned
   const unsigned number = ++userCounters_[trimmed];
   return spawn(kNoPreset, number, trimmed + " " + std::to_string(number), std::move(field), source.empty() ? trimmed : source);
 }
@@ -67,6 +72,7 @@ unsigned Workspace::spawn(const std::size_t presetIndex, const unsigned number, 
   t->title = title;
   t->sourceConfig = sourceConfig;
   t->field = std::move(field);
+  t->chargeIdWater = editor::nextChargeId(t->field) - 1;  // the highest assigned id (empty system -> 0)
   t->params = defaults_;
   t->computed = t->field;  // v2.3 EDIT-11: the state the first computation runs with
   t->expectedLines = ef::expectedLineCount(t->field, t->params);
@@ -154,7 +160,8 @@ unsigned Workspace::openRestored(const std::string& title, const std::size_t pre
                                  const std::string& source) {
   ef::ChargeSystem field;
   field.charges.reserve(charges.size());
-  for (const ef::PresetCharge& c : charges) field.charges.push_back(ef::Charge{c.charge, ef::Vec2{c.x, c.y}});
+  for (const ef::PresetCharge& c : charges) field.charges.push_back(ef::Charge{c.charge, ef::Vec2{c.x, c.y}, c.id, c.name, c.sizePx});
+  editor::assignChargeIds(field);  // persisted ids survive the restore; legacy id == 0 lines get assigned
   const unsigned serial = spawn(presetIndex, 0, trim(title), std::move(field));
   Tab* t = find(serial);
   t->params = params;

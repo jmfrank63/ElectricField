@@ -59,16 +59,15 @@ double arrowStep(const GridSettings& g);
 inline constexpr double kZoomMin = 0.05;
 inline constexpr double kZoomMax = 40.0;
 // v2.6 phase 2: zooming IN is limited by the adapted calculation (the h25 "at least 1 world unit across
-// the canvas" rule is superseded - the seed/hit radii now adapt to the view). The drawn dot (25 px by
-// default) must still cover the floored seed circle (kMinSeedWorld = 0.01 world units): view scale
-// <= 25 / 0.01 = 2500 device px per world unit, or the floored seed circle pokes out as a white ring.
-inline constexpr double kMaxPpu = 2500.0;
-// The largest legal zoom for a view whose base scale is `pixelsPerUnitBase` px per world unit WITHOUT
-// the zoom factor (canvasView's 100 * HiDPI scale): zoom <= kMaxPpu / pixelsPerUnitBase, clamped to
-// [kZoomMin, kZoomMax] (zoom 25 at k = 1; zoom 12.5 at HiDPI k = 2 - unchanged on-screen feel).
-// `minCanvasPx` no longer bounds the formula but keeps its parameter slot; degenerate inputs (no canvas
-// measured yet) still fall back to the static kZoomMax.
-double zoomCeiling(double minCanvasPx, double pixelsPerUnitBase);
+// the canvas" rule is superseded - the seed/hit radii now adapt to the view). At the ceiling the drawn
+// dot - the user's charge size (Options draw.chargeRadiusPx, logical px) - must still cover the floored
+// seed circle (kMinSeedWorld = 0.01 world units), or the floored circle pokes out as a white ring.
+// The largest legal zoom for a view whose base scale is `ppuBase` px per world unit WITHOUT the zoom
+// factor: zoom <= dotRadiusPx / kMinSeedWorld / ppuBase, clamped to [kZoomMin, kZoomMax] (zoom 25 with
+// the default 25 px dot at base 100; zoom 2 with the "from a dot" 2 px setting). Callers pass the base
+// and the dot in the SAME space - the GUI uses logical px, which makes the ceiling display-scale-
+// independent. Degenerate inputs (nothing measured/applied yet) fall back to the static kZoomMax.
+double zoomCeiling(double ppuBase, double dotRadiusPx);
 // Multiplies the zoom by `factor` while keeping `anchor` (the world point under the mouse) at the same
 // screen position. Clamped to [kZoomMin, zoomMax] - the caller passes zoomCeiling(...) as zoomMax
 // (kZoomMax when not, e.g. before the first frame has measured the canvas).

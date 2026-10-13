@@ -219,12 +219,13 @@ ef::Vec2 snapPoint(const GridSettings& g, ef::Vec2 world) {
 
 double arrowStep(const GridSettings& g) { return g.active && g.spacing > 0.0 ? g.spacing : 0.1; }
 
-double zoomCeiling(const double minCanvasPx, const double pixelsPerUnitBase) {
-  if (!(minCanvasPx > 0.0) || !std::isfinite(minCanvasPx) || !(pixelsPerUnitBase > 0.0) || !std::isfinite(pixelsPerUnitBase))
+double zoomCeiling(const double ppuBase, const double dotRadiusPx) {
+  if (!(ppuBase > 0.0) || !std::isfinite(ppuBase) || !(dotRadiusPx > 0.0) || !std::isfinite(dotRadiusPx))
     return kZoomMax;
-  // v2.6 phase 2: the ceiling derives from the adapted calculation (kMaxPpu over the base scale), not
-  // from the canvas's smaller side any more; the degenerate-input guard keeps its shape.
-  return std::clamp(kMaxPpu / pixelsPerUnitBase, kZoomMin, kZoomMax);
+  // v2.6 phase 2 (WR-02): the ceiling derives from the APPLIED dot - at the ceiling the floored seed
+  // circle (kMinSeedWorld) exactly fills the drawn dot on screen. A small "from a dot" charge size
+  // therefore caps zoom-in earlier instead of re-exposing the untraced white annulus.
+  return std::clamp(dotRadiusPx / ef::ComputeParams::kMinSeedWorld / ppuBase, kZoomMin, kZoomMax);
 }
 
 bool zoomAt(Tab& t, const double factor, const ef::Vec2 anchor, const double zoomMax) {

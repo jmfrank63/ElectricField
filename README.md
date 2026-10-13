@@ -64,8 +64,9 @@ preserved in history and on the `v1.0` tag.
   are always at hand, right-drag pans, and the arrow keys pan whenever no charge is selected. The
   calculation adapts to the view: when you zoom in, the field lines hug the charges (the seed circle
   shrinks to a couple of pixels on screen, floored for numerics) and a settled zoom recalculates
-  automatically - no white disk is left around them. The zoom-in ceiling is now about 25x at 100% scale
-  (12.5x on a 2x HiDPI display): the drawn charge dot covers the floored seed circle up to that limit.
+  automatically - no white disk is left around them. The zoom-in ceiling is now about 25x (at the
+  ceiling the drawn charge dot exactly covers the floored seed circle; a small charge size in the
+  Options lowers it accordingly).
 - **Your workspace comes back**: the open tabs - including each tab's calculation method, continuous
   calculation, grid settings and any charge edits - are stored per collection when you quit
   (`Sessions\<Collection>.ini`) and restored when you open the collection again. If tabs have changes

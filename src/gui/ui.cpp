@@ -105,10 +105,13 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   ImDrawList* dl = ImGui::GetWindowDrawList();
 
   ef::View view = efapp::canvasView(avail.x, avail.y, env.k);
-  // The zoom ceiling from the adapted-calculation limit (v2.6: kMaxPpu over the base scale; the h25
-  // canvas-min-side rule is superseded since the seed/hit radii adapt to the view), applied to the
-  // stored zoom every frame - a window shrunk after a deep zoom re-clamps it here.
-  const double zoomCeiling = efapp::editor::zoomCeiling(std::min(avail.x, avail.y), view.pixelsPerUnit);
+  // The zoom ceiling from the adapted-calculation limit: at the ceiling the floored seed circle
+  // (0.01 world) exactly fills the drawn dot - the user's charge size, logical px (WR-02). In the
+  // logical space the base scale is k-free 100, so the ceiling is display-scale-independent. Applied
+  // to the stored zoom every frame - a smaller charge size after an Options change or a window shrunk
+  // after a deep zoom re-clamps it here.
+  const double dotPx = env.options ? env.options->draw.chargeRadiusPx : ef::DrawStyle{}.chargeRadiusPx;
+  const double zoomCeiling = efapp::editor::zoomCeiling(100.0, dotPx);
   t.zoom = std::min(t.zoom, zoomCeiling);
   view.pixelsPerUnit *= t.zoom;  // v2.2 zoom
   view.centre = t.centre;        // v2.2 pan
@@ -718,7 +721,8 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   // 261012-h25: the buttons share the canvas's zoom ceiling (canvasMin/Max hold the rect drawn this frame).
   {
     const float bw = (kEditorPanelWidth * env.k - 2 * ImGui::GetStyle().ItemSpacing.x) / 3.f;
-    const double ceiling = efapp::editor::zoomCeiling(std::min(ui.canvasMax.x - ui.canvasMin.x, ui.canvasMax.y - ui.canvasMin.y), 100.0 * env.k);
+    const double dotPx = env.options ? env.options->draw.chargeRadiusPx : ef::DrawStyle{}.chargeRadiusPx;
+    const double ceiling = efapp::editor::zoomCeiling(100.0, dotPx);  // same ceiling as the canvas (logical base)
     if (ImGui::Button("Zoom -", ImVec2(bw, 0.f))) efapp::editor::zoomAt(t, 1.0 / 1.25, t.centre, ceiling);
     ImGui::SameLine();
     if (ImGui::Button("Zoom +", ImVec2(bw, 0.f))) efapp::editor::zoomAt(t, 1.25, t.centre, ceiling);

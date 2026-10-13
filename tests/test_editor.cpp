@@ -200,19 +200,20 @@ TEST_CASE("flipSign and the view controls (v2.2 EDIT-09, ZOOM/PAN)") {
   CHECK_FALSE(v.dirty);
 }
 
-// v2.6 phase 2: zoom-in is capped by the adapted-calculation limit - the drawn dot (25 px) must cover
-// the floored seed circle (0.01 world): kMaxPpu = 2500 ppu. The h25 canvas-min-side rule is superseded
-// (the seed/hit radii adapt to the view now); minCanvasPx keeps its parameter slot only.
-TEST_CASE("zoom ceiling: the adapted-calculation limit (v2.6 phase 2)") {
-  // zoomCeiling = kMaxPpu / base pixels-per-unit, clamped to [kZoomMin, kZoomMax].
-  CHECK(efapp::editor::zoomCeiling(768.0, 100.0) == doctest::Approx(25.0));
-  CHECK(efapp::editor::zoomCeiling(1024.0, 200.0) == doctest::Approx(12.5));   // HiDPI base (2x) halves the ceiling
-  CHECK(efapp::editor::zoomCeiling(50.0, 100.0) == doctest::Approx(25.0));     // the canvas size no longer bounds zoom-in
-  CHECK(efapp::editor::zoomCeiling(5000.0, 100.0) == doctest::Approx(25.0));   // ...nor does a huge one
-  CHECK(efapp::editor::zoomCeiling(768.0, 100000.0) == doctest::Approx(efapp::editor::kZoomMin));  // extreme base: floor wins
-  CHECK(efapp::editor::zoomCeiling(0.0, 100.0) == doctest::Approx(efapp::editor::kZoomMax));     // degenerate: static cap
-  CHECK(efapp::editor::zoomCeiling(-5.0, 100.0) == doctest::Approx(efapp::editor::kZoomMax));
-  CHECK(efapp::editor::zoomCeiling(768.0, 0.0) == doctest::Approx(efapp::editor::kZoomMax));
+// v2.6 phase 2 (WR-02): zoom-in is capped by the adapted-calculation limit derived from the APPLIED
+// dot: at the ceiling the floored seed circle (0.01 world) exactly fills the drawn dot
+// (zoomCeiling = dotRadiusPx / kMinSeedWorld / ppuBase). The h25 canvas-min-side rule is long superseded.
+TEST_CASE("zoom ceiling: the applied dot covers the floored seed circle (v2.6 phase 2 WR-02)") {
+  // zoomCeiling = dotRadiusPx / kMinSeedWorld / ppuBase, clamped to [kZoomMin, kZoomMax].
+  CHECK(efapp::editor::zoomCeiling(100.0, 25.0) == doctest::Approx(25.0));   // default dot at the logical base 100
+  CHECK(efapp::editor::zoomCeiling(100.0, 2.0) == doctest::Approx(2.0));     // "from a dot": the annulus stays covered
+  CHECK(efapp::editor::zoomCeiling(200.0, 25.0) == doctest::Approx(12.5));   // the formula is unit-agnostic: a doubled base halves it
+  CHECK(efapp::editor::zoomCeiling(100.0, 120.0) == doctest::Approx(efapp::editor::kZoomMax));  // a huge dot: the static cap binds
+  CHECK(efapp::editor::zoomCeiling(100000.0, 25.0) == doctest::Approx(efapp::editor::kZoomMin));  // extreme base: floor wins
+  CHECK(efapp::editor::zoomCeiling(0.0, 25.0) == doctest::Approx(efapp::editor::kZoomMax));       // degenerate: static cap
+  CHECK(efapp::editor::zoomCeiling(-5.0, 25.0) == doctest::Approx(efapp::editor::kZoomMax));
+  CHECK(efapp::editor::zoomCeiling(100.0, 0.0) == doctest::Approx(efapp::editor::kZoomMax));
+  CHECK(efapp::editor::zoomCeiling(100.0, -1.0) == doctest::Approx(efapp::editor::kZoomMax));
 
   ThrowFactory f;
   efapp::Tab& t = dipoleTab(f);

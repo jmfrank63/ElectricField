@@ -112,6 +112,14 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   t.zoom = std::min(t.zoom, zoomCeiling);
   view.pixelsPerUnit *= t.zoom;  // v2.2 zoom
   view.centre = t.centre;        // v2.2 pan
+  // v2.6 phase 2: arm the zoom-settle recalculation. Only Done tabs, and never on the first frame
+  // (armedViewPpu starts 0); checked before viewControls so this frame's wheel event re-arms cleanly
+  // next frame. viewPpu tracks the live ppu so an explicit Calculate stamps the same scale.
+  if (t.state == efapp::TabState::Done && t.session == nullptr) {
+    if (t.armedViewPpu != 0 && view.pixelsPerUnit != t.armedViewPpu) t.pendingViewRecalcAt = -2;
+    t.viewPpu = view.pixelsPerUnit;
+    t.armedViewPpu = view.pixelsPerUnit;
+  }
   const ef::DrawStyle style = efapp::scaledStyle(env.drawStyle, env.k);  // user draw options (Phase 4), scaled for HiDPI
   {
     efrender::ImGuiPainter painter(dl, p);

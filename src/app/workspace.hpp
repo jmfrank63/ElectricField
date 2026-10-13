@@ -67,6 +67,13 @@ struct Tab {
   // autoRecalcTick(now) every frame and the tab recomputes once `pendingRecalcAt` (now + delay) passes.
   bool autoRecalc = false;
   double pendingRecalcAt = -1.0;  // absolute deadline in seconds; -1 = not armed
+  // v2.6 phase 2: zoom-settle recalculation. drawCanvas arms pendingViewRecalcAt = -2 when a Done tab's
+  // view scale differs from the armed one (armedViewPpu starts 0: the first frame never arms);
+  // Workspace::viewRecalcTick converts the marker into a deadline (the same protocol as pendingRecalcAt)
+  // and recalculates with params.viewScale = viewPpu. A view change is not an edit: no stale/dirty/undo.
+  double viewPpu = 0;                 // the ppu the pending view recalculation will run with
+  double armedViewPpu = 0;            // the ppu seen on the previous Done frame
+  double pendingViewRecalcAt = -1.0;  // absolute deadline; -1 = not armed, -2 = arm at the next tick
   // v2.3 EDIT-11/12: the charges of the last (re)computation (Esc reverts here) and the per-tab history.
   ef::ChargeSystem computed;
   struct HistoryEntry {
@@ -117,6 +124,10 @@ class Workspace {
   // Continuous calculation (v2.2 CALC-03): recalculates every tab that has autoRecalc on, is stale, and
   // whose pending deadline has passed. Called every frame by the GUI with the current time in seconds.
   void autoRecalcTick(double nowSeconds);
+  // v2.6 phase 2: zoom-settle recalculation. Converts every armed pendingViewRecalcAt = -2 marker into a
+  // deadline (now + kAutoRecalcDelay) and fires calculate() with params.viewScale = viewPpu once due.
+  // Never sets stale/dirty and records no undo: a view change is not an edit. Called every frame by the GUI.
+  void viewRecalcTick(double nowSeconds);
   // v2.2: true when at least one open tab has charge edits that are not stored in any collection file.
   bool anyDirty() const;
   // Options dialog (Phase 4): new tabs open with these params; tabs already open keep the params they were opened with.

@@ -294,6 +294,7 @@ void App::handleEvent(const SDL_Event& e) {
 void App::frame() {
   ws_.pollAll();
   ws_.autoRecalcTick(ImGui::GetTime());  // v2.2 CALC-03: fire due continuous recalculations
+  ws_.viewRecalcTick(ImGui::GetTime());  // v2.6 phase 2: fire due zoom-settle recalculations
   ui_.userConfigs = userConfigs_;  // the chooser reads the mirror; the App keeps the master list
   ui_.collections = collections_;
   ui_.recentCollections = recentMenus(recents_);  // 261012-h26: File > Recent Collections entries

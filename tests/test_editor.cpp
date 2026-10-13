@@ -232,6 +232,92 @@ TEST_CASE("zoom ceiling: one world unit stays visible (261012-h25)") {
   CHECK_FALSE(t.dirty);
 }
 
+// v2.6 phase 2: zoom-settle recalculation. The GUI arming lives in drawCanvas, so the doctest drives the
+// WORKSPACE contract: pendingViewRecalcAt -2 -> deadline -> calculate with params.viewScale set, and no
+// stale/dirty/undo anywhere on that path (a view change is not an edit).
+TEST_CASE("viewRecalcTick fires the zoom-settle recalculation with the adapted view scale (v2.6 phase 2)") {
+  std::vector<ef::ComputeParams> received;
+  efapp::Workspace ws{ef::ComputeParams{}, [&](const ef::ChargeSystem&, const ef::ComputeParams& p) -> std::unique_ptr<efapp::ISession> {
+    received.push_back(p);
+    throw std::runtime_error("no compute");  // instant Failed tab: session null, recalc paths reachable
+  }};
+  const unsigned s = ws.openEmpty();
+  efapp::Tab& t = *ws.find(s);
+  REQUIRE(received.size() == 1);
+  CHECK(received[0].viewScale == doctest::Approx(0.0));  // a fresh tab computes legacy (ef-cli parity)
+
+  // The drawCanvas arming, simulated (the GUI side): a zoom to 800 ppu arms the marker.
+  t.armedViewPpu = 800.0;
+  t.viewPpu = 800.0;
+  t.pendingViewRecalcAt = -2;
+  ws.viewRecalcTick(100.0);  // -2 becomes the deadline, nothing fires yet
+  CHECK(t.pendingViewRecalcAt == doctest::Approx(100.0 + efapp::kAutoRecalcDelay));
+  CHECK(received.size() == 1);
+  ws.viewRecalcTick(100.0 + efapp::kAutoRecalcDelay - 0.01);  // before the deadline: nothing
+  CHECK(received.size() == 1);
+  ws.viewRecalcTick(100.0 + efapp::kAutoRecalcDelay);  // due: recalculation with the stamped view scale
+  REQUIRE(received.size() == 2);
+  CHECK(received[1].viewScale == doctest::Approx(800.0));  // the factory received the adapted params
+  CHECK(t.params.viewScale == doctest::Approx(800.0));
+  CHECK_FALSE(t.stale);
+  CHECK_FALSE(t.dirty);
+  CHECK(t.undo.empty());
+  CHECK(t.pendingViewRecalcAt < 0);  // disarmed by the fire
+
+  // An explicit Calculate honours the armed view too and disarms the pending settle recalculation.
+  t.viewPpu = 900.0;
+  t.pendingViewRecalcAt = -2;
+  CHECK(ws.calculate(s));
+  REQUIRE(received.size() == 3);
+  CHECK(received[2].viewScale == doctest::Approx(900.0));
+  CHECK(t.pendingViewRecalcAt < 0);
+
+  // Never-armed tab (armedViewPpu 0): calculate keeps the legacy params untouched.
+  efapp::Tab& fresh = *ws.find(ws.openEmpty());
+  CHECK(fresh.armedViewPpu == 0.0);
+  CHECK(ws.calculate(fresh.serial));
+  CHECK(fresh.params.viewScale == doctest::Approx(0.0));
+}
+
+// v2.6 phase 2: the settle recalculation runs a REAL adapted computation and lands back in Done with
+// clean flags - the same full cycle the CALC-03 test drives for the edit debounce.
+TEST_CASE("viewRecalcTick with a real session completes the adapted computation (v2.6 phase 2)") {
+  ef::ComputeParams light;  // light defaults: the adapted sweep stays cheap in Debug builds
+  light.linesPerUnitCharge = 4;
+  light.potentialInterval = 0.5;
+  efapp::Workspace ws{light};
+  const unsigned s = ws.openEmpty();
+  efapp::Tab& t = *ws.find(s);
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+  while (t.state == efapp::TabState::Computing && std::chrono::steady_clock::now() < deadline) {
+    ws.pollAll();
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  REQUIRE(t.state == efapp::TabState::Done);
+  REQUIRE(t.scene.electric.size() > 0);
+
+  // Zoom to 800 ppu (the drawCanvas arming, simulated) and let the tick fire.
+  t.armedViewPpu = 800.0;
+  t.viewPpu = 800.0;
+  t.pendingViewRecalcAt = -2;
+  ws.viewRecalcTick(100.0);
+  ws.viewRecalcTick(100.0 + efapp::kAutoRecalcDelay + 0.01);
+  CHECK(t.state == efapp::TabState::Computing);
+  CHECK_FALSE(t.stale);
+  CHECK_FALSE(t.dirty);
+  while (t.state == efapp::TabState::Computing && std::chrono::steady_clock::now() < deadline) {
+    ws.pollAll();
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  REQUIRE(t.state == efapp::TabState::Done);
+  CHECK(t.scene.electric.size() > 0);
+  CHECK_FALSE(t.stale);
+  CHECK_FALSE(t.dirty);
+  CHECK(t.undo.empty());
+  CHECK(t.params.viewScale == doctest::Approx(800.0));
+  ws.closeAll();
+}
+
 TEST_CASE("dirty tracking and anyDirty (v2.2 leave prompt)") {
   ThrowFactory f;
   efapp::Tab& t = dipoleTab(f);

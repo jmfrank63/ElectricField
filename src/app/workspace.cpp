@@ -90,6 +90,10 @@ unsigned Workspace::spawn(const std::size_t presetIndex, const unsigned number, 
 bool Workspace::calculate(const unsigned serial) {
   Tab* t = find(serial);
   if (!t || t->session) return false;  // unknown serial or still computing (v2 D-03)
+  // v2.6 phase 2: an explicit recalculation honours the adapted view (F5 right after a zoom must not
+  // compute with a stale view scale) and disarms the zoom-settle deadline (no double computation).
+  if (t->armedViewPpu != 0) t->params.viewScale = t->viewPpu;
+  t->pendingViewRecalcAt = -1.0;
   t->expectedLines = ef::expectedLineCount(t->field, t->params);
   t->scene = ef::buildScene(t->field, ef::FieldResult{});  // parity: a fresh computation starts charges-only
   t->computed = t->field;  // v2.3 EDIT-11: the charges this computation runs with (Esc reverts here)
@@ -114,6 +118,20 @@ void Workspace::autoRecalcTick(const double nowSeconds) {
   for (auto& tp : tabs_) {
     Tab& t = *tp;
     if (t.autoRecalc && t.stale && t.pendingRecalcAt >= 0 && nowSeconds >= t.pendingRecalcAt) calculate(t.serial);
+  }
+}
+
+void Workspace::viewRecalcTick(const double nowSeconds) {
+  for (auto& tp : tabs_) {
+    Tab& t = *tp;
+    if (t.session) continue;  // arming is a Done-tab activity; a live session refuses calculate anyway
+    if (t.pendingViewRecalcAt == -2)
+      t.pendingViewRecalcAt = nowSeconds + kAutoRecalcDelay;
+    else if (t.pendingViewRecalcAt >= 0 && nowSeconds >= t.pendingViewRecalcAt) {
+      t.pendingViewRecalcAt = -1.0;
+      t.params.viewScale = t.viewPpu;
+      calculate(t.serial);  // calculate() alone: no stale, no dirty, no undo entry
+    }
   }
 }
 

@@ -114,9 +114,14 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   view.centre = t.centre;        // v2.2 pan
   // v2.6 phase 2: arm the zoom-settle recalculation. Only Done tabs, and never on the first frame
   // (armedViewPpu starts 0); checked before viewControls so this frame's wheel event re-arms cleanly
-  // next frame. viewPpu tracks the live ppu so an explicit Calculate stamps the same scale.
+  // next frame. viewPpu tracks the live ppu so an explicit Calculate stamps the same scale. A zoom that
+  // settles back into the regime the tab was last computed at (both sides <= kRefPpu) would reproduce
+  // the identical calculation, so it disarms a pending recalc instead of arming one - zoom wiggling
+  // below the reference never locks the editor with a redundant computation.
   if (t.state == efapp::TabState::Done && t.session == nullptr) {
-    if (t.armedViewPpu != 0 && view.pixelsPerUnit != t.armedViewPpu) t.pendingViewRecalcAt = -2;
+    const bool sameRegime = view.pixelsPerUnit <= ef::ComputeParams::kRefPpu &&
+                            (t.params.viewScale == 0 || t.params.viewScale <= ef::ComputeParams::kRefPpu);
+    if (t.armedViewPpu != 0 && view.pixelsPerUnit != t.armedViewPpu) t.pendingViewRecalcAt = sameRegime ? -1.0 : -2;
     t.viewPpu = view.pixelsPerUnit;
     t.armedViewPpu = view.pixelsPerUnit;
   }

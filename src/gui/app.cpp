@@ -1165,7 +1165,7 @@ namespace {
 
 // A view that fits a charge arrangement into a fixed canvas, centred on the charges: bounded, so the
 // same collection produces the same pages anywhere (the script exports must be deterministic).
-ef::View fittedView(const std::vector<ef::SceneCharge>& charges, int widthPx, int heightPx) {
+ef::View fittedView(const std::vector<ef::SceneCharge>& charges, int widthPx, int heightPx, const double defaultRadiusPx) {
   double minX = 0, maxX = 0, minY = 0, maxY = 0;
   bool any = false;
   for (const ef::SceneCharge& c : charges) {
@@ -1182,7 +1182,14 @@ ef::View fittedView(const std::vector<ef::SceneCharge>& charges, int widthPx, in
   }
   const double spanX = std::max(maxX - minX, 3.0);  // a single charge keeps a sensible minimum span
   const double spanY = std::max(maxY - minY, 3.0);
-  const double margin = 64.0;                       // device px
+  // IN-06: the margin must clear the DOTS, not just the centres - with the per-charge sizes of
+  // v2.6 phase 3 a 120 px charge at the bounding-box boundary clipped up to 56 px of dot. The
+  // largest effective radius (its own sizePx, else the style default the callers pass) on top of
+  // the 64 px centre guarantee keeps every whole dot >= 64 px from the canvas edge.
+  double maxRadius = defaultRadiusPx;
+  for (const ef::SceneCharge& c : charges)
+    if (c.sizePx > 0.f) maxRadius = std::max(maxRadius, static_cast<double>(c.sizePx));
+  const double margin = 64.0 + maxRadius;           // device px
   const double ppu = std::clamp(std::min((widthPx - 2 * margin) / spanX, (heightPx - 2 * margin) / spanY), 5.0, 100.0);
   ef::View view{widthPx, heightPx, ppu};
   view.centre = ef::Vec2{(minX + maxX) / 2.0, (minY + maxY) / 2.0};
@@ -1211,7 +1218,7 @@ std::string App::exportConfigurationTo(const std::string& path) {
   if (!session.takeResult(result)) return "error: no result for the active configuration";
   const ef::FieldScene scene = ef::buildScene(t->field, result);
   const ef::DrawStyle style = options_.draw;
-  return writeBinaryFile(path, ef::renderPdf(scene, style, fittedView(scene.charges, 1024, 768)));
+  return writeBinaryFile(path, ef::renderPdf(scene, style, fittedView(scene.charges, 1024, 768, style.chargeRadiusPx)));
 }
 
 // One PDF with one page per configuration (the whole collection, EXP-03). Each page is computed
@@ -1238,7 +1245,7 @@ std::string App::exportCollectionTo(const std::string& path) {
     ef::FieldResult result;
     if (!session.takeResult(result)) return "error: no result for '" + c.name + "'";
     const ef::FieldScene scene = ef::buildScene(field, result);
-    ef::renderScene(painter, scene, style, fittedView(scene.charges, 1024, 768));  // one renderScene = one page
+    ef::renderScene(painter, scene, style, fittedView(scene.charges, 1024, 768, style.chargeRadiusPx));  // one renderScene = one page
     painter.setTitle(c.name);  // the page rendered above (renderScene owns begin/end)
   }
   return writeBinaryFile(path, painter.build());

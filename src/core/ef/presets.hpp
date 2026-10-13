@@ -11,15 +11,17 @@ namespace ef {
 
 inline constexpr std::size_t kPresetCount = 9;
 
-// The one transport type for collections/sessions/API. Same trailing identity/draw fields as Charge
-// (v2.6 phase 3); defaults keep the 9-entry preset table and every legacy literal compiling.
+// The one transport type for collections/sessions/API. The trailing identity/draw fields mirror the
+// persisted line order (value, x, y, sizePx, id, name - pinned) so a positional 6-field initializer
+// reads exactly like the file line; defaults keep the 9-entry preset table and every legacy literal
+// compiling (v2.6 phase 3).
 struct PresetCharge {
   int charge;
   double x;
   double y;
+  float sizePx = 0.f;
   std::uint64_t id = 0;
   std::string name{};
-  float sizePx = 0.f;
 };
 
 // v2.6 phase 3: the Charge -> PresetCharge conversion used by every save/merge/dump site, so the

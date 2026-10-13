@@ -39,7 +39,9 @@ tab serial=2 title=Empty Configuration 1 state=done method=euler autocalc=0 stal
 `charges=` is a `;`-separated list of `v,x,y,sizePx,id,name` per charge (v2.6 phase 3): the drawn
 radius in px (0 = the Options default), the stable id, and the EFFECTIVE name (the stored name, or
 the derived `Charge N`; names are comma-free on disk). Older dumps' `v,x,y` prefix is unchanged, so
-`app.expect charges=1,0.5,0` keeps matching.
+`app.expect charges=1,0.5,0` keeps matching. Names are stored raw apart from ',', so a name
+containing ';' or '=' makes the dump ambiguous for consumers that split on them - avoid such names
+in scripts.
 
 `drawsize=` is the drawn charge radius in px (v2.5 SIZE-01, valid range 2-120; the `chargeSize` key in options.ini).
 

@@ -259,6 +259,26 @@ TEST_CASE("renderScene honours the view centre (v2.2 zoom/pan)") {
   CHECK(shifted.circles[0].c.y == doctest::Approx(100));
 }
 
+// v2.6 phase 3: a charge with its own sizePx draws at that radius; 0 inherits the style radius. Every
+// exporter (svg/pdf/png) funnels through renderScene, so one Recorder pins all of them.
+TEST_CASE("renderScene draws SceneCharge.sizePx when set, style.chargeRadiusPx when 0 (v2.6 phase 3)") {
+  FieldScene scene;
+  scene.charges.push_back(SceneCharge{Vec2{-2, 0}, +1, 60.f});  // custom radius
+  scene.charges.push_back(SceneCharge{Vec2{2, 0}, -1, 0.f});    // inherit the style default
+  Recorder rec;
+  renderScene(rec, scene, DrawStyle{}, View{1024, 768, 100.});
+  REQUIRE(rec.circles.size() == 2);
+  CHECK(rec.circles[0].r == 60.f);
+  CHECK(rec.circles[0].color.b == 255);  // still the positive-charge colour
+  CHECK(rec.circles[1].r == 25.f);       // DrawStyle{} default
+  CHECK(rec.circles[1].color.r == 255);
+
+  // The SVG exporter picks the custom radius up through the same renderScene site.
+  const std::string svg = renderSvg(scene, DrawStyle{}, View{1024, 768, 100.});
+  CHECK(svg.find("<circle cx=\"312\" cy=\"384\" r=\"60\"") != std::string::npos);
+  CHECK(svg.find("r=\"25\"") != std::string::npos);
+}
+
 TEST_CASE("renderScene draws the grid between background and scene (v2.4 BUG-01)") {
   Recorder r;
   FieldScene scene;

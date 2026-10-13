@@ -25,7 +25,6 @@ constexpr const char* kBlogUrl = "https://compphys.go.ro/electric-field-lines/";
 constexpr const char* kRepoUrl = "https://github.com/jmfrank63/ElectricField";
 constexpr const char* kUpstreamUrl = "https://github.com/aromanro/ElectricField";
 constexpr float kEditorPanelWidth = 230.f;    // v2 editor panel, logical px
-constexpr double kEditorHitRadius = 0.30;     // world units: charge radius 0.25 + slack (D-06)
 
 ImU32 rgba(int r, int g, int b, int a = 255) { return IM_COL32(r, g, b, a); }
 
@@ -135,12 +134,13 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   const ef::Vec2 mouseWorld = efapp::editor::snapPoint(t.grid, efapp::worldFromCanvas(view, p.x, p.y, io.MousePos.x, io.MousePos.y));
   if (canEdit && hovered) {
     if (ImGui::IsMouseDoubleClicked(0)) {  // EDIT-13: double-click empty canvas adds a charge in one go
-      if (efapp::editor::hitCharge(t.field, mouseWorld, kEditorHitRadius) < 0) {
+      // v2.6 phase 3: per-charge hit bounds - radius px and ppu in the SAME device space.
+      if (efapp::editor::hitCharge(t.field, mouseWorld, view.pixelsPerUnit, dotPx * env.k) < 0) {
         efapp::editor::addCharge(t, mouseWorld, 1);
         armAutoRecalc(t);
       }
     } else if (ImGui::IsMouseClicked(0)) {  // single click selects the charge for editing
-      t.selected = efapp::editor::hitCharge(t.field, mouseWorld, kEditorHitRadius);
+      t.selected = efapp::editor::hitCharge(t.field, mouseWorld, view.pixelsPerUnit, dotPx * env.k);
     }
   }
   // A drag that started on the canvas keeps moving the charge even past the edge until the button is released.

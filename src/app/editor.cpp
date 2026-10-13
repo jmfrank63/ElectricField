@@ -54,13 +54,16 @@ void assignChargeIds(ef::ChargeSystem& field) {
     if (c.id == 0) c.id = nextChargeId(field);  // each assignment raises the max: monotonic within the call
 }
 
-int hitCharge(const ef::ChargeSystem& field, ef::Vec2 world, const double radius) {
+int hitCharge(const ef::ChargeSystem& field, ef::Vec2 world, const double pixelsPerUnit, const double defaultRadiusPx) {
+  const double ppu = pixelsPerUnit > 0.0 ? pixelsPerUnit : 1.0;  // degenerate view scale: 1 px per unit
   int best = -1;
-  double bestDist = radius;
+  double bestDist = 0;
   for (std::size_t i = 0; i < field.charges.size(); ++i) {
-    const ef::Vec2 d = field.charges[i].position - world;
+    const ef::Charge& c = field.charges[i];
+    const ef::Vec2 d = c.position - world;
     const double dist = std::sqrt(d * d);
-    if (dist <= bestDist) {
+    const double bound = (c.sizePx > 0.f ? static_cast<double>(c.sizePx) : defaultRadiusPx) / ppu + kEditorHitSlack;
+    if (dist <= bound && (best < 0 || dist <= bestDist)) {  // nearest wins among each charge's own bound
       bestDist = dist;
       best = static_cast<int>(i);
     }
@@ -175,6 +178,30 @@ bool flipSign(Tab& t) {
   t.stale = true;
   t.dirty = true;
   t.pendingRecalcAt = -2;
+  return true;
+}
+
+// v2.6 phase 3: identity edits - dirty only, never stale, never a pending recalculation (the drawn
+// lines are not a function of a name or a size). Same refusal/no-op discipline as moveCharge.
+bool setChargeName(Tab& t, std::size_t index, const std::string& name) {
+  if (!editable(t) || index >= t.field.charges.size()) return false;
+  std::string clean = name;
+  clean.erase(std::remove(clean.begin(), clean.end(), ','), clean.end());  // ',' is the field separator on disk
+  if (clean == t.field.charges[index].name) return true;                   // nothing to do, no history entry
+  recordHistory(t);
+  t.field.charges[index].name = std::move(clean);
+  t.dirty = true;  // collection-visible state, NOT a recalculation request
+  return true;
+}
+
+bool setChargeSize(Tab& t, std::size_t index, float sizePx) {
+  if (!editable(t) || index >= t.field.charges.size()) return false;
+  if (!(sizePx == 0.f || (sizePx >= 2.f && sizePx <= 120.f))) return false;  // 0 = inherit, else 2..120 px
+  if (sizePx == t.field.charges[index].sizePx) return true;                  // nothing to do, no history entry
+  recordHistory(t);
+  t.field.charges[index].sizePx = sizePx;
+  syncScene(t, index);  // the canvas redraws the dot at once (sizePx is a draw property only)
+  t.dirty = true;
   return true;
 }
 

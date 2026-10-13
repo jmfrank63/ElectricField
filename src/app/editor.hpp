@@ -15,8 +15,20 @@ namespace efapp {
 
 namespace editor {
 
-// Selecting: the nearest charge within `radius` world units; -1 when none (or the field is empty).
-int hitCharge(const ef::ChargeSystem& field, ef::Vec2 world, double radius);
+// Selecting: the nearest charge within its own bound (world units). Each charge's bound is its
+// effective radius converted to world units plus a fixed slack:
+//   (sizePx > 0 ? sizePx : defaultRadiusPx) / pixelsPerUnit + kEditorHitSlack
+// `defaultRadiusPx` and `pixelsPerUnit` must be in the SAME (device) space: ui.cpp passes
+// view.pixelsPerUnit with defaultPx * k. At the defaults this is byte-identical to the old fixed
+// 0.30 bound (25 px / 100 ppu + 0.05). pixelsPerUnit <= 0 degenerates to 1.0. -1 = no hit.
+inline constexpr double kEditorHitSlack = 0.05;
+int hitCharge(const ef::ChargeSystem& field, ef::Vec2 world, double pixelsPerUnit, double defaultRadiusPx);
+
+// The effective display name (v2.6 phase 3): the stored name, or the derived "Charge N" (1-based
+// index). The model never stores the derived form - this is the one derivation site.
+inline std::string chargeDisplayName(const ef::Charge& c, std::size_t index) {
+  return c.name.empty() ? "Charge " + std::to_string(index + 1) : c.name;
+}
 
 // All mutators return false when the tab is computing or the request is invalid (unknown index, last
 // charge, nothing selected). Positions are clamped to [-1e5, 1e5] world units.
@@ -40,6 +52,16 @@ bool stepSelected(Tab& t, ef::Vec2 delta);
 bool stepValue(Tab& t, int delta);
 // Flips the sign of the selected charge's value (+10 -> -10); 0 stays 0 (v2.2 EDIT-09).
 bool flipSign(Tab& t);
+
+// v2.6 phase 3: identity edits. Name/size are collection-visible state: both mark the tab DIRTY only
+// (never stale, never pendingRecalcAt - the drawn lines are not a function of a name or size) and
+// update the scene in place where it mirrors the field (setChargeSize syncs sizePx; the name has no
+// scene copy - the tooltip reads field.charges). Undo/redo ride the existing ChargeSystem snapshots.
+// setChargeName strips ',' (the persistence field separator); an identical name is a no-op that
+// returns true without a history entry. setChargeSize validates 0 or 2..120 px (else false) and is a
+// no-op for an identical size.
+bool setChargeName(Tab& t, std::size_t index, const std::string& name);
+bool setChargeSize(Tab& t, std::size_t index, float sizePx);
 
 // v2.3 EDIT-12: history. Every successful charge/method mutation records the pre-state (capped);
 // undo/redo restore it. Both refuse while the tab is computing.

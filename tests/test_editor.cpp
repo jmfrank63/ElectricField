@@ -28,11 +28,13 @@ TEST_CASE("hitCharge: nearest within radius, -1 outside (EDIT-01)") {
   ef::ChargeSystem f;
   f.charges.push_back(ef::Charge{1, ef::Vec2{-2, 0}});
   f.charges.push_back(ef::Charge{-1, ef::Vec2{2, 0}});
-  CHECK(efapp::editor::hitCharge(f, ef::Vec2{-1.9, 0.1}, 0.30) == 0);
-  CHECK(efapp::editor::hitCharge(f, ef::Vec2{2.2, 0.0}, 0.30) == 1);
-  CHECK(efapp::editor::hitCharge(f, ef::Vec2{0.0, 0.0}, 0.30) == -1);  // midway: nothing near
+  // v2.6 phase 3: (pixelsPerUnit, defaultRadiusPx) device pairs. 25 px at 100 ppu + 0.05 slack = the
+  // old fixed 0.30 bound; 45 px at 100 ppu = the old 0.50 probe.
+  CHECK(efapp::editor::hitCharge(f, ef::Vec2{-1.9, 0.1}, 100.0, 25.0) == 0);
+  CHECK(efapp::editor::hitCharge(f, ef::Vec2{2.2, 0.0}, 100.0, 25.0) == 1);
+  CHECK(efapp::editor::hitCharge(f, ef::Vec2{0.0, 0.0}, 100.0, 25.0) == -1);  // midway: nothing near
   // nearest wins when two are in range
-  CHECK(efapp::editor::hitCharge(f, ef::Vec2{1.8, 0.0}, 0.50) == 1);
+  CHECK(efapp::editor::hitCharge(f, ef::Vec2{1.8, 0.0}, 100.0, 45.0) == 1);
 }
 
 TEST_CASE("moveCharge updates field and scene, refuses while computing, marks stale (EDIT-01, EDIT-05)") {
@@ -557,4 +559,218 @@ TEST_CASE("commitDrag after the dragged charge was removed mid-drag records noth
   efapp::editor::commitDrag(t);  // the dragged index is out of range: discard, no crash
   CHECK_FALSE(efapp::editor::dragActive(t));
   CHECK(t.undo.empty());
+}
+
+// ---------------------------------------------------------------------------
+// v2.6 phase 3: charge identity (id / name / per-charge size).
+// ---------------------------------------------------------------------------
+
+TEST_CASE("ids: presets get 1..N on open, addCharge assigns max+1, removed ids are never reused") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);
+  REQUIRE(t.field.charges.size() == 2);
+  CHECK(t.field.charges[0].id == 1);  // presets: assignChargeIds on open
+  CHECK(t.field.charges[1].id == 2);
+  CHECK(efapp::editor::nextChargeId(t.field) == 3);
+
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 5}, 3));
+  CHECK(t.field.charges[2].id == 3);  // max over the system + 1
+  CHECK(t.scene.charges[2].sizePx == 0.0f);
+
+  // Removing the max-id charge and adding again must NOT hand out id 3 again.
+  t.selected = 2;
+  CHECK(efapp::editor::removeSelected(t));
+  REQUIRE(t.field.charges.size() == 2);
+  CHECK(efapp::editor::nextChargeId(t.field) == 3);  // the pure helper only sees the live system...
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 6}, 1));
+  CHECK(t.field.charges[2].id == 4);  // ...but the tab's high-water mark keeps 3 retired
+}
+
+TEST_CASE("ids: no reuse across undo/redo - snapshots restore ids, the high-water mark survives them") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);  // ids 1, 2
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 5}, 3));  // id 3
+  CHECK(efapp::editor::moveCharge(t, 0, ef::Vec2{-1, 0}));  // history entry (pre-state has ids 1,2,3)
+
+  t.selected = 2;
+  CHECK(efapp::editor::removeSelected(t));  // removals record no history
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{1, 1}, 1));
+  CHECK(t.field.charges[2].id == 4);  // 3 stays retired
+
+  CHECK(efapp::editor::undo(t));  // the snapshot brings ids 1,2,3 back exactly
+  REQUIRE(t.field.charges.size() == 3);
+  CHECK(t.field.charges[0].id == 1);
+  CHECK(t.field.charges[1].id == 2);
+  CHECK(t.field.charges[2].id == 3);
+
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{2, 2}, 1));
+  CHECK(t.field.charges[3].id == 5);  // 4 was handed out above: still retired after the undo
+
+  CHECK(efapp::editor::redo(t));  // redo restores the moved-forward state (ids 1,2 and the id-4 add)
+  REQUIRE(t.field.charges.size() == 3);
+  CHECK(t.field.charges[2].id == 4);
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{2, 2}, 1));
+  CHECK(t.field.charges[3].id == 6);  // 3, 4 and 5 are all retired: max over system (4) and water (5) + 1
+}
+
+TEST_CASE("ids: openUser / openRestored preserve persisted ids and only fill id == 0") {
+  ThrowFactory f;
+  const unsigned u = f.ws.openUser("Kept", {ef::PresetCharge{1, 0, 0, 0.f, 5, "Five"}, ef::PresetCharge{-1, 1, 1}});
+  efapp::Tab& ut = *f.ws.find(u);
+  REQUIRE(ut.field.charges.size() == 2);
+  CHECK(ut.field.charges[0].id == 5);  // the persisted id survived
+  CHECK(ut.field.charges[1].id == 6);  // only id == 0 got assigned (monotonic max+1)
+  CHECK(ut.field.charges[0].name == "Five");
+  CHECK(efapp::editor::nextChargeId(ut.field) == 7);  // addCharge continues past the persisted ids
+  CHECK(efapp::editor::addCharge(ut, ef::Vec2{2, 2}, 1));
+  CHECK(ut.field.charges[2].id == 7);
+
+  const unsigned r = f.ws.openRestored("Restored", efapp::kNoPreset, ef::ComputeParams{},
+                                       {ef::PresetCharge{2, 0, 0, 25.f, 9, "Nine"}, ef::PresetCharge{-2, 1, 0}});
+  efapp::Tab& rt = *f.ws.find(r);
+  REQUIRE(rt.field.charges.size() == 2);
+  CHECK(rt.field.charges[0].id == 9);
+  CHECK(rt.field.charges[1].id == 10);
+  CHECK(rt.field.charges[0].sizePx == 25.0f);
+  CHECK(rt.chargeIdWater == 10);  // later adds never collide with a restored id
+}
+
+TEST_CASE("addCharge stores the validated default size on the charge and its scene mirror (v2.6 phase 3)") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 1}, 2, 40.f));
+  CHECK(t.field.charges[2].sizePx == 40.0f);
+  CHECK(t.scene.charges[2].sizePx == 40.0f);
+
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 2}, 2, 999.f));  // out of range degrades to 0 = inherit
+  CHECK(t.field.charges[3].sizePx == 0.0f);
+  CHECK(t.scene.charges[3].sizePx == 0.0f);
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 3}, 2, 1.f));  // below the 2 px floor degrades too
+  CHECK(t.field.charges[4].sizePx == 0.0f);
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 4}, 2, 120.f));  // the range edges are kept
+  CHECK(t.field.charges[5].sizePx == 120.0f);
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 5}, 2));  // the default argument stays 0
+  CHECK(t.field.charges[6].sizePx == 0.0f);
+}
+
+TEST_CASE("setChargeName: dirty only (never stale), strips commas, identical no-op, history (v2.6 phase 3)") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);
+  REQUIRE_FALSE(t.stale);
+  CHECK(t.pendingRecalcAt == -1.0);
+  const std::size_t linesBefore = t.scene.electric.size();
+
+  CHECK(efapp::editor::setChargeName(t, 0, "A,B"));
+  CHECK(t.field.charges[0].name == "AB");  // ',' is the persistence separator: stripped
+  CHECK(t.field.charges[0].id == 1);       // identity untouched
+  CHECK_FALSE(t.stale);                    // name edits never invalidate the drawn lines
+  CHECK(t.pendingRecalcAt == -1.0);        // and never arm the auto recalculation
+  CHECK(t.dirty);
+  CHECK(t.scene.electric.size() == linesBefore);
+  CHECK(t.scene.charges.size() == 2);      // no scene write happens for a name
+
+  CHECK(efapp::editor::setChargeName(t, 0, "AB"));  // identical name: no-op
+  REQUIRE(t.undo.size() == 1);                      // ...and no history entry
+
+  CHECK(efapp::editor::setChargeName(t, 1, "Other"));
+  CHECK(efapp::editor::undo(t));
+  CHECK(t.field.charges[1].name.empty());
+  CHECK(efapp::editor::redo(t));
+  CHECK(t.field.charges[1].name == "Other");
+
+  CHECK_FALSE(efapp::editor::setChargeName(t, 7, "X"));  // bad index
+  efapp::editor::setChargeName(t, 0, "");                 // empty is allowed: back to the derived name
+  CHECK(t.field.charges[0].name.empty());
+}
+
+TEST_CASE("setChargeSize: validation, scene sync, dirty only, history (v2.6 phase 3)") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);
+  CHECK_FALSE(t.stale);
+  CHECK(t.pendingRecalcAt == -1.0);
+
+  CHECK(efapp::editor::setChargeSize(t, 0, 40.f));
+  CHECK(t.field.charges[0].sizePx == 40.0f);
+  CHECK(t.scene.charges[0].sizePx == 40.0f);  // the scene mirror follows so the canvas redraws at once
+  CHECK_FALSE(t.stale);
+  CHECK(t.pendingRecalcAt == -1.0);
+  CHECK(t.dirty);
+
+  CHECK(efapp::editor::setChargeSize(t, 0, 40.f));  // identical size: no-op
+  REQUIRE(t.undo.size() == 1);
+
+  // 0 (inherit), 2 and 120 are accepted; 1, 121 and -5 are refused without touching anything.
+  CHECK(efapp::editor::setChargeSize(t, 1, 0.f));
+  CHECK(t.field.charges[1].sizePx == 0.0f);
+  CHECK(efapp::editor::setChargeSize(t, 1, 2.f));
+  CHECK(efapp::editor::setChargeSize(t, 1, 120.f));
+  CHECK_FALSE(efapp::editor::setChargeSize(t, 1, 1.f));
+  CHECK_FALSE(efapp::editor::setChargeSize(t, 1, 121.f));
+  CHECK_FALSE(efapp::editor::setChargeSize(t, 1, -5.f));
+  CHECK(t.field.charges[1].sizePx == 120.0f);
+  CHECK_FALSE(efapp::editor::setChargeSize(t, 7, 40.f));  // bad index
+
+  // The undo/redo snapshots carry size (and id) with the whole ChargeSystem.
+  CHECK(efapp::editor::setChargeSize(t, 0, 3.f));
+  CHECK(efapp::editor::undo(t));
+  CHECK(t.field.charges[0].sizePx == 40.0f);
+  CHECK(t.field.charges[0].id == 1);
+  CHECK(t.scene.charges[0].sizePx == 40.0f);
+  CHECK(efapp::editor::redo(t));
+  CHECK(t.field.charges[0].sizePx == 3.0f);
+}
+
+TEST_CASE("undo/redo restore name+size+id together through the ChargeSystem snapshot (v2.6 phase 3)") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);
+  CHECK(efapp::editor::setChargeName(t, 0, "Alpha"));
+  CHECK(efapp::editor::setChargeSize(t, 0, 60.f));
+  CHECK(t.undo.size() == 2);
+  CHECK(efapp::editor::undo(t));  // back to name=Alpha, size=0
+  CHECK(t.field.charges[0].name == "Alpha");
+  CHECK(t.field.charges[0].sizePx == 0.0f);
+  CHECK(t.field.charges[0].id == 1);
+  CHECK(efapp::editor::undo(t));  // back to the untouched dipole
+  CHECK(t.field.charges[0].name.empty());
+  CHECK(t.field.charges[0].id == 1);
+  CHECK(t.field.charges[1].id == 2);
+  CHECK(efapp::editor::redo(t));
+  CHECK(t.field.charges[0].name == "Alpha");
+  CHECK(efapp::editor::redo(t));
+  CHECK(t.field.charges[0].sizePx == 60.0f);
+}
+
+TEST_CASE("chargeDisplayName derives \"Charge N\" only when the name is empty (v2.6 phase 3)") {
+  ef::Charge unnamed;
+  CHECK(efapp::editor::chargeDisplayName(unnamed, 0) == "Charge 1");
+  CHECK(efapp::editor::chargeDisplayName(unnamed, 4) == "Charge 5");  // 1-based index
+  ef::Charge named;
+  named.name = "My Charge";
+  CHECK(efapp::editor::chargeDisplayName(named, 4) == "My Charge");
+}
+
+TEST_CASE("hitCharge: per-charge bounds, nearest wins, default-radius parity (v2.6 phase 3)") {
+  ef::ChargeSystem f;
+  ef::Charge big{1, ef::Vec2{0, 0}};
+  big.sizePx = 60.f;  // bound 0.60 + 0.05 world at ppu 100
+  ef::Charge small{-1, ef::Vec2{0.15, 0}};
+  small.sizePx = 10.f;  // bound 0.10 + 0.05
+  f.charges.push_back(big);
+  f.charges.push_back(small);
+  f.charges.push_back(ef::Charge{2, ef::Vec2{2, 0}});  // default radius (25 px -> 0.30)
+
+  // The small charge sits inside the big one's bound: a point near it selects the SMALL one.
+  CHECK(efapp::editor::hitCharge(f, ef::Vec2{0.14, 0}, 100.0, 25.0) == 1);
+  // A point near the big charge's rim (far from the small one) selects the big one.
+  CHECK(efapp::editor::hitCharge(f, ef::Vec2{-0.60, 0}, 100.0, 25.0) == 0);
+  // Between the two but inside both bounds: nearest wins.
+  CHECK(efapp::editor::hitCharge(f, ef::Vec2{0.10, 0}, 100.0, 25.0) == 1);
+  // The default-radius charge behaves exactly like the old fixed 0.30 bound.
+  CHECK(efapp::editor::hitCharge(f, ef::Vec2{2.25, 0}, 100.0, 25.0) == 2);
+  CHECK(efapp::editor::hitCharge(f, ef::Vec2{2.31, 0}, 100.0, 25.0) == -1);  // 0.25 + 0.05 is the edge
+  // Outside every bound.
+  CHECK(efapp::editor::hitCharge(f, ef::Vec2{0, 0.80}, 100.0, 25.0) == -1);
+  // Degenerate ppu falls back to 1.0: the default radius is then 25 world units.
+  CHECK(efapp::editor::hitCharge(f, ef::Vec2{10, 0}, 0.0, 25.0) == 2);
+  CHECK(efapp::editor::hitCharge(f, ef::Vec2{10, 0}, -5.0, 25.0) == 2);
 }

@@ -44,15 +44,17 @@ struct ComputeParams {
     return std::clamp(kSeedPx / viewScale, kMinSeedWorld, chargeRadiusWorld());
   }
   // Charge::HitCharge  (Charge.h:25): chargeRadius / 1.5 / distanceUnitLength; zoom-adapted above
-  // kRefPpu so endpoints stay behind the drawn dot (kHitPx = chargeRadiusPx / 1.5 px on screen). Two
-  // clamps: the legacy value above (25/1.5/100 with the defaults, so the adapted radius shrinks
-  // continuously out of it) and the seed circle below - a line is BORN on the seed circle, so a hit
-  // radius above it would end the line on its own charge at the first step (the MFC numbers keep
-  // seed = 1.5 * hit; at the ceiling the seed is the binding constraint and endpoints stay in the dot).
+  // kRefPpu so endpoints stay behind the drawn dot. The seed circle is the binding constraint at every
+  // adapted viewScale (the 16.67 px hit target chargeRadiusPx/1.5/viewScale never gets below the floored
+  // seed before the seed cap binds - IN-01: the elaborate clamp tier was unreachable), so the adapted
+  // radius is simply the smaller of the legacy value and the seed circle: a line is BORN on the seed
+  // circle, and a larger hit radius would end it on its own charge at the first step. The regime switch
+  // at kRefPpu is intentionally a JUMP (0.1667 -> 0.02 with the defaults) - the same switch the seed
+  // makes; the MFC numbers keep seed = 1.5 * hit.
   double hitRadius() const {
     const double legacy = chargeRadiusPx / 1.5 / static_cast<double>(pixelsPerUnit);
     if (!adapts()) return legacy;
-    return std::min(std::clamp(chargeRadiusPx / 1.5 / viewScale, kMinSeedWorld, legacy), seedRadius());
+    return std::min(legacy, seedRadius());
   }
 };
 

@@ -122,6 +122,9 @@ TEST_CASE("the session records the current collection (v2.2 COL-04)") {
   const efapp::ParsedSession absent = efapp::parseSession("[tab \"Dipole 1\"]\npreset = 0\ncharge = 1, -2, 0\n");
   CHECK(absent.collection == "Original");
   CHECK_FALSE(absent.hasCollection);
+  const efapp::ParsedSession spaced = efapp::parseSession("collection =   \n[tab \"Dipole 1\"]\ncharge = 1, -2, 0\n");
+  CHECK(spaced.collection == "Original");
+  CHECK_FALSE(spaced.hasCollection);  // trailing spaces trim to a blank value, same as `collection =`
 
   // The collection key survives the file round-trip.
   const auto tmp = std::filesystem::temp_directory_path() / "ef-test-session-col";
@@ -242,4 +245,23 @@ TEST_CASE("recents round-trip in the session pointer (261012-h26)") {
   CHECK(capped[0] == key);
   CHECK(capped[1] == "/tmp/ef/R0.ini");
   CHECK(capped.back() == "/tmp/ef/R8.ini");  // the oldest of the previous ten fell off
+
+  // v2.6 (phase 1 review): the cap is unconditional - the parser admits up to 100 recent lines, so an
+  // over-cap pointer (hand-edited / corrupt-but-parseable) comes back capped whether or not the key
+  // was inserted.
+  std::vector<std::string> overCap;
+  for (int i = 0; i < 12; ++i) overCap.push_back("/tmp/ef/N" + std::to_string(i) + ".ini");
+  const std::vector<std::string> cappedInsert = efapp::seedRecents(overCap, key);
+  REQUIRE(cappedInsert.size() == efapp::kMaxRecentCollections);
+  CHECK(cappedInsert[0] == key);  // inserted at the front, then capped with drop
+  CHECK(cappedInsert[1] == "/tmp/ef/N0.ini");
+  CHECK(cappedInsert.back() == "/tmp/ef/N8.ini");
+
+  std::vector<std::string> overCapPresent = overCap;
+  overCapPresent[5] = key;  // key already in the list: order intact, nothing re-inserted, the tail beyond the cap falls off
+  const std::vector<std::string> cappedPresent = efapp::seedRecents(overCapPresent, key);
+  REQUIRE(cappedPresent.size() == efapp::kMaxRecentCollections);
+  CHECK(cappedPresent[0] == "/tmp/ef/N0.ini");
+  CHECK(cappedPresent[5] == key);
+  CHECK(cappedPresent.back() == "/tmp/ef/N9.ini");
 }

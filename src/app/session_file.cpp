@@ -201,10 +201,9 @@ SavedSession loadSessionFull(const std::filesystem::path& file) {
 }
 
 std::vector<std::string> seedRecents(std::vector<std::string> recents, const std::string& collectionKey) {
-  if (collectionKey.empty()) return recents;
-  if (std::find(recents.begin(), recents.end(), collectionKey) != recents.end()) return recents;  // order intact
-  recents.insert(recents.begin(), collectionKey);
-  if (recents.size() > kMaxRecentCollections) recents.resize(kMaxRecentCollections);
+  if (!collectionKey.empty() && std::find(recents.begin(), recents.end(), collectionKey) == recents.end())
+    recents.insert(recents.begin(), collectionKey);  // the pointer's collection is the most recently opened
+  if (recents.size() > kMaxRecentCollections) recents.resize(kMaxRecentCollections);  // unconditional: the parser admits up to 100 recent lines, an over-cap pointer comes back capped
   return recents;
 }
 

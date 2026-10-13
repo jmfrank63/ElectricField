@@ -72,9 +72,10 @@ struct SavedSession {
 SavedSession loadSessionFull(const std::filesystem::path& file);
 
 // v2.6 REC-02: seed a session pointer's collection into the recents list - inserted at the front when
-// absent (it is by definition the most recently opened), capped at kMaxRecentCollections. `collectionKey` is the
-// UTF-8 path of the collection file (recents entries are full paths), or empty when there is nothing
-// to seed (no stored collection line / file missing).
+// absent (it is by definition the most recently opened); the result is capped at kMaxRecentCollections
+// unconditionally, so an over-cap pointer comes back capped even when nothing was inserted. `collectionKey`
+// is the UTF-8 path of the collection file (recents entries are full paths), or empty when there is
+// nothing to seed (no stored collection line / file missing).
 std::vector<std::string> seedRecents(std::vector<std::string> recents, const std::string& collectionKey);
 
 }  // namespace efapp

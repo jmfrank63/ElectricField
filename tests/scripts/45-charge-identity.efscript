@@ -1,0 +1,24 @@
+# 45-charge-identity: per-charge id/name/size through the API, the state oracle and the collection file (v2.6 phase 3)
+collection.open Original
+tab.new-empty
+app.wait-done
+charge.name 0 "My Charge"
+charge.size 0 40
+app.expect charges=1,0,0,40,1,My Charge
+charge.add -2 3 0
+app.expect ";-2,3,0,0,2,Charge 2"
+charge.remove 1
+charge.add -2 3 0
+app.expect ";-2,3,0,0,3,Charge 2"
+# add/remove are not undoable (v2.5 history model): the undo restores the pre-size-edit snapshot,
+# which carries name + size + id of the surviving charge through the ChargeSystem snapshot.
+editor.undo
+app.expect charges=1,0,0,0,1,My Charge
+app.expect-error "0 or 2-120" charge.size 0 1
+app.expect-error "0 or 2-120" charge.size 0 121
+config.save-as "Identity Test"
+tab.close
+config.open "Identity Test"
+app.wait-done
+app.expect charges=1,0,0,0,1,My Charge
+app.quit force

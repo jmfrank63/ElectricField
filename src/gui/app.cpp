@@ -1619,8 +1619,11 @@ std::string App::command(const std::string& line) {
          << " zoom=" << t.zoom << " centre=" << t.centre.X << "," << t.centre.Y << " grid=" << (t.grid.active ? 1 : 0) << ','
          << (t.grid.visible ? 1 : 0) << ',' << (t.grid.polar ? 1 : 0) << ',' << (t.grid.intersectionsOnly ? 1 : 0) << ',' << t.grid.origin.X << ',' << t.grid.origin.Y << ','
          << t.grid.spacing << ',' << t.grid.angleStepDeg << " charges=";
+      // v2.6 phase 3: charges=v,x,y,sizePx,id,displayName (substring-compatible: the old v,x,y prefix
+      // is untouched; the name shown is the stored one or the derived "Charge N").
       for (std::size_t i = 0; i < t.field.charges.size(); ++i)
-        os << (i ? ";" : "") << t.field.charges[i].charge << ',' << t.field.charges[i].position.X << ',' << t.field.charges[i].position.Y;
+        os << (i ? ";" : "") << t.field.charges[i].charge << ',' << t.field.charges[i].position.X << ',' << t.field.charges[i].position.Y << ','
+           << t.field.charges[i].sizePx << ',' << t.field.charges[i].id << ',' << efapp::editor::chargeDisplayName(t.field.charges[i], i);
       os << '\n';
     }
     return os.str();
@@ -1883,6 +1886,33 @@ std::string App::command(const std::string& line) {
     if (at < 0) return e;
     t->selected = at;
     if (!efapp::editor::removeSelected(*t)) return "error: cannot remove the last charge";
+    return "ok";
+  }
+  // v2.6 phase 3: identity edits - realtime like charge.move (dirty, never stale).
+  if (cmd == "charge.name") {
+    if (const std::string e = need(2); !e.empty()) return e;
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    long long i = 0;
+    if (!parseApiInt(tok[1], i) || i < 0 || static_cast<std::size_t>(i) >= t->field.charges.size()) return "error: invalid charge index";
+    std::string name;  // remaining tokens joined with single spaces (quoted names arrive as one token)
+    for (std::size_t k = 2; k < tok.size(); ++k) {
+      if (k > 2) name += ' ';
+      name += tok[k];
+    }
+    if (!efapp::editor::setChargeName(*t, static_cast<std::size_t>(i), name)) return "error: the tab is computing";
+    return "ok";
+  }
+  if (cmd == "charge.size") {
+    if (const std::string e = need(2); !e.empty()) return e;
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    long long i = 0;
+    if (!parseApiInt(tok[1], i) || i < 0 || static_cast<std::size_t>(i) >= t->field.charges.size()) return "error: invalid charge index";
+    double px = 0;
+    if (!parseApiDouble(tok[2], px)) return "error: charge.size needs <index> <px>";
+    if (px != 0.0 && (px < 2.0 || px > 120.0)) return "error: charge size must be 0 or 2-120";  // 0 = the Options default
+    if (!efapp::editor::setChargeSize(*t, static_cast<std::size_t>(i), static_cast<float>(px))) return "error: the tab is computing";
     return "ok";
   }
 

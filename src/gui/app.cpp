@@ -1275,7 +1275,7 @@ void App::noteRecentCollection(const std::filesystem::path& file) {
   const std::string key = file.u8string();
   recents_.erase(std::remove(recents_.begin(), recents_.end(), key), recents_.end());
   recents_.insert(recents_.begin(), key);
-  if (recents_.size() > kMaxRecentCollections) recents_.resize(kMaxRecentCollections);
+  if (recents_.size() > efapp::kMaxRecentCollections) recents_.resize(efapp::kMaxRecentCollections);
 }
 
 void App::enterCollection(const std::string& name, const bool restoreTabs) {

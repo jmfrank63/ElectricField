@@ -238,7 +238,7 @@ TEST_CASE("recents round-trip in the session pointer (261012-h26)") {
   std::vector<std::string> full;
   for (int i = 0; i < 10; ++i) full.push_back("/tmp/ef/R" + std::to_string(i) + ".ini");
   const std::vector<std::string> capped = efapp::seedRecents(full, key);
-  REQUIRE(capped.size() == efapp::kMaxRecents);
+  REQUIRE(capped.size() == efapp::kMaxRecentCollections);
   CHECK(capped[0] == key);
   CHECK(capped[1] == "/tmp/ef/R0.ini");
   CHECK(capped.back() == "/tmp/ef/R8.ini");  // the oldest of the previous ten fell off

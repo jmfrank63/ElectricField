@@ -204,7 +204,7 @@ std::vector<std::string> seedRecents(std::vector<std::string> recents, const std
   if (collectionKey.empty()) return recents;
   if (std::find(recents.begin(), recents.end(), collectionKey) != recents.end()) return recents;  // order intact
   recents.insert(recents.begin(), collectionKey);
-  if (recents.size() > kMaxRecents) recents.resize(kMaxRecents);
+  if (recents.size() > kMaxRecentCollections) recents.resize(kMaxRecentCollections);
   return recents;
 }
 

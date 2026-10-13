@@ -21,8 +21,9 @@
 
 namespace efapp {
 
-// v2.6 REC-02: the recents cap (the same 10 the GUI's recents menu enforces).
-inline constexpr std::size_t kMaxRecents = 10;
+// v2.6 REC-02: the one recents cap - seedRecents below AND the GUI's File > Recent Collections menu
+// (efgui::noteRecentCollection) both enforce it, so the seeding cap and the menu cap cannot drift apart.
+inline constexpr std::size_t kMaxRecentCollections = 10;
 
 struct SavedTab {
   std::string title;
@@ -71,7 +72,7 @@ struct SavedSession {
 SavedSession loadSessionFull(const std::filesystem::path& file);
 
 // v2.6 REC-02: seed a session pointer's collection into the recents list - inserted at the front when
-// absent (it is by definition the most recently opened), capped at kMaxRecents. `collectionKey` is the
+// absent (it is by definition the most recently opened), capped at kMaxRecentCollections. `collectionKey` is the
 // UTF-8 path of the collection file (recents entries are full paths), or empty when there is nothing
 // to seed (no stored collection line / file missing).
 std::vector<std::string> seedRecents(std::vector<std::string> recents, const std::string& collectionKey);

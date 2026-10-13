@@ -70,6 +70,11 @@ struct UiState {
   double addX = 0.0, addY = 0.0;
   char tabNameBuf[128] = "";
   unsigned tabNameBufSerial = 0;
+  // v2.6 phase 3: the selected charge's name buffer (the tabNameBuf pattern, keyed on the active tab
+  // AND the selection - it re-syncs whenever either changes).
+  char chargeNameBuf[128] = "";
+  unsigned chargeNameBufSerial = 0;
+  int chargeNameBufSelected = -1;
   int exportRequest = 0;     // File > Export / dialog kinds (consumed by App::frame): 1 = PNG, 2 = SVG, 3 = PDF
                              // (the active tab) and 10 = Open Collection..., 11 = Save Collection As...,
                              // 12 = New Collection..., 13 = Export Collection (v2.5 OPEN-01/EXP-03)

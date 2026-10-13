@@ -132,15 +132,17 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   const bool canEdit = t.session == nullptr;
   const ImGuiIO& io = ImGui::GetIO();
   const ef::Vec2 mouseWorld = efapp::editor::snapPoint(t.grid, efapp::worldFromCanvas(view, p.x, p.y, io.MousePos.x, io.MousePos.y));
+  // v2.6 phase 3: one hit test per frame, reused by the double-click guard, the click-select and the
+  // hover tooltip. Radius px and ppu in the SAME device space (defaultPx * env.k).
+  const int hoverIdx = (canEdit && hovered) ? efapp::editor::hitCharge(t.field, mouseWorld, view.pixelsPerUnit, dotPx * env.k) : -1;
   if (canEdit && hovered) {
     if (ImGui::IsMouseDoubleClicked(0)) {  // EDIT-13: double-click empty canvas adds a charge in one go
-      // v2.6 phase 3: per-charge hit bounds - radius px and ppu in the SAME device space.
-      if (efapp::editor::hitCharge(t.field, mouseWorld, view.pixelsPerUnit, dotPx * env.k) < 0) {
-        efapp::editor::addCharge(t, mouseWorld, 1);
+      if (hoverIdx < 0) {
+        efapp::editor::addCharge(t, mouseWorld, 1, static_cast<float>(dotPx));
         armAutoRecalc(t);
       }
     } else if (ImGui::IsMouseClicked(0)) {  // single click selects the charge for editing
-      t.selected = efapp::editor::hitCharge(t.field, mouseWorld, view.pixelsPerUnit, dotPx * env.k);
+      t.selected = hoverIdx;
     }
   }
   // A drag that started on the canvas keeps moving the charge even past the edge until the button is released.
@@ -176,13 +178,20 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   if (canEdit && t.stale && (hovered || ImGui::IsItemFocused()) && ImGui::IsKeyPressed(ImGuiKey_Escape)) {
     efapp::editor::revertToComputed(t);
   }
+  // v2.6 phase 3: hovering a charge shows its (effective) name - not while dragging, and never while
+  // the tab is computing. GUI-only surface (headless scripts cannot hover).
+  if (hoverIdx >= 0 && !ImGui::IsMouseDragging(0) && !efapp::editor::dragActive(t) && t.state != efapp::TabState::Computing)
+    ImGui::SetTooltip("%s", efapp::editor::chargeDisplayName(t.field.charges[static_cast<std::size_t>(hoverIdx)], static_cast<std::size_t>(hoverIdx)).c_str());
   // v2.2 zoom/pan: wheel + right-drag + (unselected) arrow keys. View-only: never stale, works while computing.
   viewControls(t, view, mouseWorld, hovered, zoomCeiling);
 
-  // Selection ring (v2): over the drawn scene, only when the charge exists.
+  // Selection ring (v2): over the drawn scene, only when the charge exists. v2.6 phase 3: the ring
+  // follows the charge's effective radius (its own sizePx, else the style default).
   if (t.state != efapp::TabState::Computing && t.selected >= 0 && static_cast<std::size_t>(t.selected) < t.scene.charges.size()) {
-    const ef::Vec2 c = efapp::canvasFromWorld(view, p.x, p.y, t.scene.charges[static_cast<std::size_t>(t.selected)].position);
-    dl->AddCircle(ImVec2(static_cast<float>(c.X), static_cast<float>(c.Y)), style.chargeRadiusPx + 3.f * env.k, rgba(0x42, 0x96, 0xFA), 0, 1.5f * env.k);
+    const ef::SceneCharge& sc = t.scene.charges[static_cast<std::size_t>(t.selected)];
+    const ef::Vec2 c = efapp::canvasFromWorld(view, p.x, p.y, sc.position);
+    const float ringRadius = (sc.sizePx > 0.f ? sc.sizePx : style.chargeRadiusPx) + 3.f * env.k;
+    dl->AddCircle(ImVec2(static_cast<float>(c.X), static_cast<float>(c.Y)), ringRadius, rgba(0x42, 0x96, 0xFA), 0, 1.5f * env.k);
   }
 
   if (t.state == efapp::TabState::Computing) {
@@ -586,7 +595,7 @@ void optionsModal(UiState& ui, const UiEnv& env) {
       ImGui::InputDouble("Charge size", &e.chargeSize, 1.0, 10.0, "%.0f");  // v2.5 SIZE-01: dot to very large; +/- steppers like the MFC spin control
       ImGui::InputInt("Field line thickness", &e.electricThickness);
       ImGui::InputInt("Equipotential thickness", &e.potentialThickness);
-      ImGui::TextDisabled("Charge size 2 - 120, thicknesses 1 - 64");
+      ImGui::TextDisabled("Charge size = default size for new charges (2 - 120); thicknesses 1 - 64");
       ImGui::EndTabItem();
     }
     ImGui::EndTabBar();
@@ -724,7 +733,9 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   ImGui::InputDouble("X##add", &ui.addX, 0.0, 0.0, "%.3f");
   ImGui::InputDouble("Y##add", &ui.addY, 0.0, 0.0, "%.3f");
   if (ImGui::Button("Add", ImVec2(-FLT_MIN, 0.f))) {
-    efapp::editor::addCharge(t, ef::Vec2{ui.addX, ui.addY}, ui.addValue);
+    // v2.6 phase 3: new charges take the Options charge size as their default (0 = inherit).
+    const float addDefaultPx = env.options ? env.options->draw.chargeRadiusPx : ef::DrawStyle{}.chargeRadiusPx;
+    efapp::editor::addCharge(t, ef::Vec2{ui.addX, ui.addY}, ui.addValue, addDefaultPx);
     armAutoRecalc(t);
   }
   ImGui::Separator();
@@ -803,6 +814,32 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     ImGui::SameLine(0.f, 8.f * env.k);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Y");
+
+    // v2.6 phase 3: the charge's identity - an editable name (empty = the derived "Charge N", shown as
+    // disabled context so the user sees what the tooltip will say) and its own drawn size. Both edits
+    // are dirty-only in the core: the drawn lines never depend on them, so no recalculation hint.
+    if (ui.chargeNameBufSerial != t.serial || ui.chargeNameBufSelected != t.selected) {
+      std::snprintf(ui.chargeNameBuf, sizeof(ui.chargeNameBuf), "%s", c.name.c_str());
+      ui.chargeNameBufSerial = t.serial;
+      ui.chargeNameBufSelected = t.selected;
+    }
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 50.f * env.k);
+    if (ImGui::InputText("##chargename", ui.chargeNameBuf, sizeof(ui.chargeNameBuf)))
+      efapp::editor::setChargeName(t, at, std::string(ui.chargeNameBuf));  // strips ',', empty allowed
+    ImGui::SameLine(0.f, 6.f * env.k);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Name");
+    if (c.name.empty()) ImGui::TextDisabled("%s", efapp::editor::chargeDisplayName(c, at).c_str());
+
+    double sizePx = c.sizePx;
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 110.f * env.k);
+    if (ImGui::InputDouble("##chargesize", &sizePx, 0.0, 0.0, "%.0f")) {
+      sizePx = std::max(0.0, std::min(120.0, sizePx));  // typed input clamps into the legal range
+      efapp::editor::setChargeSize(t, at, static_cast<float>(sizePx));  // a transient illegal value is simply not applied
+    }
+    ImGui::SameLine(0.f, 6.f * env.k);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextDisabled("Size (0 = default)");
 
     ImGui::BeginDisabled(t.field.charges.size() <= 1);  // EDIT-04: at least one charge remains
     if (ImGui::Button("Remove charge")) {

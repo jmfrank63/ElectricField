@@ -21,6 +21,9 @@
 
 namespace efapp {
 
+// v2.6 REC-02: the recents cap (the same 10 the GUI's recents menu enforces).
+inline constexpr std::size_t kMaxRecents = 10;
+
 struct SavedTab {
   std::string title;
   std::size_t preset = kNoPreset;  // kNoPreset = "none"
@@ -43,6 +46,7 @@ std::string serializeSession(const std::vector<SavedTab>& tabs, const std::strin
 
 struct ParsedSession {
   std::string collection = "Original";  // v2.2: the collection the tabs belong to
+  bool hasCollection = false;           // v2.6 REC-02: true only when the file carried a non-empty `collection =` value (the struct's "Original" default is NOT a stored line)
   std::vector<SavedTab> value;
   int skippedTabs = 0;
   int skippedCharges = 0;
@@ -60,9 +64,16 @@ std::vector<SavedTab> loadSession(const std::filesystem::path& file);
 // Like loadSession, but also returns the collection tag (v2.2 COL-04) and the recents (261012-h26).
 struct SavedSession {
   std::string collection = "Original";
+  bool hasCollection = false;  // v2.6 REC-02: true only when the file carried a non-empty `collection =` value (the struct's "Original" default is NOT a stored line)
   std::vector<SavedTab> tabs;
   std::vector<std::string> recents;
 };
 SavedSession loadSessionFull(const std::filesystem::path& file);
+
+// v2.6 REC-02: seed a session pointer's collection into the recents list - inserted at the front when
+// absent (it is by definition the most recently opened), capped at kMaxRecents. `collectionKey` is the
+// UTF-8 path of the collection file (recents entries are full paths), or empty when there is nothing
+// to seed (no stored collection line / file missing).
+std::vector<std::string> seedRecents(std::vector<std::string> recents, const std::string& collectionKey);
 
 }  // namespace efapp

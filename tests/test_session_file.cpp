@@ -111,6 +111,18 @@ TEST_CASE("the session records the current collection (v2.2 COL-04)") {
   const efapp::ParsedSession legacy = efapp::parseSession(efapp::serializeSession(tabs));
   CHECK(legacy.collection == "Original");
 
+  // v2.6 REC-02: hasCollection is true only for a genuinely stored, non-empty collection line - a blank
+  // or absent line parses as the "Original" default but must stay distinguishable (a legacy pointer
+  // carries exactly `collection = <name>` and nothing else; a fresh sandbox pointer is absent entirely).
+  CHECK(r.hasCollection);
+  CHECK(legacy.hasCollection);  // serializeSession always writes the line, so this one is genuinely stored
+  const efapp::ParsedSession blank = efapp::parseSession("collection =\n[tab \"Dipole 1\"]\ncharge = 1, -2, 0\n");
+  CHECK(blank.collection == "Original");
+  CHECK_FALSE(blank.hasCollection);
+  const efapp::ParsedSession absent = efapp::parseSession("[tab \"Dipole 1\"]\npreset = 0\ncharge = 1, -2, 0\n");
+  CHECK(absent.collection == "Original");
+  CHECK_FALSE(absent.hasCollection);
+
   // The collection key survives the file round-trip.
   const auto tmp = std::filesystem::temp_directory_path() / "ef-test-session-col";
   std::filesystem::create_directories(tmp);
@@ -119,6 +131,13 @@ TEST_CASE("the session records the current collection (v2.2 COL-04)") {
   REQUIRE(efapp::saveSession(file, tabs, "My Collection", err));
   const efapp::ParsedSession loaded = efapp::parseSession(efapp::serializeSession(efapp::loadSessionFull(file).tabs, efapp::loadSessionFull(file).collection));
   CHECK(loaded.collection == "My Collection");
+  // ... and the flag survives too (stored line / blank line, the blank being what the quit dump of
+  // collection-less preset tabs writes - REC-02 must not seed from it).
+  CHECK(efapp::loadSessionFull(file).hasCollection);
+  REQUIRE(efapp::saveSession(file, tabs, std::string(), err));
+  const efapp::SavedSession blankFull = efapp::loadSessionFull(file);
+  CHECK(blankFull.collection == "Original");
+  CHECK_FALSE(blankFull.hasCollection);
   std::error_code ec;
   std::filesystem::remove(file, ec);
   std::filesystem::remove(tmp, ec);
@@ -199,4 +218,28 @@ TEST_CASE("recents round-trip in the session pointer (261012-h26)") {
 
   // Legacy text without recents parses to an empty list.
   CHECK(efapp::parseSession(efapp::serializeSession({sample()}, "X")).recents.empty());
+
+  // v2.6 REC-02: seeding the pointer's collection into the recents list. Entries are full paths, so
+  // membership is compared against the key itself.
+  const std::string key = "/tmp/ef/Collections/Original.ini";
+  CHECK(efapp::seedRecents({}, key) == std::vector<std::string>{key});  // empty list -> the key alone
+
+  const std::vector<std::string> withKey = {"/tmp/ef/Second.ini", key};
+  CHECK(efapp::seedRecents(withKey, key) == withKey);  // already present -> unchanged, order intact
+
+  CHECK(efapp::seedRecents(withKey, std::string()) == withKey);  // empty key -> nothing to seed, list unchanged
+
+  const std::vector<std::string> seeded = efapp::seedRecents({"/tmp/ef/Second.ini", "/tmp/ef/Third.ini"}, key);
+  REQUIRE(seeded.size() == 3);
+  CHECK(seeded[0] == key);  // the pointer's collection is by definition the most recently opened
+  CHECK(seeded[1] == "/tmp/ef/Second.ini");
+  CHECK(seeded[2] == "/tmp/ef/Third.ini");
+
+  std::vector<std::string> full;
+  for (int i = 0; i < 10; ++i) full.push_back("/tmp/ef/R" + std::to_string(i) + ".ini");
+  const std::vector<std::string> capped = efapp::seedRecents(full, key);
+  REQUIRE(capped.size() == efapp::kMaxRecents);
+  CHECK(capped[0] == key);
+  CHECK(capped[1] == "/tmp/ef/R0.ini");
+  CHECK(capped.back() == "/tmp/ef/R8.ini");  // the oldest of the previous ten fell off
 }

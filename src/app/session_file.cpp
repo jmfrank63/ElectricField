@@ -102,7 +102,10 @@ ParsedSession parseSession(const std::string& text) {
     const std::string value = ini::trim(t.substr(eq + 1));
 
     if (key == "collection") {
-      if (!value.empty()) r.collection = value;  // v2.2: which collection the tabs belong to
+      if (!value.empty()) {  // v2.2: which collection the tabs belong to
+        r.collection = value;
+        r.hasCollection = true;  // v2.6 REC-02: a genuinely stored line, not the parser's "Original" default
+      }
     } else if (key == "recent") {  // 261012-h26: a recently opened collection file (UTF-8 path, newest first)
       if (!value.empty() && r.recents.size() < 100) r.recents.push_back(value);
     } else if (key == "autocalc") {
@@ -191,9 +194,18 @@ SavedSession loadSessionFull(const std::filesystem::path& file) {
   if (!readFile(file, text)) return s;
   const ParsedSession r = parseSession(text);
   s.collection = r.collection;
+  s.hasCollection = r.hasCollection;
   s.tabs = r.value;
   s.recents = r.recents;
   return s;
+}
+
+std::vector<std::string> seedRecents(std::vector<std::string> recents, const std::string& collectionKey) {
+  if (collectionKey.empty()) return recents;
+  if (std::find(recents.begin(), recents.end(), collectionKey) != recents.end()) return recents;  // order intact
+  recents.insert(recents.begin(), collectionKey);
+  if (recents.size() > kMaxRecents) recents.resize(kMaxRecents);
+  return recents;
 }
 
 }  // namespace efapp

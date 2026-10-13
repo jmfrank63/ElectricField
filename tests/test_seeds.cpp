@@ -167,13 +167,13 @@ TEST_CASE("zoom-adaptive radii: legacy at/below kRefPpu, clamped shrink above (v
   CHECK(p.hitRadius() == doctest::Approx(25.0 / 1.5 / 100.0));
   CHECK(p.seedRadius() == doctest::Approx(p.chargeRadiusWorld()));
 
-  p.viewScale = 150.0;  // just above the reference: ~2 px seed circle (2/150), endpoints at chargeRadiusPx / 1.5 px
+  p.viewScale = 150.0;  // just above the reference: ~2 px seed circle (2/150); hit is capped at the seed
   CHECK(p.seedRadius() == doctest::Approx(2.0 / 150.0));
-  CHECK(p.hitRadius() == doctest::Approx((25.0 / 1.5) / 150.0));
+  CHECK(p.hitRadius() == doctest::Approx(2.0 / 150.0));  // never above the seed: lines must escape their own charge
 
-  p.viewScale = 800.0;  // 2/800 is below the kMinSeedWorld floor: the seed floored, the hit still scales
+  p.viewScale = 800.0;  // 2/800 is below the kMinSeedWorld floor: the seed floored, the hit rides on it
   CHECK(p.seedRadius() == doctest::Approx(ComputeParams::kMinSeedWorld));
-  CHECK(p.hitRadius() == doctest::Approx((25.0 / 1.5) / 800.0));
+  CHECK(p.hitRadius() == doctest::Approx(ComputeParams::kMinSeedWorld));
 
   p.viewScale = 2000.0;  // both target radii are below the kMinSeedWorld floor: floored
   CHECK(p.seedRadius() == doctest::Approx(ComputeParams::kMinSeedWorld));
@@ -182,6 +182,14 @@ TEST_CASE("zoom-adaptive radii: legacy at/below kRefPpu, clamped shrink above (v
   p.viewScale = 2500.0;  // the new ceiling: the floored seed circle is exactly the drawn dot on screen
   CHECK(p.seedRadius() == doctest::Approx(ComputeParams::kMinSeedWorld));
   CHECK(p.seedRadius() * 2500.0 == doctest::Approx(25.0));
+  CHECK(p.hitRadius() == doctest::Approx(p.seedRadius()));
+
+  // Escape invariant over the whole adapted range: seed >= hit, or every line would end on its own
+  // charge at the first tracer step (found by the renderSurface proof, fixed as a deviation).
+  for (const double v : {101.0, 120.0, 150.0, 200.0, 400.0, 800.0, 1500.0, 2500.0}) {
+    p.viewScale = v;
+    CHECK(p.seedRadius() >= p.hitRadius());
+  }
 
   // planSeeds places the seeds on the adapted circle (planSeeds reads p.seedRadius()).
   const ChargeSystem single = [] {

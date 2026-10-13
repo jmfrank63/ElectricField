@@ -163,6 +163,24 @@ TEST_CASE("cancel flag is polled: a stopped tracer returns after at most one str
   CHECK(line.points.size() <= 1);  // only the seed point
 }
 
+// v2.6 phase 2 regression for the adapted radii: a line born on the adapted seed circle (0.01 world,
+// INSIDE the naive adapted hit radius) must escape its own charge and fly to the partner. With an
+// uncorrected hitRadius > seedRadius every adapted trace died at its first step (n = 1, seed only).
+TEST_CASE("adapted view scale: the field line escapes its own charge and ends on the partner (v2.6 phase 2)") {
+  const ChargeSystem dipole = preset("dipole");
+  ComputeParams p;
+  p.viewScale = 800.0;
+  REQUIRE(p.seedRadius() >= p.hitRadius());
+  const auto seeds = planSeeds(dipole, p);
+  REQUIRE(seeds[0].first);
+  rk::Euler<Vec2> solver;
+  const FieldLine line = traceFieldLine(solver, dipole, p, seeds[0]);
+  REQUIRE(line.points.size() > 10);
+  const Vec2 last = line.points.back();
+  CHECK((last - dipole.charges[1].position).Length() < 0.1);  // ends within the adapted hit zone of the - charge
+  for (const auto& pt : line.points) CHECK(std::isfinite(pt.X + pt.Y));
+}
+
 // Numerics policy (CORE-07): -ffp-contract=off and no fast-math. With contraction on, `x * y - 1.0` becomes one fused
 // multiply-add on aarch64 (always) and on x86-64 with FMA (Zig compiles for the native CPU) and yields -2^-60 instead of 0.
 #ifdef __FAST_MATH__

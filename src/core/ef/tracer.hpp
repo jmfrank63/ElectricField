@@ -160,6 +160,10 @@ PotentialLine traceEquipotential(Solver& solver, const ChargeSystem& field, cons
   detail::PerpendicularDirection functorV{&field};
   Vec2 point = startPoint;
   const double px = static_cast<double>(p.pixelsPerUnit);
+  // v2.6 phase 2: record ring anchors every ~8 device px at the TARGET view (legacy keeps the 100 px
+  // scale). The near-charge adapted rings are small on screen; at the legacy recording density they
+  // store 4-5 anchors and the bezier fit renders them as wild swoops instead of circles.
+  const double recordPx = p.adapts() ? p.viewScale : px;
 
   double t = 0;
   std::size_t numSteps = solver.IsAdaptive() ? 800000 : 1500000;
@@ -167,7 +171,7 @@ PotentialLine traceEquipotential(Solver& solver, const ChargeSystem& field, cons
   double step = solver.IsAdaptive() ? 0.001 : 0.0001;
   double next_step = step;
 
-  line.addPoint(startPoint, px);
+  line.addPoint(startPoint, recordPx);
   line.weightCenter = startPoint;
 
   for (std::size_t i = 0; i < numSteps; ++i) {
@@ -177,7 +181,7 @@ PotentialLine traceEquipotential(Solver& solver, const ChargeSystem& field, cons
     }
     point = solver.SolveStep(functorV, point, t, step, next_step, 1E-3, 0.01);
 
-    line.addPoint(point, px);
+    line.addPoint(point, recordPx);
     line.weightCenter += point * step;  // 'step' plays the role of the portion of the curve 'weight'
 
     t += step;

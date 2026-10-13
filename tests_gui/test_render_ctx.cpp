@@ -5,6 +5,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <string>
@@ -23,6 +24,18 @@ namespace {
 ef::FieldScene dipoleScene() {
   const ef::ChargeSystem field = ef::makeSystem(ef::presets().at(0));
   ef::ComputeSession s(field, lightParams());
+  REQUIRE_FALSE(s.wait().failed);
+  ef::FieldResult r;
+  REQUIRE(s.takeResult(r));
+  return ef::buildScene(field, r);
+}
+
+// v2.6 phase 2: the same dipole computed at an explicit view scale (0 = legacy).
+ef::FieldScene dipoleSceneAt(double viewScale) {
+  const ef::ChargeSystem field = ef::makeSystem(ef::presets().at(0));
+  ef::ComputeParams p = lightParams();
+  p.viewScale = viewScale;
+  ef::ComputeSession s(field, p);
   REQUIRE_FALSE(s.wait().failed);
   ef::FieldResult r;
   REQUIRE(s.takeResult(r));
@@ -98,6 +111,23 @@ bool samePixels(const SDL_Surface* a, const SDL_Surface* b) {
   return true;
 }
 
+// Count of non-background samples on a circle of `radius` device px around (cx, cy): majority sampling
+// over the whole ring, deliberately tolerant (anti-aliased ink counts; no byte-exact comparison).
+int ringInk(const SDL_Surface* px, float cx, float cy, float radius) {
+  const int samples = 360;
+  int ink = 0;
+  for (int i = 0; i < samples; ++i) {
+    const double a = static_cast<double>(i) * 3.14159265358979323846 / 180.0;
+    const int x = static_cast<int>(cx + radius * std::cos(a));
+    const int y = static_cast<int>(cy + radius * std::sin(a));
+    if (x < 0 || y < 0 || x >= px->w || y >= px->h) continue;
+    const auto* p = static_cast<const unsigned char*>(px->pixels) + static_cast<std::size_t>(y) * static_cast<std::size_t>(px->pitch) +
+                    static_cast<std::size_t>(x) * 4;
+    if (p[0] < 240 || p[1] < 240 || p[2] < 240) ++ink;
+  }
+  return ink;
+}
+
 }  // namespace
 
 TEST_CASE("renderSurface with no ImGui context at all (ef-cli path) leaves no context behind") {
@@ -161,4 +191,35 @@ TEST_CASE("renderPng inside a GUI context writes a PNG and restores the context"
   std::filesystem::remove(out);
   CHECK(ImGui::GetCurrentContext() == gui.ctx);
   gui.frame();
+}
+
+// v2.6 phase 2: the zoom-adapted computation closes the white disk around a charge when zoomed in.
+// Dipole computed with viewScale = 800 and rendered at ppu 800 centred on the + charge: a sampling ring
+// just outside the 25 px drawn dot must show line pixels. The legacy computation starts its lines at
+// the fixed 0.25 world seed circle (200 px at this scale), so the same ring is pure background there.
+TEST_CASE("zoom-adapted computation: field lines hug the charge at ppu 800 (renderSurface sampling)") {
+  const ef::FieldScene legacyScene = dipoleSceneAt(0.0);
+  const ef::FieldScene adaptedScene = dipoleSceneAt(800.0);
+
+  ef::View view;
+  view.widthPx = 400;
+  view.heightPx = 300;
+  view.pixelsPerUnit = 800.0;
+  view.centre = ef::Vec2{-2.0, 0.0};  // the + charge sits at the canvas centre
+
+  std::string err;
+  SDL_Surface* legacy = efrender::renderSurface(legacyScene, ef::DrawStyle{}, view, err);
+  REQUIRE(legacy != nullptr);
+  SDL_Surface* adapted = efrender::renderSurface(adaptedScene, ef::DrawStyle{}, view, err);
+  REQUIRE(adapted != nullptr);
+
+  const int legacyInk = ringInk(legacy, 200.f, 150.f, 30.f);
+  const int adaptedInk = ringInk(adapted, 200.f, 150.f, 30.f);
+  MESSAGE("ring ink of 360 samples at 30 px: legacy=", legacyInk, " adapted=", adaptedInk);
+  CHECK(legacyInk <= 4);          // essentially the whole ring is background-white before adaptation
+  CHECK(adaptedInk > legacyInk);  // the adapted computation strictly adds ink on the ring
+  CHECK(adaptedInk >= 4);         // the + charge's field lines must cross the ring
+
+  SDL_DestroySurface(legacy);
+  SDL_DestroySurface(adapted);
 }

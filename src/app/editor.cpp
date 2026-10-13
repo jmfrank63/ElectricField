@@ -4,6 +4,8 @@
 #include <cmath>
 #include <utility>
 
+#include "app/ini_text.hpp"
+
 namespace efapp {
 namespace editor {
 namespace {
@@ -195,6 +197,10 @@ bool setChargeName(Tab& t, std::size_t index, const std::string& name) {
   if (!editable(t) || index >= t.field.charges.size()) return false;
   std::string clean = name;
   clean.erase(std::remove(clean.begin(), clean.end(), ','), clean.end());  // ',' is the field separator on disk
+  // WR-03: splitCsv trims every field on read, so a trimmable-only difference would mutate on
+  // save->load (" Pad" -> "Pad", whitespace-only -> the derived display). Trim at the entry point
+  // instead: the model can never hold it, and the round-trip is the identity.
+  clean = ini::trim(clean);
   if (clean == t.field.charges[index].name) return true;                   // nothing to do, no history entry
   recordHistory(t);
   t.field.charges[index].name = std::move(clean);

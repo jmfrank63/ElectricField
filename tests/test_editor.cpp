@@ -6,6 +6,8 @@
 #include <chrono>
 #include <thread>
 
+#include "app/configs.hpp"  // WR-03: the save->load identity pin round-trips through serialize/parse
+
 #include "doctest/doctest.h"
 
 namespace {
@@ -709,6 +711,24 @@ TEST_CASE("setChargeName: dirty only (never stale), strips commas, identical no-
   CHECK_FALSE(efapp::editor::setChargeName(t, 7, "X"));  // bad index
   efapp::editor::setChargeName(t, 0, "");                 // empty is allowed: back to the derived name
   CHECK(t.field.charges[0].name.empty());
+}
+
+// WR-03: names are trimmed at the entry point so save->load is the identity (splitCsv trims every
+// field on read); a whitespace-only name collapses to "" (the derived display).
+TEST_CASE("setChargeName trims leading/trailing whitespace (WR-03)") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);
+  CHECK(efapp::editor::setChargeName(t, 0, "  Pad "));
+  CHECK(t.field.charges[0].name == "Pad");  // the model can never hold trimmable-only differences
+  CHECK(efapp::editor::setChargeName(t, 1, "\t\n"));
+  CHECK(t.field.charges[1].name.empty());   // whitespace-only -> derived "Charge N"
+  // The name survives the writer's emit + the reader's field trim byte-identically.
+  std::vector<efapp::UserConfig> configs;
+  configs.push_back({"R", {ef::toPresetCharge(t.field.charges[0])}});
+  const efapp::ParsedConfigs r = efapp::parseConfigs(efapp::serializeConfigs(configs));
+  REQUIRE(r.value.size() == 1);
+  REQUIRE(r.value[0].charges.size() == 1);
+  CHECK(r.value[0].charges[0].name == "Pad");
 }
 
 TEST_CASE("setChargeSize: validation, scene sync, dirty only, history (v2.6 phase 3)") {

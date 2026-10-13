@@ -61,9 +61,10 @@ bool flipSign(Tab& t);
 // (never stale, never pendingRecalcAt - the drawn lines are not a function of a name or size) and
 // update the scene in place where it mirrors the field (setChargeSize syncs sizePx; the name has no
 // scene copy - the tooltip reads field.charges). Undo/redo ride the existing ChargeSystem snapshots.
-// setChargeName strips ',' (the persistence field separator); an identical name is a no-op that
-// returns true without a history entry. setChargeSize validates 0 or 2..120 px (else false) and is a
-// no-op for an identical size.
+// setChargeName strips ',' (the persistence field separator) and trims leading/trailing whitespace
+// (WR-03: splitCsv trims fields on read, so the model must never hold a trimmable-only difference);
+// an identical name is a no-op that returns true without a history entry. setChargeSize validates
+// 0 or 2..120 px (else false) and is a no-op for an identical size.
 bool setChargeName(Tab& t, std::size_t index, const std::string& name);
 bool setChargeSize(Tab& t, std::size_t index, float sizePx);
 

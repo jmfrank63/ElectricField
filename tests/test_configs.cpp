@@ -195,6 +195,19 @@ TEST_CASE("file round-trip through a real path (CFG-01)") {
   std::filesystem::remove(tmp, ec);
 }
 
+// WR-02: the id bound is the shared ef::kMaxChargeId ceiling the assignment path saturates at, so
+// every id the writer can emit parses back - the save->load round-trip is closed.
+TEST_CASE("the charge id bound matches the assignment ceiling (WR-02)") {
+  const std::string text = "[configuration \"Ids\"]\n"
+                           "charge = 1, 0, 0, 0, 1000000000, Top\n"    // == ef::kMaxChargeId: parses
+                           "charge = 1, 1, 0, 0, 1000000001, Over\n";  // above the ceiling: skipped
+  const efapp::ParsedConfigs r = efapp::parseConfigs(text);
+  CHECK(r.skippedCharges == 1);
+  REQUIRE(r.value.size() == 1);
+  REQUIRE(r.value[0].charges.size() == 1);
+  CHECK(r.value[0].charges[0].id == ef::kMaxChargeId);
+}
+
 TEST_CASE("upsertUserConfig: trim, reserved names, in-place overwrite, append (CFG-03, D-04)") {
   std::vector<efapp::UserConfig> configs = {{"My Dipole", {{1, 0, 0}}}, {"Other", {{-1, 1, 1}}}};
   const std::vector<std::string> reserved = {"Dipole", "Two Equal Charges", "Quadrupole"};

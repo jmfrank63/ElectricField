@@ -51,7 +51,12 @@ std::uint64_t nextChargeId(const ef::ChargeSystem& field) {
 
 void assignChargeIds(ef::ChargeSystem& field) {
   for (auto& c : field.charges)
-    if (c.id == 0) c.id = nextChargeId(field);  // each assignment raises the max: monotonic within the call
+    if (c.id == 0) {
+      const std::uint64_t next = nextChargeId(field);  // each assignment raises the max: monotonic within the call
+      // WR-02: never mint an id the parsers would reject on the next load - saturate to unassigned.
+      if (next > ef::kMaxChargeId) return;
+      c.id = next;
+    }
 }
 
 int hitCharge(const ef::ChargeSystem& field, ef::Vec2 world, const double pixelsPerUnit, const double defaultRadiusPx) {
@@ -123,8 +128,11 @@ bool addCharge(Tab& t, ef::Vec2 world, int value, float defaultSizePx) {
   const ef::Vec2 at = clamped(world);
   // Identity is model logic: max over the system, and never below the tab's high-water mark, so a
   // removed charge's id is not reused (the watermark deliberately survives undo/redo snapshots).
-  const std::uint64_t id = std::max(nextChargeId(t.field), t.chargeIdWater + 1);
-  t.chargeIdWater = id;
+  // WR-02: past the parsers' shared ceiling the id saturates to 0 (unassigned - derived display,
+  // still addressable by index) instead of an id a save->load round-trip would drop.
+  const std::uint64_t next = std::max(nextChargeId(t.field), t.chargeIdWater + 1);
+  t.chargeIdWater = next;  // the watermark advances regardless: the saturated range stays retired
+  const std::uint64_t id = next <= ef::kMaxChargeId ? next : 0;
   const float sizePx = defaultSizePx == 0.f || (defaultSizePx >= 2.f && defaultSizePx <= 120.f) ? defaultSizePx : 0.f;
   t.field.charges.push_back(ef::Charge{value, at, id, std::string(), sizePx});
   t.scene.charges.push_back(ef::SceneCharge{at, value, sizePx});

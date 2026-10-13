@@ -11,6 +11,12 @@ namespace ef {
 
 inline constexpr std::size_t kPresetCount = 9;
 
+// WR-02: the single charge-id ceiling, shared by BOTH parsers (parseIntBounded upper bound) and the
+// assignment path (nextChargeId consumers). Ids above it would be written faithfully but rejected
+// on the next load - the whole charge silently dropped - so the assignment path saturates to
+// id 0 (unassigned: derived display, still addressable by index) instead of minting one.
+inline constexpr std::uint64_t kMaxChargeId = 1000000000;
+
 // The one transport type for collections/sessions/API. The trailing identity/draw fields mirror the
 // persisted line order (value, x, y, sizePx, id, name - pinned) so a positional 6-field initializer
 // reads exactly like the file line; defaults keep the 9-entry preset table and every legacy literal

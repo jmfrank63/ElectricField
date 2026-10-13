@@ -614,6 +614,33 @@ TEST_CASE("ids: no reuse across undo/redo - snapshots restore ids, the high-wate
   CHECK(t.field.charges[3].id == 6);  // 3, 4 and 5 are all retired: max over system (4) and water (5) + 1
 }
 
+// WR-02: the assignment path saturates at the parsers' shared ceiling - id 0 (unassigned, derived
+// display, still addressable by index) instead of an id a save->load round-trip would drop.
+TEST_CASE("ids: saturate at the parser ceiling instead of minting an unparseable id (WR-02)") {
+  ThrowFactory f;
+  const unsigned u = f.ws.openUser("Ceiling", {ef::PresetCharge{1, 0, 0, 0.f, ef::kMaxChargeId, "Top"}});
+  efapp::Tab& t = *f.ws.find(u);
+  REQUIRE(t.field.charges.size() == 1);
+  CHECK(t.field.charges[0].id == ef::kMaxChargeId);
+  CHECK(t.chargeIdWater == ef::kMaxChargeId);
+
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{1, 1}, 1));
+  CHECK(t.field.charges[1].id == 0);                   // 0 = unassigned, never ceiling + 1
+  CHECK(t.chargeIdWater == ef::kMaxChargeId + 1);      // the watermark advances: the range stays retired
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{2, 2}, 1));
+  CHECK(t.field.charges[2].id == 0);                   // sticky: still saturated
+  CHECK(efapp::editor::nextChargeId(t.field) == ef::kMaxChargeId + 1);  // the pure helper is unchanged
+
+  // assignChargeIds leaves id-0 charges unassigned once the ceiling is reached.
+  ef::ChargeSystem g;
+  g.charges.push_back(ef::Charge{1, ef::Vec2{0, 0}});
+  g.charges[0].id = ef::kMaxChargeId;
+  g.charges.push_back(ef::Charge{-1, ef::Vec2{1, 0}});  // id 0
+  efapp::editor::assignChargeIds(g);
+  CHECK(g.charges[0].id == ef::kMaxChargeId);
+  CHECK(g.charges[1].id == 0);
+}
+
 TEST_CASE("ids: openUser / openRestored preserve persisted ids and only fill id == 0") {
   ThrowFactory f;
   const unsigned u = f.ws.openUser("Kept", {ef::PresetCharge{1, 0, 0, 0.f, 5, "Five"}, ef::PresetCharge{-1, 1, 1}});

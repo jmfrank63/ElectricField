@@ -37,7 +37,9 @@ inline std::string chargeDisplayName(const ef::Charge& c, std::size_t index) {
 
 bool moveCharge(Tab& t, std::size_t index, ef::Vec2 world);
 // v2.6 phase 3: charge identity. nextChargeId is the pure "max over the system + 1" (empty -> 1);
-// assignChargeIds fills ONLY the id == 0 charges, monotonically (persisted ids are never touched).
+// assignChargeIds fills ONLY the id == 0 charges, monotonically (persisted ids are never touched),
+// saturating at ef::kMaxChargeId - past the parsers' shared ceiling a charge stays id 0 (unassigned)
+// instead of receiving an id a save->load round-trip would silently drop (WR-02).
 // makeSystem stays field-carrying (id 0) so the ef-cli parity output is untouched.
 std::uint64_t nextChargeId(const ef::ChargeSystem& field);
 void assignChargeIds(ef::ChargeSystem& field);

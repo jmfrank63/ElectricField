@@ -126,9 +126,16 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   // disarms a pending recalc instead of arming one - zoom wiggling below the reference never locks
   // the editor with a redundant computation.
   if (t.state == efapp::TabState::Done && t.session == nullptr) {
-    const double logicalPpu = 100.0 * t.zoom;
+    double logicalPpu = 100.0 * t.zoom;
+    // WR-01: a settled ppu in (kRefPpu, kRefPpuEps] is the legacy regime (fp round-trip drift of a
+    // wheel factor). The stamp snaps down to kRefPpu, so both the guard below and any computation
+    // this tab later runs (zoom settle, edit recalc, F5 - they all stamp viewScale = viewPpu) are
+    // regime-stable; a value that drifted a hair above 100 computes legacy instead of collapsing the
+    // seed circle at the default view. adapts() itself stays strict.
+    if (logicalPpu > ef::ComputeParams::kRefPpu && logicalPpu <= ef::ComputeParams::kRefPpuEps)
+      logicalPpu = ef::ComputeParams::kRefPpu;
     const bool sameRegime = logicalPpu <= ef::ComputeParams::kRefPpu &&
-                            (t.params.viewScale == 0 || t.params.viewScale <= ef::ComputeParams::kRefPpu);
+                            (t.params.viewScale == 0 || t.params.viewScale <= ef::ComputeParams::kRefPpuEps);
     if (t.armedViewPpu != 0 && logicalPpu != t.armedViewPpu) t.pendingViewRecalcAt = sameRegime ? -1.0 : -2;
     t.viewPpu = logicalPpu;
     t.armedViewPpu = logicalPpu;

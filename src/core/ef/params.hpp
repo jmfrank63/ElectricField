@@ -23,6 +23,11 @@ struct ComputeParams {
 
   // Adaptation engages ONLY above the reference ppu: at/below it every radius is exactly the legacy value.
   static constexpr double kRefPpu = 100;
+  // WR-01 hardening: a ppu this hair above the reference is still the legacy regime - a wheel factor
+  // whose double round-trip drifts above 1.0 (f*(1/f) != 1.0 for some factor/value pairs) must not
+  // flip the default view into the adapted regime. The GUI's regime guard compares against this edge
+  // and snaps the stamped scale down to kRefPpu inside the band; adapts() itself stays strict.
+  static constexpr double kRefPpuEps = kRefPpu * (1.0 + 1e-9);
   static constexpr double kSeedPx = 2.0;  // the seed circle is ~2 px on screen when zoomed in
   // Floor = 10x the near-field step 0.001: keeps h/r <= 0.1 for the fixed-step methods (load-bearing).
   static constexpr double kMinSeedWorld = 0.01;

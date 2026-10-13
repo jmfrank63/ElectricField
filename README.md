@@ -37,11 +37,15 @@ preserved in history and on the `v1.0` tag.
   picker (from anywhere), **File > New Collection...** creates one through the save dialog, and
   **File > Save Collection / Save Collection As...** write it back (Ctrl+S or a chosen path). The
   **File > Recent Collections** submenu re-opens the files you worked with lately (the list survives
-  restarts). The **Original** collection (under `Collections\` in the per-user config directory) holds
+  restarts; when upgrading from an older version the list is seeded from the session pointer's
+  collection, and the list is rewritten on quit - current even without a collection switch). The
+  **Original** collection (under `Collections\` in the per-user config directory) holds
   the built-in arrangements. The collection you have open appears in the menu bar's switcher; the
   configuration menu entries (New/Open/Save Configuration...) are greyed out until a collection is
   open - the flow is always *open a collection, then work with its configurations*. Nothing is
-  auto-opened at startup.
+  auto-opened at startup. A configuration can be removed from its collection with the visible
+  **Remove...** button in the configuration chooser (with confirmation; right-clicking the row works
+  too).
 - **Save Configuration**: a tab opened from a configuration (or saved with **Save Configuration
   As...**) can write its current charges back into that configuration with **File > Save
   Configuration**; the file on disk updates immediately.

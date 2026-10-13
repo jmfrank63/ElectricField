@@ -1,0 +1,7 @@
+# 44-recents-seed: a LEGACY session pointer (pre-261012-h26 shape: only `collection = Original`, no
+# `recent` lines - pre-seeded into this script's sandbox by the CI step, scripts cannot write files
+# before start) seeds the recents list at startup (v2.6 REC-02), and the stored collection name is
+# never blanked.
+app.expect recents=Original
+app.expect collections=Original
+app.quit force

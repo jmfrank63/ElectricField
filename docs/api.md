@@ -39,7 +39,10 @@ tab serial=2 title=Empty Configuration 1 state=done method=euler autocalc=0 stal
 `drawsize=` is the drawn charge radius in px (v2.5 SIZE-01, valid range 2-120; the `chargeSize` key in options.ini).
 
 `recents=` is the File > Recent Collections menu, newest first (261012-h26; the opened collection
-files' names, persisted as `recent` path lines in session.ini).
+files' names, persisted as `recent` path lines in session.ini). v2.6 REC-02: at startup the list is
+seeded from the pointer's `collection` value when it names an existing collection file that is
+missing from the list (a legacy pointer carries only that line), and session.ini is rewritten on
+quit - the list stays current even when the app closes without a collection switch.
 
 ## Commands
 
@@ -65,13 +68,17 @@ files' names, persisted as `recent` path lines in session.ini).
 | `collection.save-as <name\|path>` | save the collection's configurations to a new file; the tabs stay open and belong to it |
 | `collection.close` | save and close the collection (afterwards no collection is open and the configuration menus grey out) |
 
+The session pointer (session.ini) never loses its stored collection name: with no collection open its
+`collection` line is preserved instead of blanked, so the startup seeding above keeps working (v2.6
+REC-02).
+
 ### Configurations
 | Command | Effect |
 |---|---|
 | `config.open <name>` | open a configuration of the current collection in a new tab |
 | `config.save` | store the active tab's charges into the configuration it came from, renaming that entry in place to the tab's current name when the tab was renamed (v2.5 CFG-04); a name owned by a different configuration is refused — use `config.save-as` to overwrite with confirmation; preset-sourced tabs append a new configuration under the current name; fails for tabs never saved to a configuration |
 | `config.save-as <name>` | store the active tab's charges under the name (reserved preset names refused); the tab takes the name and now saves there with `config.save` |
-| `config.remove <name>` | remove a configuration from the collection (open tabs unaffected) |
+| `config.remove <name>` | remove a configuration from the collection (open tabs unaffected); in the UI also the chooser's visible Remove... button, with the same confirmation (v2.6 COL-10) |
 | `export.configuration <path.pdf>` | export the active configuration as a PDF with a fitted view (v2.5 EXP-03) |
 | `export.collection <path.pdf>` | export every configuration of the collection - one PDF page each (v2.5 EXP-03) |
 

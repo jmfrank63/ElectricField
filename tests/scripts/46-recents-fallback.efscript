@@ -1,0 +1,6 @@
+# 46-recents-fallback: REC-02 (v2.6) - with NO session pointer at all (a fresh config dir or wiped
+# history), the existing collection files are the Recent Collections, newest first. CI pre-creates
+# A.ini (older) and B.ini (newer); the app itself seeds Collections/Original.ini during this start,
+# so it is the newest of the three.
+app.expect recents=Original|B|A
+app.quit force

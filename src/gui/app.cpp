@@ -232,6 +232,24 @@ bool App::init(const AppOptions& opt, std::string& step, std::string& message) {
         if (std::filesystem::exists(f)) seedKey = f.u8string();
       }
       recents_ = efapp::seedRecents(pointer.recents, seedKey);
+      if (recents_.empty()) {
+        // Nothing to seed from (no pointer line, nothing recent): the existing collection files ARE
+        // the recents, newest first - the menu must never be empty while collections exist.
+        std::vector<std::filesystem::path> files;
+        std::error_code ec;
+        for (const std::filesystem::directory_entry& e : std::filesystem::directory_iterator(collectionsDir_, ec))
+          if (e.is_regular_file() && e.path().extension() == ".ini") files.push_back(e.path());
+        std::sort(files.begin(), files.end(), [](const std::filesystem::path& a, const std::filesystem::path& b) {
+          std::error_code ea, eb;
+          const auto ta = std::filesystem::last_write_time(a, ea), tb = std::filesystem::last_write_time(b, eb);
+          if (!ea && !eb && ta != tb) return ta > tb;
+          return a.filename() < b.filename();  // deterministic tie-break
+        });
+        for (const std::filesystem::path& f : files) {
+          if (recents_.size() >= efapp::kMaxRecentCollections) break;
+          recents_.push_back(f.u8string());
+        }
+      }
     }
   }
   env_.options = &options_;

@@ -88,7 +88,9 @@ jobs:
       # 41 must run in 40's user dir (it verifies the session restore of 40's quit); 43 in 42's (the
       # recents list restored from the session pointer, 261012-h26). 44's sandbox is pre-seeded with a
       # legacy pointer (`collection = Original`, no recents) that 44 proves the startup seeding from
-      # (v2.6 REC-02); the app seeds Collections/Original.ini itself on first run.
+      # (v2.6 REC-02); the app seeds Collections/Original.ini itself on first run. 46's sandbox has no
+      # pointer at all - pre-created collection files with fixed mtimes prove the newest-first
+      # fallback (Original is created by the app during the same start, hence newest).
       - name: Command-API script tests
         run: |
           mkdir -p script-out
@@ -99,6 +101,13 @@ jobs:
             if [ "$name" = "41-session-restore" ]; then dir="script-out/40-session"; fi
             if [ "$name" = "43-recents-restore" ]; then dir="script-out/42-recents"; fi
             if [ "$name" = "44-recents-seed" ]; then mkdir -p "$dir" && printf 'collection = Original\n' > "$dir/session.ini"; fi
+            if [ "$name" = "46-recents-fallback" ]; then
+              mkdir -p "$dir/Collections"
+              printf '[configuration "A"]\ncharge = 1, 0, 0\n' > "$dir/Collections/A.ini"
+              printf '[configuration "B"]\ncharge = 1, 0, 0\n' > "$dir/Collections/B.ini"
+              touch -t 202601010000 "$dir/Collections/A.ini"
+              touch -t 202601020000 "$dir/Collections/B.ini"
+            fi
             echo "--- $name"
             ./zig-out/bin/ElectricField --script "$f" --user-dir "$dir" --out "script-out/$name.log" || status=1
           done

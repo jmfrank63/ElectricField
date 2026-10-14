@@ -1,7 +1,8 @@
 # 42-recents: File > Recent Collections (261012-h26 REC-01) - newest-first ordering, re-ordering by open,
 # the 10-entry cap and the collection.open-recent command. Paired with 43 (same user dir) for the
-# persistence across the restart.
-app.expect recents=
+# persistence across the restart. The startup line pins the no-pointer fallback (v2.6): a fresh sandbox
+# lists the existing Collections files (Original, just auto-seeded) instead of an empty menu.
+app.expect recents=Original
 collection.new Alpha
 collection.new Beta
 # The recents order by recency: Beta is the newest (1), Alpha second (2).

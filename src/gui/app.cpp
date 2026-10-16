@@ -413,6 +413,7 @@ void App::frame() {
       leaveConfirmed_ = false;
       pendingCollection_.clear();
       pendingCollectionFile_.clear();
+      ui_.closePopups = true;  // Cancel/Esc must dismiss the prompt too (it used to stay up forever)
     }
     ui_.leaveDecision = 0;
   }

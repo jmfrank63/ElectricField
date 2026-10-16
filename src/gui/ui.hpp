@@ -73,10 +73,14 @@ struct UiState {
   // v2.6 phase 3: the selected charge's name buffer (the tabNameBuf pattern, keyed on the active tab
   // AND the selection - it re-syncs whenever either changes). IN-03: 256 bytes with UTF-8-safe
   // truncation on copy, so a long API-set name is never cut mid-code point (128 silently truncated
-  // at 127 bytes AND at an arbitrary byte).
+  // at 127 bytes AND at an arbitrary byte). The size is a text field parsed LIVE: InputDouble's
+  // value is not written back until commit, which is why a typed size used to apply only on Enter.
   char chargeNameBuf[256] = "";
   unsigned chargeNameBufSerial = 0;
   int chargeNameBufSelected = -1;
+  char chargeSizeBuf[16] = "";
+  unsigned chargeSizeBufSerial = 0;
+  int chargeSizeBufSelected = -1;
   int exportRequest = 0;     // File > Export / dialog kinds (consumed by App::frame): 1 = PNG, 2 = SVG, 3 = PDF
                              // (the active tab) and 10 = Open Collection..., 11 = Save Collection As...,
                              // 12 = New Collection..., 13 = Export Collection (v2.5 OPEN-01/EXP-03)

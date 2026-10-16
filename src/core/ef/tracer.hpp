@@ -38,10 +38,11 @@ struct PotentialLine : FieldLine {
 // the measured worst Debug+UBSan gap between polls is about 11 ms (Dormand-Prince); the relaxed atomic load costs nothing measurable.
 inline constexpr std::size_t kCancelStride = 1024;
 
-// v2.6 phase 2: an equipotential ring is posted only when its on-screen spacing along the line is at
-// least this many logical px (spacing dr = dV/|E|, on-screen dr * viewScale; viewScale is the GUI's
-// zoom-relative logical scale); sub-pixel rings render as a blob.
-inline constexpr double kRingPx = 1.25;
+// v2.6 phase 2, revised after the owner's zoom report: in the adapted regime consecutive posted
+// equipotential rings keep at least this many logical px of on-screen spacing (spacing dr = dV/|E|,
+// on-screen dr * viewScale; viewScale is the GUI's zoom-relative logical scale). 1.25 was still dense
+// enough that 1-px-wide rings merged into a solid gray field; 6 keeps them clearly distinct.
+inline constexpr double kRingPx = 6.0;
 
 // Hooks used by the tracers. Default = standalone (never cancelled, no equipotential jobs).
 struct NoHooks {
@@ -79,16 +80,20 @@ inline bool shouldPostEquipotential(const ChargeSystem& field, const ComputePara
                                     double& oldPotential) {
   if (!seed.first || !p.calculateEquipotentials) return false;
   const double potential = field.Potential(point);
-  if (sign(seed.charge) * sign(potential) > 0 && std::abs(oldPotential - potential) >= p.potentialInterval) {
+  // v2.6 (owner zoom report, replaces the phase-2 hard skip): in the adapted regime the effective
+  // potential interval stretches so consecutive rings stay >= kRingPx logical px apart on screen
+  // (spacing dr = dV/|E|; require dV >= |E| * kRingPx / viewScale). The hard skip this replaces left
+  // two artifacts: rings posted at the 1-2 px boundary merged into a solid gray field, and in an
+  // asymmetric field the |E| threshold crossed mid-ring, dashing arcs into moire stripes. Stretching
+  // the interval instead spaces every posted ring by construction. |E| is exact for multi-charge
+  // fields. Legacy (viewScale <= kRefPpu) uses the plain interval, unchanged.
+  const double interval =
+      p.adapts() ? std::max(p.potentialInterval, field.E(point).Length() * kRingPx / p.viewScale) : p.potentialInterval;
+  if (sign(seed.charge) * sign(potential) > 0 && std::abs(oldPotential - potential) >= interval) {
     if (oldPotential == 0)
-      oldPotential = std::floor(potential / p.potentialInterval) * p.potentialInterval;
+      oldPotential = std::floor(potential / interval) * interval;
     else
-      oldPotential += sign(potential - oldPotential) * p.potentialInterval;
-    // Ring gate (v2.6 phase 2, after the label logic): |E(point)| * kRingPx > interval * viewScale means
-    // the next ring is less than kRingPx px away on screen - skip the post (the label still advances, so
-    // labels stay consecutive once spacing recovers). |E| is exact for multi-charge fields. Legacy
-    // (viewScale <= kRefPpu) never gates.
-    if (p.adapts() && field.E(point).Length() * kRingPx > p.potentialInterval * p.viewScale) return false;
+      oldPotential += sign(potential - oldPotential) * interval;
     return true;
   }
   return false;

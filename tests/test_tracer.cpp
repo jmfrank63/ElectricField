@@ -108,29 +108,56 @@ TEST_CASE("viewScale <= kRefPpu posts exactly the legacy equipotential jobs (ef-
   }
 }
 
-// v2.6 phase 2 ring gate: with |E| = 1/r^2 (single +1 charge at the origin), the on-screen spacing is
-// kRingPx px at r = sqrt(kRingPx / (interval * viewScale)) - no posts below it, posts allowed beyond.
-TEST_CASE("ring gate: sub-pixel equipotential spacing is not posted above kRefPpu (v2.6 phase 2)") {
+// v2.6 (owner zoom report, replaces the phase-2 gate test): in the adapted regime the effective
+// interval stretches so CONSECUTIVE posted rings keep >= kRingPx logical px of on-screen spacing - no
+// mush (1-2 px rings merged into a solid gray field) and no dashed arcs (the old hard skip crossed
+// mid-ring in an asymmetric field). Walk a probe outward like the tracer does and pin the spacing.
+TEST_CASE("adapted equipotential posts keep kRingPx on-screen spacing; legacy unchanged") {
   ChargeSystem field;
   field.charges.push_back(Charge{1, Vec2{0, 0}});
   ComputeParams p;
   p.potentialInterval = 0.1;
   p.viewScale = 1000.0;
-  const double rGate = std::sqrt(ef::kRingPx / (p.potentialInterval * p.viewScale));
-  const double rBlock = 0.5 * rGate;  // well inside: |E| * kRingPx > interval * viewScale
-  const double rAllow = 2.0 * rGate;  // well outside: |E| * kRingPx < interval * viewScale
-
   Seed s;
   s.first = true;
   s.charge = 1;
-  double oldPotential = 0;
-  CHECK_FALSE(shouldPostEquipotential(field, p, s, Vec2{rBlock, 0}, oldPotential));
-  CHECK(shouldPostEquipotential(field, p, s, Vec2{rAllow, 0}, oldPotential));
 
-  // Legacy never gates: the same blocked point posts once the label condition holds.
+  std::vector<double> postedR, postedV;
+  double oldPotential = 0;
+  for (double r = 0.05; r <= 3.0; r += 0.0005) {
+    if (shouldPostEquipotential(field, p, s, Vec2{r, 0}, oldPotential)) {
+      postedR.push_back(r);
+      postedV.push_back(oldPotential);
+    }
+  }
+  REQUIRE(postedR.size() >= 3);
+  // Rings start right away (no empty hole around the charge) and the potential decreases outward.
+  CHECK(postedR.front() == doctest::Approx(0.05).epsilon(0.02));
+  for (std::size_t i = 1; i < postedR.size(); ++i) {
+    const double dr = postedR[i] - postedR[i - 1];
+    const double dV = postedV[i] - postedV[i - 1];
+    CHECK(dV < 0.0);  // outward = falling potential for a + charge
+    // The on-screen radial gap (dr * viewScale, dr = dV / |E|) stays near kRingPx - the step
+    // quantization of the walk (and of the real trace) wobbles it by well under a pixel; what the
+    // stretch must guarantee is DISTINCT rings, i.e. never anywhere near the old 1.25 px mush.
+    CHECK(dr * p.viewScale >= ef::kRingPx * 0.7);
+  }
+
+  // Legacy (no view scale) never stretches: within the stretch region the plain interval posts far
+  // denser (the region ends where |E| * kRingPx == interval * viewScale, r = sqrt(kRingPx/80) here).
   p.viewScale = 0;
+  std::vector<double> legacyR;
   oldPotential = 0;
-  CHECK(shouldPostEquipotential(field, p, s, Vec2{rBlock, 0}, oldPotential));
+  for (double r = 0.05; r <= 3.0; r += 0.0005)
+    if (shouldPostEquipotential(field, p, s, Vec2{r, 0}, oldPotential)) legacyR.push_back(r);
+  std::size_t adaptedInside = 0, legacyInside = 0;
+  const double rStretch = std::sqrt(ef::kRingPx / (0.1 * 1000.0));
+  for (const double r : postedR)
+    if (r <= rStretch) ++adaptedInside;
+  for (const double r : legacyR)
+    if (r <= rStretch) ++legacyInside;
+  CHECK(legacyInside > adaptedInside * 3);
+  CHECK(legacyR.front() == doctest::Approx(0.05).epsilon(0.02));  // posts immediately at the walk start
 }
 
 TEST_CASE("equipotential trace closes on itself and records the weight centre (CalculateEquipotential)") {

@@ -828,8 +828,8 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
       ui.chargeNameBufSelected = t.selected;
     }
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 50.f * env.k);
-    if (ImGui::InputText("##chargename", ui.chargeNameBuf, sizeof(ui.chargeNameBuf)))
-      efapp::editor::setChargeName(t, at, std::string(ui.chargeNameBuf));  // strips ',', empty allowed
+    if (ImGui::InputText("##chargename", ui.chargeNameBuf, sizeof(ui.chargeNameBuf)) || ImGui::IsItemEdited())
+      efapp::editor::setChargeName(t, at, std::string(ui.chargeNameBuf));  // strips ',', empty allowed; live like the size
     // IN-02: while the field is NOT being edited it mirrors the model, so an undo/redo or a scripted
     // charge.name is never clobbered by the next keystroke committing stale buffer text. While the
     // user is typing (IsItemActive) the in-progress text wins; every edit already committed above.
@@ -843,11 +843,30 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     ImGui::TextUnformatted("Name");
     if (c.name.empty()) ImGui::TextDisabled("%s", efapp::editor::chargeDisplayName(c, at).c_str());
 
-    double sizePx = c.sizePx;
+    // The size is a TEXT field parsed live (the tabNameBuf pattern): InputDouble's value is not
+    // written back until Enter / focus loss, so a typed size applied nothing until then (the owner's
+    // "change in size had no effect"). IsItemEdited fires per keystroke; a transient partial number
+    // ("-", "") simply does not apply, and an illegal one is refused by setChargeSize's validation.
+    if (ui.chargeSizeBufSerial != t.serial || ui.chargeSizeBufSelected != t.selected) {
+      std::snprintf(ui.chargeSizeBuf, sizeof(ui.chargeSizeBuf), "%.0f", static_cast<double>(c.sizePx));
+      ui.chargeSizeBufSerial = t.serial;
+      ui.chargeSizeBufSelected = t.selected;
+    }
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 110.f * env.k);
-    if (ImGui::InputDouble("##chargesize", &sizePx, 0.0, 0.0, "%.0f")) {
-      sizePx = std::max(0.0, std::min(120.0, sizePx));  // typed input clamps into the legal range
-      efapp::editor::setChargeSize(t, at, static_cast<float>(sizePx));  // a transient illegal value is simply not applied
+    ImGui::InputText("##chargesize", ui.chargeSizeBuf, sizeof(ui.chargeSizeBuf));
+    if (ImGui::IsItemEdited()) {
+      double parsed = 0;
+      if (efapp::ini::parseDouble(efapp::ini::trim(ui.chargeSizeBuf), parsed)) {
+        parsed = std::max(0.0, std::min(120.0, parsed));
+        efapp::editor::setChargeSize(t, at, static_cast<float>(parsed));
+      }
+    }
+    char expectSize[16];
+    std::snprintf(expectSize, sizeof(expectSize), "%.0f", static_cast<double>(c.sizePx));
+    if (!ImGui::IsItemActive() && std::string(ui.chargeSizeBuf) != expectSize) {
+      std::snprintf(ui.chargeSizeBuf, sizeof(ui.chargeSizeBuf), "%s", expectSize);
+      ui.chargeSizeBufSerial = t.serial;
+      ui.chargeSizeBufSelected = t.selected;
     }
     ImGui::SameLine(0.f, 6.f * env.k);
     ImGui::AlignTextToFramePadding();

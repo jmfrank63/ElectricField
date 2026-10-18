@@ -911,9 +911,65 @@ bool App::smokeExtras(std::string& report) {
   }
   ws_.find(es)->autoRecalc = false;
 
+  // v2.6 (review): the panel's Size field applies LIVE - typing without Enter resizes the charge at
+  // once, and a transient partial number ("-", an empty buffer) applies nothing. A wide window keeps
+  // the whole panel visible (the Size row is below the fold at the smoke's minimum size).
+  SDL_SetWindowSize(window_, 1280, 1024);
+  SDL_SyncWindow(window_);
+  frames(2);
+  const float sx = (ui_.canvasMin.x + ui_.canvasMax.x) * 0.5f, sy = (ui_.canvasMin.y + ui_.canvasMax.y) * 0.5f;
+  eio.AddMousePosEvent(sx + 90.f, sy);  // the charge sits at ~(0.9, 0) from the drag above
+  frames(2);
+  eio.AddMouseButtonEvent(0, true);
+  frames(1);
+  eio.AddMouseButtonEvent(0, false);
+  frames(2);
+  if (ws_.find(es)->selected != 0) return fail("size field: re-selecting the charge failed");
+  if (ui_.chargeSizeMax.x <= ui_.chargeSizeMin.x)
+    return fail("size field: the Size field rect was not exposed (is the selected-charge row drawn?)");
+  eio.AddMousePosEvent((ui_.chargeSizeMin.x + ui_.chargeSizeMax.x) * 0.5f, (ui_.chargeSizeMin.y + ui_.chargeSizeMax.y) * 0.5f);
+  frames(2);
+  eio.AddMouseButtonEvent(0, true);
+  frames(1);
+  eio.AddMouseButtonEvent(0, false);
+  frames(2);
+  chord(0, ImGuiKey_End);      // caret to the end of the "0"
+  chord(0, ImGuiKey_Backspace);  // clear it (buffer "" -> the live parse applies nothing)
+  frames(1);
+  eio.AddInputCharactersUTF8("60");
+  frames(2);
+  if (ws_.find(es)->field.charges[0].sizePx != 60.f)
+    return fail("size field: typing 60 did not apply LIVE (sizePx=" + std::to_string(ws_.find(es)->field.charges[0].sizePx) + ")");
+  if (ws_.find(es)->stale) return fail("size field: the size edit must not mark the tab stale (dirty-only)");
+  if (!ws_.find(es)->dirty) return fail("size field: the size edit did not mark the tab dirty");
+  eio.AddInputCharactersUTF8("-");  // a transient partial number: nothing applies
+  frames(2);
+  if (ws_.find(es)->field.charges[0].sizePx != 60.f) return fail("size field: the transient '-' must not apply");
+  chord(0, ImGuiKey_End);
+  for (int i = 0; i < 3; ++i) chord(0, ImGuiKey_Backspace);  // clear "60-"
+  frames(1);
+  eio.AddInputCharactersUTF8("30");
+  frames(2);
+  if (ws_.find(es)->field.charges[0].sizePx != 30.f) return fail("size field: typing 30 after 60 did not apply live");
+
   // v2.4 BUG-02: the leave prompt must CLOSE after its answer (it used to stay open and lock the UI).
+  // v2.6 (review): Cancel and Esc dismiss it too - they used to leave it up forever.
   ws_.find(es)->dirty = true;  // make quitting "unsaved"
   quit_ = true;                // iterate() opens the leave prompt instead of quitting
+  iterate();
+  if (!ui_.leaveConfirmVisible) return fail("the leave prompt did not open for a dirty tab");
+  chord(0, ImGuiKey_Escape);
+  frames(2);
+  if (ui_.leaveConfirmVisible || ui_.openLeaveConfirm) return fail("the leave prompt stayed open after Esc");
+  if (!ws_.find(es)) return fail("Esc on the leave prompt quit the app");
+  quit_ = true;  // the prompt again: Cancel takes the same App-side branch the button feeds
+  iterate();
+  if (!ui_.leaveConfirmVisible) return fail("the leave prompt did not re-open for the second dirty quit");
+  ui_.leaveDecision = 2;  // Cancel
+  iterate();
+  frames(2);  // the closePopups guard draws once
+  if (ui_.leaveConfirmVisible || ui_.openLeaveConfirm) return fail("the leave prompt stayed open after Cancel");
+  quit_ = true;  // and the existing "Quit anyway" flow, unchanged
   iterate();
   if (!ui_.leaveConfirmVisible) return fail("the leave prompt did not open for a dirty tab");
   ui_.leaveDecision = 1;  // "Quit anyway": the pending quit proceeds and the prompt must close

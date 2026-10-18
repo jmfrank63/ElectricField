@@ -249,3 +249,40 @@ TEST_CASE("numerics policy: no fused multiply-add contraction, no fast-math (-ff
   const double r = x * y - 1.0;  // exact product is 1 - 2^-60; rounded product is 1.0
   CHECK(r == 0.0);               // fused would give -2^-60
 }
+
+// v2.6 (review): the spacing contract on REAL traces of asymmetric fields - |E| varies along a ring
+// there, which is exactly what dashed the old hard-skip gate mid-ring. Walk the actual posted jobs
+// of traced field lines (the compute session's flow) and pin the on-screen spacing between
+// consecutive jobs of the same parent line.
+TEST_CASE("adapted equipotential jobs keep kRingPx spacing on real asymmetric-field traces") {
+  rk::Euler<Vec2> solver;
+  ComputeParams p;
+  p.potentialInterval = 0.1;
+  p.viewScale = 1000.0;
+  const char* slugs[] = {"dipole", "two-unequal-charges-different-signs", "quadrupole"};
+  for (const char* slug : slugs) {
+    const ChargeSystem field = preset(slug);
+    const auto seeds = planSeeds(field, p);
+    REQUIRE(seeds.size() >= 2);
+    CAPTURE(slug);
+    // Only a charge's FIRST seed posts equipotentials (shouldPostEquipotential's contract); trace
+    // the first seed of each of the first two charges.
+    unsigned traced = 0;
+    for (std::size_t si = 0; si < seeds.size() && traced < 2; ++si) {
+      if (!seeds[si].first) continue;
+      ++traced;
+      CollectHooks h;
+      traceElectricLine(solver, field, p, seeds[si], h);
+      REQUIRE(h.children.size() >= 3);
+      CAPTURE(si);
+      CAPTURE(h.children.size());
+      // Measured worst case across these fields: 4.0 px (the first rings right at the seed, where
+      // |E| halves between consecutive rings and the stretch is evaluated one step late at the
+      // detection point) - still 3.2x the old 1.25 px mush threshold, i.e. clearly distinct rings.
+      // Chords also run slightly under the arc spacing on bent traces, hence 0.5, not 1.0.
+      for (std::size_t i = 1; i < h.children.size(); ++i)
+        CHECK((h.children[i].start - h.children[i - 1].start).Length() * p.viewScale >= ef::kRingPx * 0.5);
+    }
+    REQUIRE(traced == 2);
+  }
+}

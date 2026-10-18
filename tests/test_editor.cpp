@@ -855,3 +855,20 @@ TEST_CASE("hitCharge: per-charge bounds, nearest wins, default-radius parity (v2
   CHECK(efapp::editor::hitCharge(f, ef::Vec2{10, 0}, 0.0, 25.0) == 2);
   CHECK(efapp::editor::hitCharge(f, ef::Vec2{10, 0}, -5.0, 25.0) == 2);
 }
+
+// v2.6 (review): the Size field's live parse - the text a keystroke left in the buffer becomes the
+// size to apply, clamped into the legal range; transient or non-numeric text applies nothing.
+TEST_CASE("chargeSizeFromText: the Size field's live parse (v2.6 review)") {
+  CHECK(efapp::chargeSizeFromText("60") == 60.0);
+  CHECK(efapp::chargeSizeFromText("060") == 60.0);   // a caret-in-front typo still means 60
+  CHECK(efapp::chargeSizeFromText(" 30 ") == 30.0);  // surrounding blanks are trimmed
+  CHECK(efapp::chargeSizeFromText("300") == 120.0);  // clamped into the legal range
+  CHECK(efapp::chargeSizeFromText("0") == 0.0);      // 0 = inherit the default
+  CHECK(efapp::chargeSizeFromText("-3") == 0.0);     // clamps to inherit
+  CHECK(efapp::chargeSizeFromText("-") == -1.0);     // transient: nothing applies yet
+  CHECK(efapp::chargeSizeFromText("") == -1.0);
+  CHECK(efapp::chargeSizeFromText("   ") == -1.0);
+  CHECK(efapp::chargeSizeFromText("abc") == -1.0);
+  CHECK(efapp::chargeSizeFromText("60x") == -1.0);   // trailing garbage never half-applies
+  CHECK(efapp::chargeSizeFromText("1") == 1.0);      // in (0, 2): returned, setChargeSize refuses it
+}

@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 
 namespace efapp {
 
@@ -10,6 +12,19 @@ char busyGlyph(double seconds) {
   static const char kGlyphs[4] = {'|', '/', '-', '\\'};
   const long long step = static_cast<long long>(std::floor(seconds * 8.0));
   return kGlyphs[static_cast<std::size_t>(step & 3)];
+}
+
+double chargeSizeFromText(const char* text) {
+  const auto isSpace = [](unsigned char c) { return std::isspace(c) != 0; };
+  const char* b = text;
+  while (*b != '\0' && isSpace(static_cast<unsigned char>(*b))) ++b;
+  const char* e = b + std::strlen(b);
+  while (e > b && isSpace(static_cast<unsigned char>(e[-1]))) --e;
+  if (e == b) return -1.0;
+  char* end = nullptr;
+  const double v = std::strtod(b, &end);
+  if (end != e || !std::isfinite(v)) return -1.0;  // full-string number or nothing (a transient "-" never applies)
+  return std::min(120.0, std::max(0.0, v));
 }
 
 std::string tabLabel(const Tab& t, double seconds) {

@@ -81,6 +81,7 @@ struct UiState {
   char chargeSizeBuf[16] = "";
   unsigned chargeSizeBufSerial = 0;
   int chargeSizeBufSelected = -1;
+  ImVec2 chargeSizeMin{0, 0}, chargeSizeMax{0, 0};  // the Size field's rect this frame (smoke clicks it)
   int exportRequest = 0;     // File > Export / dialog kinds (consumed by App::frame): 1 = PNG, 2 = SVG, 3 = PDF
                              // (the active tab) and 10 = Open Collection..., 11 = Save Collection As...,
                              // 12 = New Collection..., 13 = Export Collection (v2.5 OPEN-01/EXP-03)

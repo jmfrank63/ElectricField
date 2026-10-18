@@ -855,12 +855,11 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 110.f * env.k);
     ImGui::InputText("##chargesize", ui.chargeSizeBuf, sizeof(ui.chargeSizeBuf));
     if (ImGui::IsItemEdited()) {
-      double parsed = 0;
-      if (efapp::ini::parseDouble(efapp::ini::trim(ui.chargeSizeBuf), parsed)) {
-        parsed = std::max(0.0, std::min(120.0, parsed));
-        efapp::editor::setChargeSize(t, at, static_cast<float>(parsed));
-      }
+      const double parsed = efapp::chargeSizeFromText(ui.chargeSizeBuf);
+      if (parsed >= 0.0) efapp::editor::setChargeSize(t, at, static_cast<float>(parsed));
     }
+    ui.chargeSizeMin = ImGui::GetItemRectMin();  // smoke: the live-size-typing regression clicks this rect
+    ui.chargeSizeMax = ImGui::GetItemRectMax();
     char expectSize[16];
     std::snprintf(expectSize, sizeof(expectSize), "%.0f", static_cast<double>(c.sizePx));
     if (!ImGui::IsItemActive() && std::string(ui.chargeSizeBuf) != expectSize) {

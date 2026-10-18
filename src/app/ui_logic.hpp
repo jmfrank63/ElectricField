@@ -28,6 +28,12 @@ std::string failureDetail(const std::string& error);
 // The tab title without the trailing " <N>" counter ("Dipole 1" -> "Dipole"); prefills Save As (v2).
 std::string baseTitle(const std::string& title);
 
+// v2.6 (review): the charge editor's Size-field text parsed into the size to apply, clamped to
+// [0, 120] (0 = inherit the default), or -1 when the text is transient or not a number ("-", "",
+// "60x") - nothing applies then. The result is always acceptable to editor::setChargeSize except
+// the (0, 2) open range it refuses (e.g. "1"), which stays "not applied" by the core's contract.
+double chargeSizeFromText(const char* text);
+
 // Display-scale k: clamp to [0.75, 4.0]; non-finite or <= 0 falls back to 1.0.
 float clampScale(float k);
 

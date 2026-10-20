@@ -239,6 +239,33 @@ TEST_CASE("zoom ceiling: the applied dot covers the floored seed circle (v2.6 ph
   CHECK_FALSE(t.dirty);
 }
 
+// 261020-ef1: per-charge sizes drive the ceiling too - the SMALLEST effective dot in the tab must
+// cover its floored seed circle, so a tab holding a small charge stops zooming before that charge's
+// untraced annulus could show (before, the ceiling read only the Options default and the lines of a
+// small charge ended visibly short of the dot at deep zoom).
+TEST_CASE("tabZoomCeiling: the smallest effective dot in the tab drives the limit (261020-ef1)") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);  // +1 (-2,0), -1 (2,0); no per-charge sizes
+  // No sizes anywhere: the plain default-dot ceiling.
+  CHECK(efapp::editor::tabZoomCeiling(t, 100.0, 25.0) == doctest::Approx(25.0));
+  // One charge sized down to 2 px (the others inherit): the small dot caps the whole tab.
+  REQUIRE(efapp::editor::setChargeSize(t, 0, 2.0f));
+  CHECK(efapp::editor::tabZoomCeiling(t, 100.0, 25.0) == doctest::Approx(2.0));
+  // At that ceiling the floored seed circle exactly fills the 2 px dot (0.01 world at viewScale 200).
+  REQUIRE(efapp::editor::zoomAt(t, 100.0, ef::Vec2{0, 0}, efapp::editor::tabZoomCeiling(t, 100.0, 25.0)));
+  CHECK(t.zoom == doctest::Approx(2.0));
+  ef::ComputeParams atCeiling;
+  atCeiling.viewScale = 100.0 * t.zoom;
+  CHECK(atCeiling.seedRadiusFor(2.0) * atCeiling.viewScale == doctest::Approx(2.0));
+  // An empty system falls back to the default dot; a degenerate default falls back to the static cap.
+  REQUIRE(efapp::editor::addCharge(t, ef::Vec2{0, 0}, 1, 4.f));
+  efapp::editor::removeSelected(t);  // remove the added one; the dipole pair stays
+  REQUIRE(efapp::editor::setChargeSize(t, 1, 0.0f));  // back to inheriting
+  REQUIRE(efapp::editor::setChargeSize(t, 0, 0.0f));
+  CHECK(efapp::editor::tabZoomCeiling(t, 100.0, 25.0) == doctest::Approx(25.0));
+  CHECK(efapp::editor::tabZoomCeiling(t, 100.0, 0.0) == doctest::Approx(efapp::editor::kZoomMax));
+}
+
 // v2.6 phase 2: zoom-settle recalculation. The GUI arming lives in drawCanvas, so the doctest drives the
 // WORKSPACE contract: pendingViewRecalcAt -2 -> deadline -> calculate with params.viewScale set, and no
 // stale/dirty/undo anywhere on that path (a view change is not an edit).
@@ -870,5 +897,9 @@ TEST_CASE("chargeSizeFromText: the Size field's live parse (v2.6 review)") {
   CHECK(efapp::chargeSizeFromText("   ") == -1.0);
   CHECK(efapp::chargeSizeFromText("abc") == -1.0);
   CHECK(efapp::chargeSizeFromText("60x") == -1.0);   // trailing garbage never half-applies
-  CHECK(efapp::chargeSizeFromText("1") == 1.0);      // in (0, 2): returned, setChargeSize refuses it
+  // 261020-ef1: the minimum size allowed for a charge is 2, not 1 - values in (0, 2) clamp UP to it
+  // (before, "1" was returned as 1.0 and then silently refused by setChargeSize: nothing applied).
+  CHECK(efapp::chargeSizeFromText("1") == 2.0);
+  CHECK(efapp::chargeSizeFromText("1.5") == 2.0);
+  CHECK(efapp::chargeSizeFromText("2") == 2.0);      // the minimum itself passes through
 }

@@ -53,6 +53,39 @@ TEST_CASE("HitCharge radius = chargeRadius / 1.5 / pixelsPerUnit") {
   CHECK_FALSE(s.HitCharge(Vec2(-2 + 0.17, 0), p));
 }
 
+// 261020-ef1: the per-charge radii. The seed/hit circle of a charge is its OWN effective drawn dot
+// (its sizePx, else chargeRadiusPx): field lines start and end on the dot the user drew, at every
+// zoom. A charge without its own size reproduces the plain seedRadius()/hitRadius() values exactly,
+// so preset/CLI parity output is untouched.
+TEST_CASE("per-charge seed/hit radii follow the charge's own drawn size (261020-ef1)") {
+  ComputeParams p;
+
+  // legacy regime: the dot in world units, hit = dot / 1.5 (the MFC ratio)
+  CHECK(p.seedRadiusFor(25.0) == doctest::Approx(p.seedRadius()));
+  CHECK(p.hitRadiusFor(25.0) == doctest::Approx(p.hitRadius()));
+  CHECK(p.seedRadiusFor(4.0) == doctest::Approx(0.04));
+  CHECK(p.hitRadiusFor(4.0) == doctest::Approx(4.0 / 1.5 / 100.0));
+  CHECK(p.seedRadiusFor(2.0) == doctest::Approx(0.02));
+  // adapted regime: the seed floor (kMinSeedWorld) and the per-charge dot cap
+  p.viewScale = 800.0;
+  CHECK(p.seedRadiusFor(4.0) == doctest::Approx(ComputeParams::kMinSeedWorld));  // clamp(2/800, 0.01, 0.04)
+  CHECK(p.hitRadiusFor(4.0) == doctest::Approx(ComputeParams::kMinSeedWorld));   // <= the seed circle
+  CHECK(p.seedRadiusFor(2.0) == doctest::Approx(ComputeParams::kMinSeedWorld));
+  p.viewScale = 150.0;
+  CHECK(p.seedRadiusFor(4.0) == doctest::Approx(2.0 / 150.0));  // clamp(2/150, 0.01, 0.04): the 2 px circle
+  CHECK(p.hitRadiusFor(4.0) == doctest::Approx(2.0 / 150.0));
+  // the plain accessors stay the default-dot forms
+  CHECK(p.seedRadius() == doctest::Approx(p.seedRadiusFor(p.chargeRadiusPx)));
+  CHECK(p.hitRadius() == doctest::Approx(p.hitRadiusFor(p.chargeRadiusPx)));
+  // a line is never born inside its own hit zone: seed >= hit for every dot at every scale
+  for (const double dot : {2.0, 4.0, 25.0, 120.0}) {
+    for (const double vs : {0.0, 150.0, 800.0, 2500.0}) {
+      p.viewScale = vs;
+      REQUIRE(p.seedRadiusFor(dot) >= p.hitRadiusFor(dot));
+    }
+  }
+}
+
 TEST_CASE("totalCharge / hasDifferentSigns") {
   bool diff = true;
   ChargeSystem s;

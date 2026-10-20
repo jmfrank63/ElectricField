@@ -304,6 +304,16 @@ double zoomCeiling(const double ppuBase, const double dotRadiusPx) {
   return std::clamp(dotRadiusPx / ef::ComputeParams::kMinSeedWorld / ppuBase, kZoomMin, kZoomMax);
 }
 
+// 261020-ef1: the SMALLEST effective dot in the tab drives the ceiling (see editor.hpp).
+double tabZoomCeiling(const Tab& t, const double ppuBase, const double defaultDotPx) {
+  double dot = defaultDotPx;
+  for (const auto& c : t.field.charges) {
+    const double s = c.sizePx > 0.f ? static_cast<double>(c.sizePx) : defaultDotPx;
+    if (s > 0.0 && (dot <= 0.0 || s < dot)) dot = s;
+  }
+  return zoomCeiling(ppuBase, dot);
+}
+
 bool zoomAt(Tab& t, const double factor, const ef::Vec2 anchor, const double zoomMax) {
   if (!(factor > 0.0) || !std::isfinite(factor)) return false;
   const double ceiling = std::clamp(zoomMax, kZoomMin, kZoomMax);

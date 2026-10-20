@@ -107,6 +107,12 @@ inline constexpr double kZoomMax = 40.0;
 // and the dot in the SAME space - the GUI uses logical px, which makes the ceiling display-scale-
 // independent. Degenerate inputs (nothing measured/applied yet) fall back to the static kZoomMax.
 double zoomCeiling(double ppuBase, double dotRadiusPx);
+// 261020-ef1: per-charge sizes drive the ceiling too. The smallest EFFECTIVE dot in the tab (a charge
+// with sizePx 0 inherits defaultDotPx) must cover its floored seed circle at every legal zoom - the
+// deep zoom of a tab holding a 2 px charge used to keep the Options-derived ceiling and show that
+// charge's untraced annulus with the field lines ending on it (the owner's "field lines do not end on
+// the charge"). No charges -> the plain default-dot ceiling.
+double tabZoomCeiling(const Tab& t, double ppuBase, double defaultDotPx);
 // Multiplies the zoom by `factor` while keeping `anchor` (the world point under the mouse) at the same
 // screen position. Clamped to [kZoomMin, zoomMax] - the caller passes zoomCeiling(...) as zoomMax
 // (kZoomMax when not, e.g. before the first frame has measured the canvas).

@@ -201,3 +201,31 @@ TEST_CASE("zoom-adaptive radii: legacy at/below kRefPpu, clamped shrink above (v
   for (const auto& s : planSeeds(single, p))
     CHECK((s.point - single.charges[s.chargeIndex].position).Length() == doctest::Approx(2.0 / 150.0));
 }
+
+// 261020-ef1: the seed circle is each charge's OWN effective drawn dot (its sizePx, else the Options
+// default). A charge with its own small size used to seed (and hit) on the Options-sized circle: the
+// lines stopped short of the drawn dot leaving the untraced annulus the owner screenshotted.
+TEST_CASE("per-charge seed placement and hit targets (261020-ef1)") {
+  ChargeSystem field;
+  field.charges.push_back(Charge{1, Vec2{0, 0}, 0, "", 4.f});  // a 4 px dot of its own
+  field.charges.push_back(Charge{-1, Vec2{5, 0}});             // no size: the 25 px Options default
+  ComputeParams p;                                             // legacy regime
+
+  const auto seeds = planSeeds(field, p);
+  REQUIRE(seeds.size() >= 17);  // 16 on the + charge (source), 1 on the - (sink, equipotentials on)
+  for (const auto& s : seeds) {
+    const double r = (s.point - field.charges[s.chargeIndex].position).Length();
+    if (s.chargeIndex == 0)
+      CHECK(r == doctest::Approx(0.04));  // born on the 4 px dot's edge (4 px / 100 ppu)
+    else
+      CHECK(r == doctest::Approx(0.25));  // the unsized charge keeps the Options-sized circle
+  }
+
+  // Hit targets follow the same dots: a point 0.1 world from the 4 px charge is OUTSIDE its
+  // 4/1.5/100 = 0.0267 hit circle (the old shared 25 px radius killed lines there), while the
+  // unsized partner still hits at its 25/1.5/100 circle.
+  CHECK(field.HitCharge(Vec2{0.02, 0}, p));
+  CHECK_FALSE(field.HitCharge(Vec2{0.1, 0}, p));
+  CHECK(field.HitCharge(Vec2{5.0 + 0.16, 0}, p));
+  CHECK_FALSE(field.HitCharge(Vec2{5.0 + 0.17, 0}, p));
+}

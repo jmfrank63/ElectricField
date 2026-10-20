@@ -56,6 +56,23 @@ struct ComputeParams {
     if (!adapts()) return legacy;
     return std::min(legacy, seedRadius());
   }
+
+  // 261020-ef1: the same two radii for a SPECIFIC charge, derived from its EFFECTIVE drawn dot
+  // (its own sizePx, else chargeRadiusPx - the fallback the GUI draws with). Field lines must start
+  // and end ON the charge the user drew, at every zoom: a charge with its own small size used to
+  // seed/hit on the Options-sized circle and showed a white annulus with the lines stopping short of
+  // the dot. A charge without its own size (sizePx 0, every preset/collection legacy line) passes
+  // chargeRadiusPx and reproduces the values above bit-for-bit, so ef-cli parity output is untouched.
+  double seedRadiusFor(const double effectiveDotPx) const {
+    const double dotWorld = effectiveDotPx / static_cast<double>(pixelsPerUnit);
+    if (!adapts()) return dotWorld;
+    return std::clamp(kSeedPx / viewScale, kMinSeedWorld, dotWorld);
+  }
+  double hitRadiusFor(const double effectiveDotPx) const {
+    const double legacy = effectiveDotPx / 1.5 / static_cast<double>(pixelsPerUnit);
+    if (!adapts()) return legacy;
+    return std::min(legacy, seedRadiusFor(effectiveDotPx));
+  }
 };
 
 }  // namespace ef

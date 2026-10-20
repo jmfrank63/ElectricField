@@ -207,6 +207,61 @@ TEST_CASE("adapted rings record anchors at the target view density (v2.6 phase 2
     CHECK((b.points[i] - b.points[i - 1]).Length() * adapted.viewScale >= 8.0 - 1e-9);
 }
 
+// 261020-ef1 fan regression: the ring-closure test measured "within 6 px of the start" at the FIXED
+// 100 px/unit reference. In the zoom-adapted regime that world threshold (0.06) exceeds whole ring
+// diameters, so rings closed after a fraction of their circle with a straight chord up to 150
+// target-view px long - the owner's screenshot: arcs bunching into near-straight jogged "blades" on
+// one side, clean rings on the other. The close test now measures at the TARGET-view scale.
+TEST_CASE("adapted equipotential rings close around the FULL circle (261020-ef1)") {
+  ChargeSystem field;
+  field.charges.push_back(Charge{-1, Vec2{0, 0}});  // the owner's scene: a single -1 charge
+  CollectHooks h;
+  rk::Euler<Vec2> solver;
+  ComputeParams p;
+  p.viewScale = 2500.0;                 // deep zoom: the ring sits at a few hundredths of a world unit
+  const Vec2 start(-0.0304, 0.00605);   // r ~= 0.031 world = ~77 target-view px from the charge
+  const PotentialLine line = traceEquipotential(solver, field, p, start, -30.0, h);
+  REQUIRE(line.points.size() > 20);
+  REQUIRE(line.points.front() == line.points.back());  // closed (startPoint pushed again)
+
+  // Unwrap the recorded angles: the trace must sweep the whole circle (the old bug stopped after
+  // ~147 degrees, when the oversized chord test fired near the antipode).
+  double turn = 0.0, prev = 0.0, rmin = 1e9, rmax = 0.0;
+  for (std::size_t i = 0; i + 1 < line.points.size(); ++i) {  // the last point repeats the first
+    const double a = std::atan2(line.points[i].Y, line.points[i].X);
+    if (i == 0) {
+      prev = a;
+      continue;
+    }
+    double d = a - prev;
+    while (d > kPi) d -= 2.0 * kPi;
+    while (d < -kPi) d += 2.0 * kPi;
+    turn += d;
+    prev = a;
+    const double r = line.points[i].Length();
+    rmin = std::min(rmin, r);
+    rmax = std::max(rmax, r);
+  }
+  CHECK(std::abs(turn) > 2.0 * kPi * 0.95);
+  // ... and stays a circle: the radius spread is a hair of the target-view spacing, not the old
+  // 30-40 px eccentric wobbling.
+  CHECK((rmax - rmin) * p.viewScale < 10.0);
+
+  // Legacy regime unchanged: recordPx == px there, so the closure behaviour and the recorded points
+  // are exactly what they were before the fix (a full-size legacy ring: a 0.03 world ring records
+  // only ~3 anchors at the 100 px/unit legacy density).
+  ChargeSystem dipole = preset("dipole");
+  ComputeParams legacy;
+  const Vec2 onAxis(-2.0 + 1.0, 0.0);  // a 1-world-unit ring around the + charge (as in the closure test)
+  const PotentialLine baseline = traceEquipotential(solver, dipole, legacy, onAxis, 0.7, h);
+  REQUIRE(baseline.points.size() > 20);
+  CHECK(baseline.points.front() == baseline.points.back());
+  const PotentialLine again = traceEquipotential(solver, dipole, legacy, onAxis, 0.7, h);
+  REQUIRE(again.points.size() == baseline.points.size());
+  for (std::size_t i = 0; i < baseline.points.size(); ++i)
+    CHECK(again.points[i] == baseline.points[i]);
+}
+
 TEST_CASE("cancel flag is polled: a stopped tracer returns after at most one stride and reports cancelled") {
   const ChargeSystem dipole = preset("dipole");
   ComputeParams p;

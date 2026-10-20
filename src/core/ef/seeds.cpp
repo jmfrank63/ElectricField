@@ -11,11 +11,16 @@ std::vector<Seed> planSeeds(const ChargeSystem& field, const ComputeParams& p) {
   std::vector<Seed> out;
   bool hasDifferentSigns = false;
   const int total = field.totalCharge(hasDifferentSigns);
-  const double r = p.seedRadius();
 
   for (std::size_t ci = 0; ci < field.charges.size(); ++ci) {
     const Charge& charge = field.charges[ci];
     if (charge.charge == 0) continue;
+
+    // 261020-ef1: the seed circle is the charge's OWN effective drawn dot (its sizePx, else the
+    // Options default) - the lines are born on the dot the user drew, at every zoom. A charge
+    // without its own size reproduces the former p.seedRadius() value exactly (parity).
+    const double dotPx = charge.sizePx > 0.f ? static_cast<double>(charge.sizePx) : p.chargeRadiusPx;
+    const double r = p.seedRadiusFor(dotPx);
 
     const double angle_step = 2. * kPi / (std::abs(static_cast<double>(charge.charge)) * p.linesPerUnitCharge);
 

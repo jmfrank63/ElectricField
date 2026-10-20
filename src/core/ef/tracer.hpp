@@ -195,7 +195,14 @@ PotentialLine traceEquipotential(Solver& solver, const ChargeSystem& field, cons
     if (solver.IsAdaptive()) step = next_step;
 
     const double dist = (startPoint - point).Length();
-    if (dist * px < 6. && t > 2. * dist) {
+    // 261020-ef1: the "within 6 px of the start" close test must be measured at the scale the ring is
+    // drawn at. It used the FIXED 100 px/unit reference (px), so in the zoom-adapted regime
+    // (recordPx = viewScale > 100) the world threshold 6/100 was larger than whole ring diameters:
+    // rings closed after a fraction of their circle with a straight chord up to 6/100*viewScale px
+    // long (the "fan of blades" the owner reported: arcs bunching into near-straight jogged lines on
+    // one side, clean rings on the other). recordPx is exactly px in the legacy regime, so ef-cli /
+    // MFC-parity output is bit-identical.
+    if (dist * recordPx < 6. && t > 2. * dist) {
       line.points.push_back(startPoint);  // close the loop
       line.weightCenter /= t;             // divide by the whole 'weight' of the curve
       break;

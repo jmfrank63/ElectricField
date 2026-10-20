@@ -2017,8 +2017,8 @@ std::string App::command(const std::string& line) {
     // v2.6 phase 2: the same ceiling as the UI - at the ceiling the floored seed circle fills the
     // drawn dot (the applied charge size, logical px; base 100 in the logical space). Before the first
     // frame has measured the canvas the static kZoomMax still applies (the first drawn frame
-    // re-clamps the stored zoom).
-    efapp::editor::zoomAt(*t, f, t->centre, efapp::editor::zoomCeiling(100.0, options_.draw.chargeRadiusPx));
+    // re-clamps the stored zoom). 261020-ef1: per-charge sizes are included (the smallest effective dot).
+    efapp::editor::zoomAt(*t, f, t->centre, efapp::editor::tabZoomCeiling(*t, 100.0, options_.draw.chargeRadiusPx));
     return "ok";
   }
   if (cmd == "view.pan") {

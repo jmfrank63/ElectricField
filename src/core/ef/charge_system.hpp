@@ -47,8 +47,12 @@ class ChargeSystem {
   }
   Vec2 ENormalized(const Vec2& pos) const { return E(pos).Normalize(); }
   bool HitCharge(const Vec2& pos, const ComputeParams& p) const {
-    for (const auto& c : charges)
-      if (c.Hit(pos, p.hitRadius())) return true;
+    for (const auto& c : charges) {
+      // 261020-ef1: the hit target is the charge's OWN effective drawn dot (its sizePx, else the
+      // Options default) - a field line ends on the dot the user drew, at every zoom.
+      const double dotPx = c.sizePx > 0.f ? static_cast<double>(c.sizePx) : p.chargeRadiusPx;
+      if (c.Hit(pos, p.hitRadiusFor(dotPx))) return true;
+    }
     return false;
   }
 

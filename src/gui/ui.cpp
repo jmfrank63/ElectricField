@@ -110,7 +110,7 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   // to the stored zoom every frame - a smaller charge size after an Options change or a window shrunk
   // after a deep zoom re-clamps it here.
   const double dotPx = env.options ? env.options->draw.chargeRadiusPx : ef::DrawStyle{}.chargeRadiusPx;
-  const double zoomCeiling = efapp::editor::zoomCeiling(100.0, dotPx);
+  const double zoomCeiling = efapp::editor::tabZoomCeiling(t, 100.0, dotPx);  // 261020-ef1: per-charge sizes included
   t.zoom = std::min(t.zoom, zoomCeiling);
   view.pixelsPerUnit *= t.zoom;  // v2.2 zoom
   view.centre = t.centre;        // v2.2 pan
@@ -722,7 +722,7 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   {
     const float bw = (kEditorPanelWidth * env.k - 2 * ImGui::GetStyle().ItemSpacing.x) / 3.f;
     const double dotPx = env.options ? env.options->draw.chargeRadiusPx : ef::DrawStyle{}.chargeRadiusPx;
-    const double ceiling = efapp::editor::zoomCeiling(100.0, dotPx);  // same ceiling as the canvas (logical base)
+    const double ceiling = efapp::editor::tabZoomCeiling(t, 100.0, dotPx);  // same ceiling as the canvas (logical base)
     if (ImGui::Button("Zoom -", ImVec2(bw, 0.f))) efapp::editor::zoomAt(t, 1.0 / 1.25, t.centre, ceiling);
     ImGui::SameLine();
     if (ImGui::Button("Zoom +", ImVec2(bw, 0.f))) efapp::editor::zoomAt(t, 1.25, t.centre, ceiling);

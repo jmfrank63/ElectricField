@@ -92,6 +92,11 @@ struct Tab {
   // commitDrag, so a whole physical drag coalesces into a single history entry.
   int dragIndex = -1;
   HistoryEntry dragPre;
+  // 261020-ef2 review: set by applyDefaults when the Options charge size changed WHILE this tab was
+  // computing (its running session still uses the old fallback radius for inherit-sized charges).
+  // poll() consumes it when the result publishes: the tab is marked stale with a pending
+  // recalculation, so the lines refit instead of shipping the mid-flight radius forever.
+  bool refitOnDone = false;
   // v2.3 GRID: snap grid settings (independently active and visible; Cartesian or polar; own origin).
   GridSettings grid;
 };

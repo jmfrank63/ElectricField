@@ -306,6 +306,51 @@ TEST_CASE("applyDefaults: the Options charge size reaches the tabs, inherit char
   CHECK(t.stale);         // the inherit tab follows
 }
 
+// 261020-ef2 review, medium finding: a default-size change WHILE a tab computes must not ship the
+// mid-flight radius - poll() marks the tab for recalculation when the held session finally publishes.
+TEST_CASE("applyDefaults during a computation refits the tab when it publishes (261020-ef2 review)") {
+  ef::ChargeSystem field;
+  field.charges.push_back(ef::Charge{1, ef::Vec2{0, 0}});
+  auto held = std::make_unique<ef::ComputeSession>(field, ef::ComputeParams{});
+  bool released = false;
+  efapp::Workspace ws{ef::ComputeParams{}, [&](const ef::ChargeSystem&, const ef::ComputeParams&) -> std::unique_ptr<efapp::ISession> {
+    struct Held final : efapp::ISession {
+      Held(bool* r, ef::ComputeSession* s) : released(r), s(s) {}
+      void cancel() override { *released = true; s->cancel(); }
+      ef::SessionStatus poll(ef::PollBatch& out) override {
+        if (!*released) return ef::SessionStatus{};  // hold: the tab stays Computing
+        return s->poll(out);
+      }
+      bool takeResult(ef::FieldResult& out) override { return s->takeResult(out); }
+      bool* released;
+      ef::ComputeSession* s;
+    };
+    return std::make_unique<Held>(&released, held.get());
+  }};
+  const unsigned serial = ws.openEmpty();
+  efapp::Tab& t = *ws.find(serial);
+  CHECK(t.session != nullptr);  // held mid-computation
+
+  ef::ComputeParams p;
+  p.chargeRadiusPx = 60.0;
+  ws.applyDefaults(p);
+  CHECK(t.params.chargeRadiusPx == 60.0);
+
+  // Release the held session: the result publishes (with the OLD radius - the session kept its own
+  // params copy) and the tab must be marked so the lines refit to the new default.
+  released = true;
+  for (int i = 0; i < 20000 && ws.find(serial)->session != nullptr; ++i) {
+    ws.pollAll();
+    if (ws.find(serial)->session != nullptr) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  efapp::Tab& done = *ws.find(serial);
+  REQUIRE(done.state == efapp::TabState::Done);
+  CHECK(done.stale);                // the lines still show the old fallback radius
+  CHECK(done.pendingRecalcAt == -2.0);
+  CHECK(ws.calculate(serial));      // F5 (or Continuous calculation) runs with the new radius
+  CHECK(done.params.chargeRadiusPx == 60.0);
+}
+
 // v2.6 phase 2: zoom-settle recalculation. The GUI arming lives in drawCanvas, so the doctest drives the
 // WORKSPACE contract: pendingViewRecalcAt -2 -> deadline -> calculate with params.viewScale set, and no
 // stale/dirty/undo anywhere on that path (a view change is not an edit).
@@ -746,8 +791,10 @@ TEST_CASE("addCharge stores the validated default size on the charge and its sce
   CHECK(t.field.charges[4].sizePx == 0.0f);
   CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 3.5}, 2, 1.f));  // 1 px is legal now (261020-ef2)
   CHECK(t.field.charges[5].sizePx == 1.0f);
-  CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 4}, 2, 120.f));  // the range edges are kept
-  CHECK(t.field.charges[6].sizePx == 120.0f);
+  // 261020-ef2 review: the 120 px request clamps to the nearest neighbour - the charge at (0, 3.5)
+  // sits 0.5 world (50 px) away.
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 4}, 2, 120.f));
+  CHECK(t.field.charges[6].sizePx == 50.0f);
   CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 5}, 2));  // the default argument stays 0
   CHECK(t.field.charges[7].sizePx == 0.0f);
   CHECK_FALSE(efapp::editor::addCharge(t, ef::Vec2{0, 6}, 0));  // 261020-ef2: a 0 value is not a charge
@@ -830,7 +877,6 @@ TEST_CASE("setChargeSize: validation, scene sync, stale + dirty, history (v2.6 p
   CHECK_FALSE(efapp::editor::setChargeSize(t, 1, -5.f));
   CHECK(t.field.charges[1].sizePx == 120.0f);
   CHECK_FALSE(efapp::editor::setChargeSize(t, 7, 40.f));  // bad index
-
   // The undo/redo snapshots carry size (and id) with the whole ChargeSystem.
   CHECK(efapp::editor::setChargeSize(t, 0, 3.f));
   CHECK(efapp::editor::undo(t));
@@ -839,6 +885,34 @@ TEST_CASE("setChargeSize: validation, scene sync, stale + dirty, history (v2.6 p
   CHECK(t.scene.charges[0].sizePx == 40.0f);
   CHECK(efapp::editor::redo(t));
   CHECK(t.field.charges[0].sizePx == 3.0f);
+}
+
+// 261020-ef2 review: charges must never overlap - a resize clamps the size to the distance to the
+// nearest other charge (logical px at the 100 px base scale), and a new charge's default size is
+// clamped the same way at add time. The coupled value follows the CLAMPED size. Requests above the
+// global 120 px cap stay refused (the typed field and the API clamp before calling).
+TEST_CASE("charge sizes never overlap: resize and add clamp to the nearest neighbour (261020-ef2 review)") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);  // +1 (-2,0), -1 (2,0): 4 world apart = 400 px at the base scale
+  CHECK(efapp::editor::setChargeSize(t, 0, 120.f));
+  CHECK(t.field.charges[0].sizePx == 120.0f);  // the 400 px gap clears the global 120 px cap
+
+  REQUIRE(efapp::editor::moveCharge(t, 1, ef::Vec2{-1, 0}));  // 1 world from charge 0 = 100 px
+  CHECK(efapp::editor::setChargeSize(t, 0, 120.f));
+  CHECK(t.field.charges[0].sizePx == 100.0f);  // clamped to the neighbour distance
+  CHECK(efapp::editor::setChargeSize(t, 0, 0.f));  // inherit is always allowed
+  CHECK(t.field.charges[0].sizePx == 0.0f);
+
+  // The coupled value follows the CLAMPED size.
+  CHECK(efapp::editor::setChargeSize(t, 0, 120.f, true));
+  CHECK(t.field.charges[0].sizePx == 100.0f);
+  CHECK(t.field.charges[0].charge == 100);
+
+  // addCharge clamps the Options default to the new charge's nearest neighbour.
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{-1.1, 0}, 2, 25.f));  // 0.1 world from charge 1 = 10 px
+  CHECK(t.field.charges[2].sizePx == 10.0f);
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 0}, 2, 25.f));  // far from everyone: the default stands
+  CHECK(t.field.charges[3].sizePx == 25.0f);
 }
 
 // 261020-ef2: with the coupling set, applying a non-zero size also sets the charge's value to that

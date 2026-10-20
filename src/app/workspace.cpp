@@ -103,13 +103,20 @@ void Workspace::applyDefaults(const ef::ComputeParams& p) {
   for (auto& tp : tabs_) {
     Tab& t = *tp;
     t.params.chargeRadiusPx = p.chargeRadiusPx;
-    if (!sizeChanged || t.session != nullptr) continue;  // a computing tab re-fits on its next computation
+    if (!sizeChanged) continue;
+    bool hasInherit = false;
     for (const auto& c : t.field.charges)
       if (c.sizePx == 0.f) {
-        t.stale = true;          // the lines' start/end circles move with the default
-        t.pendingRecalcAt = -2;  // Continuous calculation picks it up; otherwise the F5 hint shows
+        hasInherit = true;
         break;
       }
+    if (!hasInherit) continue;  // every charge carries its own size: nothing depends on the default
+    if (t.session != nullptr)
+      t.refitOnDone = true;    // 261020-ef2 review: the running session uses the old radius - refit when it publishes
+    else {
+      t.stale = true;          // the lines' start/end circles move with the default
+      t.pendingRecalcAt = -2;  // Continuous calculation picks it up; otherwise the F5 hint shows
+    }
   }
 }
 
@@ -126,6 +133,7 @@ bool Workspace::calculate(const unsigned serial) {
   t->linesReceived = 0;
   t->state = TabState::Computing;
   t->stale = false;
+  t->refitOnDone = false;    // a fresh computation supersedes a pending mid-flight refit
   t->pendingRecalcAt = -1.0;  // a manual/automatic recalculation disarms the auto deadline
   try {
     t->session = factory_(t->field, t->params);
@@ -240,6 +248,18 @@ void Workspace::poll(Tab& t) {
     if (t.session->takeResult(r)) {
       t.scene = ef::buildScene(t.field, r);
       t.state = TabState::Done;
+      // 261020-ef2 review: the Options charge size changed while this session was running - the
+      // published lines still use the old fallback radius. Mark the tab so the lines refit
+      // (F5 / Continuous calculation) instead of shipping the mid-flight radius indefinitely.
+      if (t.refitOnDone) {
+        t.refitOnDone = false;
+        for (const auto& c : t.field.charges)
+          if (c.sizePx == 0.f) {
+            t.stale = true;
+            t.pendingRecalcAt = -2;
+            break;
+          }
+      }
     } else {
       t.state = TabState::Failed;
       t.error = "The computation produced no result.";

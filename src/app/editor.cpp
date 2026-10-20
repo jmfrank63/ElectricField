@@ -136,7 +136,17 @@ bool addCharge(Tab& t, ef::Vec2 world, int value, float defaultSizePx) {
   const std::uint64_t next = std::max(nextChargeId(t.field), t.chargeIdWater + 1);
   t.chargeIdWater = next;  // the watermark advances regardless: the saturated range stays retired
   const std::uint64_t id = next <= ef::kMaxChargeId ? next : 0;
-  const float sizePx = defaultSizePx == 0.f || (defaultSizePx >= 1.f && defaultSizePx <= 120.f) ? defaultSizePx : 0.f;
+  float sizePx = defaultSizePx == 0.f || (defaultSizePx >= 1.f && defaultSizePx <= 120.f) ? defaultSizePx : 0.f;
+  // 261020-ef2 review: charges must never overlap - a new charge's size is clamped to the distance
+  // to its nearest neighbour (the same base-scale rule setChargeSize applies on resize).
+  if (sizePx > 0.f) {
+    float maxPx = 120.f;
+    for (const ef::Charge& other : t.field.charges) {
+      const double gap = (other.position - at).Length() * 100.0;
+      maxPx = std::min(maxPx, static_cast<float>(gap));
+    }
+    sizePx = std::clamp(sizePx, 1.f, std::max(1.f, maxPx));
+  }
   t.field.charges.push_back(ef::Charge{value, at, id, std::string(), sizePx});
   t.scene.charges.push_back(ef::SceneCharge{at, value, sizePx});
   t.selected = static_cast<int>(t.field.charges.size()) - 1;
@@ -223,6 +233,17 @@ bool setChargeSize(Tab& t, std::size_t index, float sizePx, bool coupleValue) {
   if (!editable(t) || index >= t.field.charges.size()) return false;
   if (!(sizePx == 0.f || (sizePx >= 1.f && sizePx <= 120.f))) return false;  // 0 = inherit, else 1..120 px
   ef::Charge& c = t.field.charges[index];
+  // 261020-ef2 review: charges must never overlap - a non-zero size is clamped to the distance to
+  // the nearest OTHER charge (logical px at the 100 px base scale; zooming scales dots and gaps
+  // alike, so base-scale separation is the zoom-independent notion of "not overlapping"). The
+  // minimum of 1 px survives even a stacked placement.
+  float maxPx = 120.f;
+  for (std::size_t k = 0; k < t.field.charges.size(); ++k) {
+    if (k == index) continue;
+    const double gap = (t.field.charges[k].position - c.position).Length() * 100.0;
+    maxPx = std::min(maxPx, static_cast<float>(gap));
+  }
+  if (sizePx > 0.f) sizePx = std::clamp(sizePx, 1.f, std::max(1.f, maxPx));
   // 261020-ef2: with the coupling set, the size IS the value's magnitude (the pair starts at
   // value 1 = size 1); the sign survives. An inherit (0) resize couples nothing.
   const int coupled = coupleValue && sizePx > 0.f ? (c.charge < 0 ? -1 : 1) * static_cast<int>(std::lround(sizePx)) : c.charge;

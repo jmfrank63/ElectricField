@@ -861,7 +861,11 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
       ui.chargeSizeBufSerial = t.serial;
       ui.chargeSizeBufSelected = t.selected;
     }
-    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 110.f * env.k);
+    // 261020-ef2 review: the Size field gets the same up/down buttons as the Value/X/Y rows - easy
+    // mouse adjustments. Both steppers and the typed text go through setChargeSize (and honour the
+    // value coupling); a resize is a recalculation hint now.
+    const float sizeRowButtons = 2 * (22.f + 6.f * env.k) + 8.f * env.k;
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - sizeRowButtons - 96.f * env.k);
     ImGui::InputText("##chargesize", ui.chargeSizeBuf, sizeof(ui.chargeSizeBuf));
     if (ImGui::IsItemEdited()) {
       const double parsed = efapp::chargeSizeFromText(ui.chargeSizeBuf);
@@ -880,7 +884,16 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
       ui.chargeSizeBufSerial = t.serial;
       ui.chargeSizeBufSelected = t.selected;
     }
+    const bool coupled = env.options != nullptr && env.options->coupleValueSize;
     ImGui::SameLine(0.f, 6.f * env.k);
+    if (stepArrowButton("##chargesize-", 3)) {
+      if (efapp::editor::setChargeSize(t, at, c.sizePx - 1.f, coupled)) armAutoRecalc(t);
+    }
+    ImGui::SameLine(0.f, 4.f * env.k);
+    if (stepArrowButton("##chargesize+", 1)) {
+      if (efapp::editor::setChargeSize(t, at, c.sizePx + 1.f, coupled)) armAutoRecalc(t);
+    }
+    ImGui::SameLine(0.f, 8.f * env.k);
     ImGui::AlignTextToFramePadding();
     ImGui::TextDisabled("Size (0 = default)");
 

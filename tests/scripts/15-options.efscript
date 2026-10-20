@@ -5,11 +5,11 @@ app.wait-done
 app.expect drawsize=25
 options.set charge-size 60
 app.expect drawsize=60
-app.expect-error "2..120" options.set charge-size 121
-app.expect-error "2..120" options.set charge-size 1
+app.expect-error "1..120" options.set charge-size 121
+app.expect-error "1..120" options.set charge-size 0
 app.expect drawsize=60
-options.set charge-size 2
-app.expect drawsize=2
+options.set charge-size 1
+app.expect drawsize=1
 options.set charge-size 120
 app.expect drawsize=120
 app.quit force

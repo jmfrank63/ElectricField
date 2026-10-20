@@ -29,10 +29,9 @@ std::string failureDetail(const std::string& error);
 std::string baseTitle(const std::string& title);
 
 // v2.6 (review): the charge editor's Size-field text parsed into the size to apply, clamped to
-// [2, 120] (values below 2 clamp UP to the minimum; 0 = inherit the default; negative clamps to 0),
+// [1, 120] (values below 1 clamp UP to the minimum; 0 = inherit the default; negative clamps to 0),
 // or -1 when the text is transient or not a number ("-", "", "60x") - nothing applies then. The
-// result is always acceptable to editor::setChargeSize. 261020-ef1: "1" (any (0, 2) value) clamps
-// to 2 - the minimum size allowed for a charge - instead of being silently refused downstream.
+// result is always acceptable to editor::setChargeSize. The minimum size allowed for a charge is 1.
 double chargeSizeFromText(const char* text);
 
 // Display-scale k: clamp to [0.75, 4.0]; non-finite or <= 0 falls back to 1.0.

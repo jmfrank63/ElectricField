@@ -43,7 +43,9 @@ the derived `Charge N`; names are comma-free on disk). Older dumps' `v,x,y` pref
 containing ';' or '=' makes the dump ambiguous for consumers that split on them - avoid such names
 in scripts.
 
-`drawsize=` is the drawn charge radius in px (v2.5 SIZE-01, valid range 2-120; the `chargeSize` key in options.ini).
+`drawsize=` is the drawn charge radius in px (v2.5 SIZE-01, valid range 1-120; the `chargeSize` key in options.ini).
+
+`couple=` is the value-and-size coupling flag (261020-ef2, `coupleValueSize` in options.ini).
 
 `recents=` is the File > Recent Collections menu, newest first (261012-h26; the opened collection
 files' names, persisted as `recent` path lines in session.ini). v2.6 REC-02: at startup the list is
@@ -101,10 +103,10 @@ REC-02).
 ### Editor
 | Command | Effect |
 |---|---|
-| `charge.add <value> <x> <y>` | append a charge (snapped when the grid is active) and select it |
-| `charge.select <index>` / `charge.move <i> <x> <y>` / `charge.value <i> <v>` / `charge.sign <i>` / `charge.remove <i>` | edit charges (index defaults to the selection where optional) |
+| `charge.add <value> <x> <y>` | append a charge (snapped when the grid is active) and select it; a value of 0 is refused (261020-ef2) |
+| `charge.select <index>` / `charge.move <i> <x> <y>` / `charge.value <i> <v>` / `charge.sign <i>` / `charge.remove <i>` | edit charges (index defaults to the selection where optional); `charge.value` refuses 0 (`error: the charge value must not be 0`) |
 | `charge.name <i> <name...>` | set the charge's name (v2.6 phase 3): remaining tokens joined with single spaces, quoted names arrive as one token, ',' is stripped, empty resets to the derived "Charge N"; marks the tab dirty without invalidating the drawn lines |
-| `charge.size <i> <px>` | set the charge's own drawn radius (v2.6 phase 3): 0 = the Options default, else 2-120 px (`error: charge size must be 0 or 2-120`); dirty only, the canvas redraws at once |
+| `charge.size <i> <px>` | set the charge's own drawn radius (v2.6 phase 3): 0 = the Options default, else 1-120 px (`error: charge size must be 0 or 1-120`); marks the tab for recalculation (the per-charge seed/hit circles follow the size); with `options.set couple-value-size on` a resize also sets the charge's value to the size (sign preserved) |
 | `editor.undo` / `editor.redo` | step through charge and method changes |
 
 ### View & grid
@@ -117,7 +119,7 @@ REC-02).
 ### Options
 | Command | Effect |
 |---|---|
-| `options.set lines\|threads\|interval\|equipotentials\|method\|charge-size <value>` | change computation/draw options (validated, persisted); `charge-size` = the drawn charge radius, 2-120 px (v2.5) - since v2.6 phase 3 it is the DEFAULT size for NEW charges and the fallback for charges without their own size |
+| `options.set lines\|threads\|interval\|equipotentials\|method\|charge-size\|couple-value-size <value>` | change computation/draw options (validated, persisted); `charge-size` = the drawn charge radius, 1-120 px (v2.5, minimum 1 since 261020-ef2) - since v2.6 phase 3 it is the DEFAULT size for NEW charges and the fallback for charges without their own size; `couple-value-size on\|off` = the panel's value-and-size coupling (261020-ef2) |
 
 ## Menu parity
 

@@ -127,6 +127,7 @@ void commitDrag(Tab& t) {
 
 bool addCharge(Tab& t, ef::Vec2 world, int value, float defaultSizePx) {
   if (!editable(t)) return false;
+  if (value == 0) return false;  // 261020-ef2: 0 will not be allowed
   const ef::Vec2 at = clamped(world);
   // Identity is model logic: max over the system, and never below the tab's high-water mark, so a
   // removed charge's id is not reused (the watermark deliberately survives undo/redo snapshots).
@@ -135,7 +136,7 @@ bool addCharge(Tab& t, ef::Vec2 world, int value, float defaultSizePx) {
   const std::uint64_t next = std::max(nextChargeId(t.field), t.chargeIdWater + 1);
   t.chargeIdWater = next;  // the watermark advances regardless: the saturated range stays retired
   const std::uint64_t id = next <= ef::kMaxChargeId ? next : 0;
-  const float sizePx = defaultSizePx == 0.f || (defaultSizePx >= 2.f && defaultSizePx <= 120.f) ? defaultSizePx : 0.f;
+  const float sizePx = defaultSizePx == 0.f || (defaultSizePx >= 1.f && defaultSizePx <= 120.f) ? defaultSizePx : 0.f;
   t.field.charges.push_back(ef::Charge{value, at, id, std::string(), sizePx});
   t.scene.charges.push_back(ef::SceneCharge{at, value, sizePx});
   t.selected = static_cast<int>(t.field.charges.size()) - 1;
@@ -167,11 +168,20 @@ bool stepSelected(Tab& t, ef::Vec2 delta) {
 bool stepValue(Tab& t, int delta) {
   if (!editable(t) || t.selected < 0 || static_cast<std::size_t>(t.selected) >= t.field.charges.size()) return false;
   const std::size_t at = static_cast<std::size_t>(t.selected);
-  const int target = std::clamp(t.field.charges[at].charge + delta, -1000000, 1000000);
-  if (target == t.field.charges[at].charge) return true;  // nothing to do, no history entry
+  int target = std::clamp(t.field.charges[at].charge + delta, -1000000, 1000000);
+  // 261020-ef2: 0 is not a charge - a step that would land on it continues to the neighbour.
+  if (target == 0) target = delta > 0 ? 1 : -1;
+  return setValue(t, at, target);
+}
+
+bool setValue(Tab& t, std::size_t index, int value) {
+  if (!editable(t) || index >= t.field.charges.size()) return false;
+  if (value == 0) return false;  // 261020-ef2: 0 will not be allowed
+  value = std::clamp(value, -1000000, 1000000);
+  if (value == t.field.charges[index].charge) return true;  // nothing to do, no history entry
   recordHistory(t);
-  t.field.charges[at].charge = target;
-  syncScene(t, at);
+  t.field.charges[index].charge = value;
+  syncScene(t, index);
   t.stale = true;
   t.dirty = true;
   t.pendingRecalcAt = -2;
@@ -208,26 +218,40 @@ bool setChargeName(Tab& t, std::size_t index, const std::string& name) {
   return true;
 }
 
-bool setChargeSize(Tab& t, std::size_t index, float sizePx) {
+bool setChargeSize(Tab& t, std::size_t index, float sizePx, bool coupleValue) {
   if (!editable(t) || index >= t.field.charges.size()) return false;
-  if (!(sizePx == 0.f || (sizePx >= 2.f && sizePx <= 120.f))) return false;  // 0 = inherit, else 2..120 px
-  if (sizePx == t.field.charges[index].sizePx) return true;                  // nothing to do, no history entry
-  recordHistory(t);
-  t.field.charges[index].sizePx = sizePx;
-  syncScene(t, index);  // the canvas redraws the dot at once (sizePx is a draw property only)
+  if (!(sizePx == 0.f || (sizePx >= 1.f && sizePx <= 120.f))) return false;  // 0 = inherit, else 1..120 px
+  ef::Charge& c = t.field.charges[index];
+  // 261020-ef2: with the coupling set, the size IS the value's magnitude (the pair starts at
+  // value 1 = size 1); the sign survives. An inherit (0) resize couples nothing.
+  const int coupled = coupleValue && sizePx > 0.f ? (c.charge < 0 ? -1 : 1) * static_cast<int>(std::lround(sizePx)) : c.charge;
+  if (sizePx == c.sizePx && coupled == c.charge) return true;                // nothing to do, no history entry
+  recordHistory(t);                                                          // ONE entry covers size + coupled value
+  c.sizePx = sizePx;
+  if (coupled != c.charge) {
+    c.charge = coupled;
+    t.stale = true;  // the value is physics
+  }
+  // 261020-ef1: the per-charge seed/hit radii are derived from the drawn size, so the drawn lines
+  // ARE a function of the size: a resize marks the tab for recalculation (the previous
+  // "dirty only, never stale" contract held only while the size was purely a draw property).
+  t.stale = true;
+  t.pendingRecalcAt = -2;
+  syncScene(t, index);  // the canvas redraws the dot at once
   t.dirty = true;
   return true;
 }
 
-// WR-04: the physics slice of a ChargeSystem - the only part the drawn lines depend on. Names,
-// sizes and ids are excluded: undoing them leaves the lines correct, so the tab must not claim
-// "the lines show the previous calculation". Exact == comparisons, the same convention moveCharge
-// and commitDrag use for no-op detection.
+// WR-04: the physics slice of a ChargeSystem - the only part the drawn lines depend on. Names are
+// excluded; the SIZE is included since the per-charge seed/hit radii (261020-ef1): undoing a size
+// edit restores lines whose start/end circles differ, so the tab must claim "the lines show the
+// previous calculation". Exact == comparisons, the same convention moveCharge and commitDrag use
+// for no-op detection.
 bool samePhysics(const ef::ChargeSystem& a, const ef::ChargeSystem& b) {
   if (a.charges.size() != b.charges.size()) return false;
   for (std::size_t i = 0; i < a.charges.size(); ++i)
     if (a.charges[i].charge != b.charges[i].charge || a.charges[i].position.X != b.charges[i].position.X ||
-        a.charges[i].position.Y != b.charges[i].position.Y)
+        a.charges[i].position.Y != b.charges[i].position.Y || a.charges[i].sizePx != b.charges[i].sizePx)
       return false;
   return true;
 }

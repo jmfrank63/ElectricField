@@ -18,8 +18,26 @@ app.expect charges=1,0,0,0,1,My Charge
 # IN-05: the size is re-applied BEFORE the save so the collection file round-trip pins a NON-ZERO
 # sizePx on disk (the undo-only flow used to save size 0 and the file path went untested for 40).
 charge.size 0 40
-app.expect-error "0 or 2-120" charge.size 0 1
-app.expect-error "0 or 2-120" charge.size 0 121
+# 261020-ef2: the minimum size allowed for a charge is 1; 0.5 and 121 are refused.
+charge.size 0 1
+app.expect charges=1,0,0,1,1,My Charge
+app.expect-error "0 or 1-120" charge.size 0 0.5
+app.expect-error "0 or 1-120" charge.size 0 121
+charge.size 0 40
+# 261020-ef2: the optional value-and-size coupling - a resize sets the charge's value to the size.
+app.expect couple=0
+app.expect-error "on|off" options.set couple-value-size maybe
+options.set couple-value-size on
+app.expect couple=1
+charge.size 0 12
+app.expect charges=12,0,0,12,1,My Charge
+options.set couple-value-size off
+app.expect couple=0
+charge.size 0 40
+app.expect charges=12,0,0,40,1,My Charge  # uncoupled resize: the value stays 12
+# restore the original value through charge.value - 0 is refused (261020-ef2), 1 applies.
+app.expect-error "must not be 0" charge.value 0 0
+charge.value 0 1
 config.save-as "Identity Test"
 tab.close
 config.open "Identity Test"

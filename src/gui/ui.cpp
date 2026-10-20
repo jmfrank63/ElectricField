@@ -599,7 +599,7 @@ void optionsModal(UiState& ui, const UiEnv& env) {
       ImGui::InputDouble("Charge size", &e.chargeSize, 1.0, 10.0, "%.0f");  // v2.5 SIZE-01: dot to very large; +/- steppers like the MFC spin control
       ImGui::InputInt("Field line thickness", &e.electricThickness);
       ImGui::InputInt("Equipotential thickness", &e.potentialThickness);
-      ImGui::TextDisabled("Charge size = default size for new charges (2 - 120); thicknesses 1 - 64");
+      ImGui::TextDisabled("Charge size = default size for new charges (1 - 120); thicknesses 1 - 64");
       ImGui::EndTabItem();
     }
     ImGui::EndTabBar();
@@ -756,8 +756,12 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     int value = c.charge;
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 3 * (22.f + 6.f * env.k) - 8.f * env.k);
     if (ImGui::InputInt("##value", &value, 0, 0)) {
-      efapp::editor::stepValue(t, value - c.charge);  // realtime per keystroke
-      armAutoRecalc(t);
+      // 261020-ef2: 0 is not a charge - a typed 0 is refused and the field refreshes back to the
+      // model value (the refresh below runs while the item is not active).
+      if (value != 0) {
+        efapp::editor::setValue(t, at, value);  // realtime per keystroke
+        armAutoRecalc(t);
+      }
     }
     ImGui::SameLine(0.f, 6.f * env.k);
     if (stepArrowButton("##value-", 3)) {
@@ -856,7 +860,11 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     ImGui::InputText("##chargesize", ui.chargeSizeBuf, sizeof(ui.chargeSizeBuf));
     if (ImGui::IsItemEdited()) {
       const double parsed = efapp::chargeSizeFromText(ui.chargeSizeBuf);
-      if (parsed >= 0.0) efapp::editor::setChargeSize(t, at, static_cast<float>(parsed));
+      // 261020-ef2: with the coupling set, applying the size also sets the charge's value; either
+      // way an applied resize is a recalculation hint now (the seed/hit radii follow the size).
+      if (parsed >= 0.0 &&
+          efapp::editor::setChargeSize(t, at, static_cast<float>(parsed), env.options ? env.options->coupleValueSize : false))
+        armAutoRecalc(t);
     }
     ui.chargeSizeMin = ImGui::GetItemRectMin();  // smoke: the live-size-typing regression clicks this rect
     ui.chargeSizeMax = ImGui::GetItemRectMax();
@@ -870,6 +878,16 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     ImGui::SameLine(0.f, 6.f * env.k);
     ImGui::AlignTextToFramePadding();
     ImGui::TextDisabled("Size (0 = default)");
+
+    // 261020-ef2: the optional value-and-size coupling, right under the Size row. The flag is the
+    // global Options value (persisted in options.ini); while set, applying a charge's size sets its
+    // value to that size (sign preserved) - the coupled pair starts at value 1 = size 1.
+    if (env.coupleValueSize != nullptr) {
+      if (ImGui::Checkbox("Couple value and size", env.coupleValueSize))
+        armAutoRecalc(t);  // a later resize recomputes anyway; arming here is harmless and keeps flow
+      if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Changing the size also sets the charge's value to it (1 px = 1 unit of charge).");
+    }
 
     ImGui::BeginDisabled(t.field.charges.size() <= 1);  // EDIT-04: at least one charge remains
     if (ImGui::Button("Remove charge")) {

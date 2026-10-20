@@ -22,6 +22,7 @@ struct UiEnv {
   const char* gitHash = "";
   ef::DrawStyle drawStyle;                  // user draw options (Phase 4), unscaled; the canvas draws scaledStyle(drawStyle, k)
   const efapp::Options* options = nullptr;  // the current options, owned by App; the dialog resets its edits from here
+  bool* coupleValueSize = nullptr;          // 261020-ef2: the panel's Couple checkbox writes through to the App's Options
 };
 
 // 261012-h26: one File > Recent Collections entry: label for display (stem, unique in the list, ImGui

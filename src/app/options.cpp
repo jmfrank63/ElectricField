@@ -133,6 +133,7 @@ std::string serialize(const Options& o) {
   os << "electricLineThickness = " << static_cast<long long>(o.draw.electricThickness) << '\n';
   os << "potentialLineThickness = " << static_cast<long long>(o.draw.potentialThickness) << '\n';
   os << "chargeSize = " << static_cast<long long>(o.draw.chargeRadiusPx) << '\n';  // v2.5 SIZE-01
+  os << "coupleValueSize = " << (o.coupleValueSize ? "true" : "false") << '\n';    // 261020-ef2
   return os.str();
 }
 
@@ -206,6 +207,14 @@ ParsedOptions parse(const std::string& text) {
         r.value.draw.chargeRadiusPx = static_cast<float>(v);
       else
         r.rejectedKeys.push_back(key);
+    } else if (key == "coupleValueSize") {  // 261020-ef2
+      const std::string v = toLower(value);
+      if (v == "true" || v == "1")
+        r.value.coupleValueSize = true;
+      else if (v == "false" || v == "0")
+        r.value.coupleValueSize = false;
+      else
+        r.rejectedKeys.push_back(key);
     }
     // Unknown keys are ignored (D-03).
   }
@@ -254,6 +263,7 @@ void OptionsEdit::reset(const Options& current) {
   potential[1] = channel(current.draw.potentialLine.g);
   potential[2] = channel(current.draw.potentialLine.b);
   equipotentials = current.compute.calculateEquipotentials;
+  coupleValueSize = current.coupleValueSize;  // 261020-ef2: round-tripped (the panel owns the edit)
   error.clear();
 }
 
@@ -285,6 +295,7 @@ Options OptionsEdit::apply() const {
   o.draw.electricThickness = static_cast<float>(electricThickness);
   o.draw.potentialThickness = static_cast<float>(potentialThickness);
   o.draw.chargeRadiusPx = static_cast<float>(chargeSize);  // v2.5 SIZE-01
+  o.coupleValueSize = coupleValueSize;  // 261020-ef2: never reset by a dialog OK
   return o;
 }
 

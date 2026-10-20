@@ -45,7 +45,7 @@ std::uint64_t nextChargeId(const ef::ChargeSystem& field);
 void assignChargeIds(ef::ChargeSystem& field);
 // Appends a charge at `world`, selects it, marks stale. Assigns the id itself (max over the system,
 // and never below the tab's high-water mark: a removed charge's id is not reused) and stores
-// `defaultSizePx` after validating (0 or 2..120 px; anything else degrades to 0 = inherit the
+// `defaultSizePx` after validating (0 or 1..120 px; anything else degrades to 0 = inherit the
 // Options default - the caller passes it).
 bool addCharge(Tab& t, ef::Vec2 world, int value, float defaultSizePx = 0.f);
 // Removes the selected charge; refuses when it is the last one (EDIT-04: at least one charge remains).
@@ -57,21 +57,31 @@ bool stepValue(Tab& t, int delta);
 // Flips the sign of the selected charge's value (+10 -> -10); 0 stays 0 (v2.2 EDIT-09).
 bool flipSign(Tab& t);
 
-// v2.6 phase 3: identity edits. Name/size are collection-visible state: both mark the tab DIRTY only
-// (never stale, never pendingRecalcAt - the drawn lines are not a function of a name or size) and
-// update the scene in place where it mirrors the field (setChargeSize syncs sizePx; the name has no
-// scene copy - the tooltip reads field.charges). Undo/redo ride the existing ChargeSystem snapshots.
+// v2.6 phase 3: identity edits. Name/size are collection-visible state: both mark the tab DIRTY,
+// and the SIZE additionally marks it STALE with a pending recalculation - since the per-charge
+// seed/hit radii (261020-ef1) the drawn lines are a function of the size, so the previous
+// "dirty only, never stale" contract holds for the NAME only. Both edits update the scene in place
+// where it mirrors the field (setChargeSize syncs sizePx; the name has no scene copy - the tooltip
+// reads field.charges). Undo/redo ride the existing ChargeSystem snapshots.
 // setChargeName strips ',' (the persistence field separator) and trims leading/trailing whitespace
 // (WR-03: splitCsv trims fields on read, so the model must never hold a trimmable-only difference);
 // an identical name is a no-op that returns true without a history entry. setChargeSize validates
-// 0 or 2..120 px (else false) and is a no-op for an identical size.
+// 0 or 1..120 px (else false) and is a no-op for an identical pair; with `coupleValue` set,
+// applying a non-zero size also sets the charge's VALUE to that size (sign preserved, ONE history
+// entry) - the coupled pair starts at value 1 = size 1 (261020-ef2).
 bool setChargeName(Tab& t, std::size_t index, const std::string& name);
-bool setChargeSize(Tab& t, std::size_t index, float sizePx);
+bool setChargeSize(Tab& t, std::size_t index, float sizePx, bool coupleValue = false);
+
+// Value edits (261020-ef2): 0 is not a charge. setValue refuses it (the typed field then refreshes
+// back to the model value); stepValue continues a step that would land on 0 to the neighbour
+// (from 1 down to -1, from -1 up to 1). Both share the moveCharge discipline: no-op for an
+// identical value, one history entry, stale + pending recalculation.
+bool setValue(Tab& t, std::size_t index, int value);
 
 // v2.3 EDIT-12: history. Every successful charge/method mutation records the pre-state (capped);
 // undo/redo restore it. Both refuse while the tab is computing. WR-04: stale is set only when the
-// restored PHYSICS (charge count/values/positions) differs from `computed` - undoing a name/size-
-// only edit keeps the tab clean (no "press Calculate" hint, no pointless recalculation).
+// restored PHYSICS (charge count/values/positions/sizes) differs from `computed` - undoing a
+// name-only edit keeps the tab clean (no "press Calculate" hint, no pointless recalculation).
 inline constexpr std::size_t kHistoryLimit = 100;
 bool undo(Tab& t);
 bool redo(Tab& t);

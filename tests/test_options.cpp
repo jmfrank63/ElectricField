@@ -135,13 +135,13 @@ TEST_CASE("serialize -> parse round-trips every field (OPT-04)") {
   CHECK(r.value.draw.chargeRadiusPx == 60.f);
 }
 
-TEST_CASE("charge size (v2.5 SIZE-01): dots to very large, validated 2-120, persistable") {
+TEST_CASE("charge size (v2.5 SIZE-01, 261020-ef2): 1-120, persistable, couple flag round-trips") {
   efapp::Options o = defaults();
-  o.draw.chargeRadiusPx = 2.f;   // the dot end
+  o.draw.chargeRadiusPx = 1.f;    // the dot end (the minimum since 261020-ef2)
   CHECK(efapp::validate(o).empty());
   o.draw.chargeRadiusPx = 120.f;  // very large
   CHECK(efapp::validate(o).empty());
-  o.draw.chargeRadiusPx = 1.f;
+  o.draw.chargeRadiusPx = 0.5f;
   CHECK_FALSE(efapp::validate(o).empty());
   o.draw.chargeRadiusPx = 121.f;
   CHECK_FALSE(efapp::validate(o).empty());
@@ -150,6 +150,16 @@ TEST_CASE("charge size (v2.5 SIZE-01): dots to very large, validated 2-120, pers
   CHECK(efapp::parse("chargeSize = 45\n").value.draw.chargeRadiusPx == 45.f);
   CHECK(efapp::parse("chargeSize = 121\n").rejectedKeys.size() == 1);  // out of range -> default (25)
   CHECK(efapp::parse("chargeSize = 121\n").value.draw.chargeRadiusPx == 25.f);
+  CHECK(efapp::parse("chargeSize = 1\n").value.draw.chargeRadiusPx == 1.f);  // the new minimum loads
+
+  // 261020-ef2: the couple flag round-trips through the ini and defaults to off.
+  CHECK_FALSE(efapp::parse("chargeSize = 45\n").value.coupleValueSize);
+  CHECK(efapp::parse("coupleValueSize = true\n").value.coupleValueSize);
+  CHECK_FALSE(efapp::parse("coupleValueSize = false\n").value.coupleValueSize);
+  CHECK(efapp::parse("coupleValueSize = yes\n").rejectedKeys.size() == 1);  // bad text -> default (off)
+  efapp::Options saved = defaults();
+  saved.coupleValueSize = true;
+  CHECK(efapp::parse(efapp::serialize(saved)).value == saved);
 }
 
 TEST_CASE("comments, blank lines and unknown keys are tolerated") {
@@ -289,17 +299,17 @@ TEST_CASE("OptionsEdit: reset copies, validate rejects without clamping, apply c
   CHECK(e.apply().compute.method == ef::Method::AdaptiveDormandPrince);
 }
 
-TEST_CASE("OptionsEdit chargeSize: edges rejected without clamping, reset copies, apply converts (SIZE-01)") {
+TEST_CASE("OptionsEdit chargeSize: edges rejected without clamping, reset copies, apply converts (SIZE-01, 261020-ef2)") {
   efapp::OptionsEdit e;
   e.reset(defaults());
-  e.chargeSize = 1.9;
+  e.chargeSize = 0.9;
   CHECK_FALSE(e.validate());
   CHECK_FALSE(e.error.empty());
   e.chargeSize = 121.0;
   CHECK_FALSE(e.validate());
-  e.chargeSize = 2.0;
+  e.chargeSize = 1.0;
   CHECK(e.validate());
-  CHECK(e.apply().draw.chargeRadiusPx == 2.f);
+  CHECK(e.apply().draw.chargeRadiusPx == 1.f);
   e.chargeSize = 120.0;
   CHECK(e.validate());
   CHECK(e.apply().draw.chargeRadiusPx == 120.f);
@@ -309,5 +319,11 @@ TEST_CASE("OptionsEdit chargeSize: edges rejected without clamping, reset copies
   custom.draw.chargeRadiusPx = 60.f;
   e.reset(custom);
   CHECK(e.chargeSize == doctest::Approx(60.0));
+  CHECK(e.apply() == custom);
+
+  // 261020-ef2: the couple flag round-trips through reset/apply - a dialog OK never resets it.
+  custom.coupleValueSize = true;
+  e.reset(custom);
+  CHECK(e.coupleValueSize);
   CHECK(e.apply() == custom);
 }

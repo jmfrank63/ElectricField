@@ -702,12 +702,15 @@ TEST_CASE("addCharge stores the validated default size on the charge and its sce
   CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 2}, 2, 999.f));  // out of range degrades to 0 = inherit
   CHECK(t.field.charges[3].sizePx == 0.0f);
   CHECK(t.scene.charges[3].sizePx == 0.0f);
-  CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 3}, 2, 1.f));  // below the 2 px floor degrades too
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 3}, 2, 0.5f));  // below the 1 px floor degrades too
   CHECK(t.field.charges[4].sizePx == 0.0f);
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 3.5}, 2, 1.f));  // 1 px is legal now (261020-ef2)
+  CHECK(t.field.charges[5].sizePx == 1.0f);
   CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 4}, 2, 120.f));  // the range edges are kept
-  CHECK(t.field.charges[5].sizePx == 120.0f);
+  CHECK(t.field.charges[6].sizePx == 120.0f);
   CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 5}, 2));  // the default argument stays 0
-  CHECK(t.field.charges[6].sizePx == 0.0f);
+  CHECK(t.field.charges[7].sizePx == 0.0f);
+  CHECK_FALSE(efapp::editor::addCharge(t, ef::Vec2{0, 6}, 0));  // 261020-ef2: a 0 value is not a charge
 }
 
 TEST_CASE("setChargeName: dirty only (never stale), strips commas, identical no-op, history (v2.6 phase 3)") {
@@ -758,7 +761,7 @@ TEST_CASE("setChargeName trims leading/trailing whitespace (WR-03)") {
   CHECK(r.value[0].charges[0].name == "Pad");
 }
 
-TEST_CASE("setChargeSize: validation, scene sync, dirty only, history (v2.6 phase 3)") {
+TEST_CASE("setChargeSize: validation, scene sync, stale + dirty, history (v2.6 phase 3, 261020-ef1/ef2)") {
   ThrowFactory f;
   efapp::Tab& t = dipoleTab(f);
   CHECK_FALSE(t.stale);
@@ -767,19 +770,22 @@ TEST_CASE("setChargeSize: validation, scene sync, dirty only, history (v2.6 phas
   CHECK(efapp::editor::setChargeSize(t, 0, 40.f));
   CHECK(t.field.charges[0].sizePx == 40.0f);
   CHECK(t.scene.charges[0].sizePx == 40.0f);  // the scene mirror follows so the canvas redraws at once
-  CHECK_FALSE(t.stale);
-  CHECK(t.pendingRecalcAt == -1.0);
+  // 261020-ef1: the per-charge seed/hit radii follow the size, so a resize marks the tab for
+  // recalculation (the pre-ef1 "dirty only, never stale" contract held while it was draw-only).
+  CHECK(t.stale);
+  CHECK(t.pendingRecalcAt == -2.0);
   CHECK(t.dirty);
 
   CHECK(efapp::editor::setChargeSize(t, 0, 40.f));  // identical size: no-op
   REQUIRE(t.undo.size() == 1);
 
-  // 0 (inherit), 2 and 120 are accepted; 1, 121 and -5 are refused without touching anything.
+  // 0 (inherit), 1 and 120 are accepted; 0.5, 121 and -5 are refused without touching anything.
   CHECK(efapp::editor::setChargeSize(t, 1, 0.f));
   CHECK(t.field.charges[1].sizePx == 0.0f);
-  CHECK(efapp::editor::setChargeSize(t, 1, 2.f));
+  CHECK(efapp::editor::setChargeSize(t, 1, 1.f));
+  CHECK(t.field.charges[1].sizePx == 1.0f);
   CHECK(efapp::editor::setChargeSize(t, 1, 120.f));
-  CHECK_FALSE(efapp::editor::setChargeSize(t, 1, 1.f));
+  CHECK_FALSE(efapp::editor::setChargeSize(t, 1, 0.5f));
   CHECK_FALSE(efapp::editor::setChargeSize(t, 1, 121.f));
   CHECK_FALSE(efapp::editor::setChargeSize(t, 1, -5.f));
   CHECK(t.field.charges[1].sizePx == 120.0f);
@@ -793,6 +799,27 @@ TEST_CASE("setChargeSize: validation, scene sync, dirty only, history (v2.6 phas
   CHECK(t.scene.charges[0].sizePx == 40.0f);
   CHECK(efapp::editor::redo(t));
   CHECK(t.field.charges[0].sizePx == 3.0f);
+}
+
+// 261020-ef2: with the coupling set, applying a non-zero size also sets the charge's value to that
+// size (sign preserved, ONE history entry); an inherit (0) resize couples nothing.
+TEST_CASE("setChargeSize coupling: the size sets the value, one history entry (261020-ef2)") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);  // +1 at (-2,0), -1 at (2,0)
+
+  CHECK(efapp::editor::setChargeSize(t, 0, 40.f, true));
+  CHECK(t.field.charges[0].sizePx == 40.0f);
+  CHECK(t.field.charges[0].charge == 40);   // the value followed the size
+  CHECK(t.field.charges[1].charge == -1);   // the untouched partner
+  CHECK(efapp::editor::setChargeSize(t, 1, 25.f, true));
+  CHECK(t.field.charges[1].charge == -25);  // the sign survives
+  REQUIRE(t.undo.size() == 2);              // one entry per charge, not per field
+  CHECK(efapp::editor::undo(t));
+  CHECK(t.field.charges[1].charge == -1);   // both fields restore together
+  CHECK(t.field.charges[1].sizePx == 0.0f);
+  CHECK(efapp::editor::setChargeSize(t, 0, 0.f, true));
+  CHECK(t.field.charges[0].charge == 40);   // an inherit (0) resize couples nothing
+  CHECK(t.field.charges[0].sizePx == 0.0f);
 }
 
 TEST_CASE("undo/redo restore name+size+id together through the ChargeSystem snapshot (v2.6 phase 3)") {
@@ -815,26 +842,32 @@ TEST_CASE("undo/redo restore name+size+id together through the ChargeSystem snap
   CHECK(t.field.charges[0].sizePx == 60.0f);
 }
 
-// WR-04: stale after undo/redo only when the restored PHYSICS (count/values/positions) differs from
-// `computed` - the charges the drawn lines came from. A name/size-only undo restores byte-identical
-// physics: the tab stays clean, no false "press Calculate" hint, no pointless recalculation.
+// WR-04: stale after undo/redo only when the restored PHYSICS (count/values/positions/sizes)
+// differs from `computed` - the charges the drawn lines came from. A name-only undo restores
+// byte-identical physics: the tab stays clean, no false "press Calculate" hint. A size undo is a
+// physical undo since 261020-ef1 (the seed/hit radii follow the size).
 TEST_CASE("undo/redo set stale only on a physical change (WR-04)") {
   ThrowFactory f;
   efapp::Tab& t = dipoleTab(f);  // computed == field (the spawn state the first compute would run with)
 
-  // Kind 1 - non-physical undo: name and size edits are dirty-only, their undo must not mark stale.
+  // Kind 1 - non-physical undo: the name edit is dirty-only, its undo must not mark stale.
   CHECK(efapp::editor::setChargeName(t, 0, "Alpha"));
-  CHECK(efapp::editor::setChargeSize(t, 0, 60.f));
-  CHECK_FALSE(t.stale);  // the edits themselves never invalidate the lines
-  CHECK(efapp::editor::undo(t));  // undo the size edit
-  CHECK_FALSE(t.stale);           // physics byte-identical to computed: no false hint
+  CHECK_FALSE(t.stale);           // the edit itself never invalidates the lines
   CHECK(efapp::editor::undo(t));  // undo the name edit
-  CHECK_FALSE(t.stale);
+  CHECK_FALSE(t.stale);           // physics byte-identical to computed: no false hint
+
+  // Kind 2 - the size edit IS physical now (261020-ef1): the edit marks stale itself...
+  CHECK(efapp::editor::setChargeSize(t, 0, 60.f));
+  CHECK(t.stale);
   CHECK(t.dirty);  // collection-visible state did change
-  CHECK(efapp::editor::redo(t));  // non-physical redo: clean too
+  CHECK(efapp::editor::undo(t));  // back to the computed size: the lines are correct again
+  CHECK_FALSE(t.stale);
+  CHECK(efapp::editor::redo(t));  // forward to the resized state: differs from computed again
+  CHECK(t.stale);
+  CHECK(efapp::editor::undo(t));  // leave the computed size for the rest of the case
   CHECK_FALSE(t.stale);
 
-  // Kind 2 - physical undo: the restored charges differ from computed -> stale, the F5 hint is real.
+  // Kind 3 - physical undo: the restored charges differ from computed -> stale, the F5 hint is real.
   CHECK(efapp::editor::moveCharge(t, 0, ef::Vec2{-1, 0}));
   CHECK(t.stale);
   CHECK(efapp::editor::undo(t));  // back to the computed state: the lines are correct again
@@ -897,9 +930,40 @@ TEST_CASE("chargeSizeFromText: the Size field's live parse (v2.6 review)") {
   CHECK(efapp::chargeSizeFromText("   ") == -1.0);
   CHECK(efapp::chargeSizeFromText("abc") == -1.0);
   CHECK(efapp::chargeSizeFromText("60x") == -1.0);   // trailing garbage never half-applies
-  // 261020-ef1: the minimum size allowed for a charge is 2, not 1 - values in (0, 2) clamp UP to it
-  // (before, "1" was returned as 1.0 and then silently refused by setChargeSize: nothing applied).
-  CHECK(efapp::chargeSizeFromText("1") == 2.0);
-  CHECK(efapp::chargeSizeFromText("1.5") == 2.0);
-  CHECK(efapp::chargeSizeFromText("2") == 2.0);      // the minimum itself passes through
+  // 261020-ef2: the minimum size allowed for a charge is 1 px - values below clamp UP to it
+  // (before v2.6's ef1 fix they were returned raw and silently refused by setChargeSize).
+  CHECK(efapp::chargeSizeFromText("1") == 1.0);
+  CHECK(efapp::chargeSizeFromText("1.5") == 1.5);
+  CHECK(efapp::chargeSizeFromText("0.5") == 1.0);    // clamped up to the minimum
+  CHECK(efapp::chargeSizeFromText("2") == 2.0);
+}
+
+// 261020-ef2: the value editor - 0 is not a charge, the steppers skip over it.
+TEST_CASE("setValue / stepValue: 0 is not a charge, steppers skip it (261020-ef2)") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);  // +1 at (-2,0), -1 at (2,0)
+
+  CHECK(efapp::editor::setValue(t, 0, 5));
+  CHECK(t.field.charges[0].charge == 5);
+  CHECK(t.field.charges[0].id == 1);
+  CHECK_FALSE(efapp::editor::setValue(t, 0, 0));   // refused, nothing touched
+  CHECK(t.field.charges[0].charge == 5);
+  CHECK(efapp::editor::setValue(t, 0, -1000001));  // clamped to the shared ceiling
+  CHECK(t.field.charges[0].charge == -1000000);
+  CHECK(efapp::editor::setValue(t, 0, 7));
+  CHECK(t.field.charges[0].charge == 7);
+  CHECK(efapp::editor::setValue(t, 0, 7));         // identical: no-op (still returns true)
+
+  // stepValue works on the SELECTION and skips the 0: from 1 down lands on -1, from -1 up on 1.
+  t.selected = 1;
+  CHECK(efapp::editor::setValue(t, 1, 1));
+  CHECK(efapp::editor::stepValue(t, -1));
+  CHECK(t.field.charges[1].charge == -1);
+  CHECK(efapp::editor::stepValue(t, 1));
+  CHECK(t.field.charges[1].charge == 1);
+  CHECK(efapp::editor::stepValue(t, 4));           // 1 -> 5: no 0 crossing, plain step
+  CHECK(t.field.charges[1].charge == 5);
+  CHECK(efapp::editor::stepValue(t, -10));         // 5 - 10 = -5: crosses 0 mid-clamp, target is legal
+  CHECK(t.field.charges[1].charge == -5);
+  CHECK_FALSE(efapp::editor::setValue(t, 9, 3));   // bad index
 }

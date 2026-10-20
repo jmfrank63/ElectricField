@@ -253,6 +253,8 @@ bool App::init(const AppOptions& opt, std::string& step, std::string& message) {
     }
   }
   env_.options = &options_;
+  env_.coupleValueSize = &options_.coupleValueSize;  // 261020-ef2: the panel's Couple checkbox writes through
+  persistedCoupleValueSize_ = options_.coupleValueSize;
   env_.drawStyle = options_.draw;
   refreshScale(true);  // also sets the minimum window size
   return true;
@@ -309,10 +311,21 @@ void App::handleEvent(const SDL_Event& e) {
   }
 }
 
+// 261020-ef2: the charge editor panel's "Couple value and size" checkbox writes the flag straight
+// into options_ (through env_.coupleValueSize); this persists the file exactly when the toggle
+// flipped - the same immediate-persist contract the Options dialog's OK has.
+void App::persistCoupleValueSize() {
+  if (optionsPath_.empty() || options_.coupleValueSize == persistedCoupleValueSize_) return;
+  persistedCoupleValueSize_ = options_.coupleValueSize;
+  std::string err;
+  if (!efapp::saveOptions(optionsPath_, options_, err)) std::fprintf(stderr, "options: %s\n", err.c_str());
+}
+
 void App::frame() {
   ws_.pollAll();
   ws_.autoRecalcTick(ImGui::GetTime());  // v2.2 CALC-03: fire due continuous recalculations
   ws_.viewRecalcTick(ImGui::GetTime());  // v2.6 phase 2: fire due zoom-settle recalculations
+  persistCoupleValueSize();              // 261020-ef2: the panel's Couple toggle persists when it flips
   ui_.userConfigs = userConfigs_;  // the chooser reads the mirror; the App keeps the master list
   ui_.collections = collections_;
   ui_.recentCollections = recentMenus(recents_);  // 261012-h26: File > Recent Collections entries
@@ -940,7 +953,10 @@ bool App::smokeExtras(std::string& report) {
   frames(2);
   if (ws_.find(es)->field.charges[0].sizePx != 60.f)
     return fail("size field: typing 60 did not apply LIVE (sizePx=" + std::to_string(ws_.find(es)->field.charges[0].sizePx) + ")");
-  if (ws_.find(es)->stale) return fail("size field: the size edit must not mark the tab stale (dirty-only)");
+  // 261020-ef1: the size drives the per-charge seed/hit circles, so a resize marks the tab for
+  // recalculation (stale) - the old "dirty only" contract held while the size was purely a draw
+  // property.
+  if (!ws_.find(es)->stale) return fail("size field: the size edit must mark the tab stale (the lines refit to the new seed circle)");
   if (!ws_.find(es)->dirty) return fail("size field: the size edit did not mark the tab dirty");
   eio.AddInputCharactersUTF8("-");  // a transient partial number: nothing applies
   frames(2);
@@ -1696,6 +1712,7 @@ std::string App::command(const std::string& line) {
     for (std::size_t i = 0; i < userConfigs_.size(); ++i) os << (i ? "|" : "") << userConfigs_[i].name;
     os << '\n';
     os << "drawsize=" << options_.draw.chargeRadiusPx << '\n';  // v2.5 SIZE-01: the applied charge radius, the script oracle for the Draw tab
+    os << "couple=" << (options_.coupleValueSize ? 1 : 0) << '\n';  // 261020-ef2: the value-and-size coupling
     const auto& tabs = ws_.tabs();
     os << "tabs=" << tabs.size() << '\n';
     for (const auto& tp : tabs) {
@@ -1955,11 +1972,11 @@ std::string App::command(const std::string& line) {
     if (!t) return e;
     const int at = selectedOrArg(e);
     if (at < 0) return e;
-    t->selected = at;  // stepValue works on the selection; an explicit index selects it (v2.5: after removals)
+    t->selected = at;  // setValue works on the explicit index (v2.5: after removals)
     long long v = 0;
     if (!parseApiInt(tok[at == t->selected && tok.size() < 3 ? 1 : 2], v)) return "error: invalid value";
-    const int delta = static_cast<int>(v) - t->field.charges[static_cast<std::size_t>(at)].charge;
-    if (!efapp::editor::stepValue(*t, delta)) return "error: the tab is computing";
+    if (v == 0) return "error: the charge value must not be 0";  // 261020-ef2: 0 will not be allowed
+    if (!efapp::editor::setValue(*t, static_cast<std::size_t>(at), static_cast<int>(v))) return "error: the tab is computing";
     return "ok";
   }
   if (cmd == "charge.sign") {
@@ -2003,8 +2020,9 @@ std::string App::command(const std::string& line) {
     if (!parseApiInt(tok[1], i) || i < 0 || static_cast<std::size_t>(i) >= t->field.charges.size()) return "error: invalid charge index";
     double px = 0;
     if (!parseApiDouble(tok[2], px)) return "error: charge.size needs <index> <px>";
-    if (px != 0.0 && (px < 2.0 || px > 120.0)) return "error: charge size must be 0 or 2-120";  // 0 = the Options default
-    if (!efapp::editor::setChargeSize(*t, static_cast<std::size_t>(i), static_cast<float>(px))) return "error: the tab is computing";
+    if (px != 0.0 && (px < 1.0 || px > 120.0)) return "error: charge size must be 0 or 1-120";  // 0 = the Options default
+    if (!efapp::editor::setChargeSize(*t, static_cast<std::size_t>(i), static_cast<float>(px), options_.coupleValueSize))
+      return "error: the tab is computing";
     return "ok";
   }
 
@@ -2101,17 +2119,22 @@ std::string App::command(const std::string& line) {
       const std::optional<ef::Method> m = ef::methodFromName(efapp::ini::toLower(tok[2]));
       if (!m) return "error: unknown method '" + tok[2] + "'";
       c.method = *m;
-    } else if (key == "charge-size") {  // v2.5 SIZE-01: the DRAWN charge radius, 2-120 px (physics unchanged)
+    } else if (key == "charge-size") {  // v2.5 SIZE-01: the DRAWN charge radius, 1-120 px
       double v = 0;
-      if (!parseApiDouble(tok[2], v) || v < 2.0 || v > 120.0) return "error: charge-size needs a value in 2..120 px";
+      if (!parseApiDouble(tok[2], v) || v < 1.0 || v > 120.0) return "error: charge-size needs a value in 1..120 px";
       options_.draw.chargeRadiusPx = static_cast<float>(v);
       env_.drawStyle = options_.draw;
+    } else if (key == "couple-value-size") {  // 261020-ef2: the panel's Couple checkbox
+      bool v = false;
+      if (!apiOnOff(tok[2], v)) return "error: options.set couple-value-size needs on|off";
+      options_.coupleValueSize = v;
     } else {
       return "error: unknown option '" + key + "'";
     }
     efapp::Options o;
     o.compute = c;
     o.draw = options_.draw;
+    o.coupleValueSize = options_.coupleValueSize;  // 261020-ef2: the flag is not an options.set casualty
     const std::string verr = efapp::validate(o);
     if (!verr.empty()) return "error: " + verr;
     ws_.setDefaults(c);

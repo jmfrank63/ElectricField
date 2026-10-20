@@ -155,15 +155,16 @@ TEST_CASE("legacy 3-field lines parse with defaults; 4/5-field lines are skipped
   CHECK(r.value[0].charges[1].name == "Named");
 }
 
-// WR-01: the extended size field obeys the mutator contract - 0 (inherit) or 2..120 px; anything
-// else is a malformed line, skipped and counted, exactly like the mutators' validation.
+// WR-01: the extended size field obeys the mutator contract - 0 (inherit) or 1..120 px (the
+// minimum is 1 since 261020-ef2); anything else is a malformed line, skipped and counted, exactly
+// like the mutators' validation.
 TEST_CASE("out-of-range sizePx values are skipped and counted, never degraded into the model (WR-01)") {
   const std::string text = "[configuration \"Sizes\"]\n"
                            "charge = 1, 0, 0, 0, 1, Zero\n"        // 0 = inherit: legal
-                           "charge = 1, 1, 0, 2, 2, Floor\n"       // the 2 px floor: legal
+                           "charge = 1, 1, 0, 1, 2, Floor\n"       // the 1 px floor: legal
                            "charge = 1, 2, 0, 120, 3, Ceiling\n"   // the 120 px ceiling: legal
                            "charge = 1, 3, 0, -5, 4, Negative\n"   // negative: malformed
-                           "charge = 1, 4, 0, 1, 5, Below\n"       // 0 < x < 2: malformed
+                           "charge = 1, 4, 0, 0.5, 5, Below\n"     // 0 < x < 1: malformed
                            "charge = 1, 5, 0, 1e30, 6, Huge\n"     // screen-filling dot: malformed
                            "charge = 1, 6, 0, 121, 7, Over\n";     // above the ceiling: malformed
   const efapp::ParsedConfigs r = efapp::parseConfigs(text);
@@ -171,7 +172,7 @@ TEST_CASE("out-of-range sizePx values are skipped and counted, never degraded in
   REQUIRE(r.value.size() == 1);
   REQUIRE(r.value[0].charges.size() == 3);
   CHECK(r.value[0].charges[0].sizePx == 0.0f);
-  CHECK(r.value[0].charges[1].sizePx == doctest::Approx(2.0));
+  CHECK(r.value[0].charges[1].sizePx == doctest::Approx(1.0));
   CHECK(r.value[0].charges[2].sizePx == doctest::Approx(120.0));
 }
 

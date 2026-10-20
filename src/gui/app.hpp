@@ -55,6 +55,7 @@ class App {
  private:
   bool iterate();                     // one pass of the main loop (events -> frame); false = quit requested
   void frame();                       // poll sessions, NewFrame, drawUi, Render, present
+  void persistCoupleValueSize();      // 261020-ef2: save options when the panel's Couple toggle flipped
   void handleEvent(const SDL_Event& e);
   void refreshScale(bool initial = false);  // initial: clamp the minimum window size to the creation size (small --size / small displays)
   unsigned lastSerial() const;  // serial of the newest tab, 0 if there is none
@@ -107,6 +108,7 @@ class App {
   efapp::Workspace ws_;
   efapp::FramePacer pacer_;
   efapp::Options options_;            // user options (Phase 4); loaded at startup, saved when the dialog is accepted
+  bool persistedCoupleValueSize_ = false;  // 261020-ef2: the shadow for the panel toggle's persist-on-flip
   std::filesystem::path optionsPath_; // empty in headless modes (nothing is loaded or persisted there)
   std::vector<efapp::UserConfig> userConfigs_;  // user configurations (v2 CFG-01); master list, mirrored into ui_
   std::filesystem::path configsPath_;           // configurations.ini; empty in headless modes

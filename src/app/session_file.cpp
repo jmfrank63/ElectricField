@@ -161,6 +161,9 @@ ParsedSession parseSession(const std::string& text) {
       bool parsed = false;
       if (inTab && (fields.size() == 3 || fields.size() == 6) && ini::parseIntBounded(fields[0], -1000000, 1000000, v) &&
           ini::parseDouble(fields[1], x) && ini::parseDouble(fields[2], y)) {
+        // 261020-ef2 review: 0 is not a charge - a legacy 0-value line loads as +1 so the model
+        // only ever holds charges the editor could produce.
+        if (v == 0) v = 1;
         if (fields.size() == 3) {
           cur.charges.push_back(ef::PresetCharge{v, x, y});  // legacy: sizePx 0, id 0, derived name
           parsed = true;

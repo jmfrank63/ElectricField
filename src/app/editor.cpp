@@ -167,6 +167,7 @@ bool stepSelected(Tab& t, ef::Vec2 delta) {
 
 bool stepValue(Tab& t, int delta) {
   if (!editable(t) || t.selected < 0 || static_cast<std::size_t>(t.selected) >= t.field.charges.size()) return false;
+  if (delta == 0) return true;  // 261020-ef2 review: a zero step is a no-op, even on a legacy 0 charge
   const std::size_t at = static_cast<std::size_t>(t.selected);
   int target = std::clamp(t.field.charges[at].charge + delta, -1000000, 1000000);
   // 261020-ef2: 0 is not a charge - a step that would land on it continues to the neighbour.
@@ -319,13 +320,25 @@ ef::Vec2 snapPoint(const GridSettings& g, ef::Vec2 world) {
 
 double arrowStep(const GridSettings& g) { return g.active && g.spacing > 0.0 ? g.spacing : 0.1; }
 
-double zoomCeiling(const double ppuBase, const double dotRadiusPx) {
+// v2.6 phase 2: zooming IN is limited by the adapted calculation (the h25 "at least 1 world unit across
+// the canvas" rule is superseded - the seed/hit radii now adapt to the view). At the ceiling the drawn
+// dot - the user's charge size (Options draw.chargeRadiusPx, logical px) - must still cover the floored
+// seed circle (kMinSeedWorld = 0.01 world units), or the floored circle pokes out as a white ring.
+// The largest legal zoom for a view whose base scale is `ppuBase` px per world unit WITHOUT the zoom
+// factor: zoom <= dotRadiusPx / kMinSeedWorld / ppuBase, clamped to [kZoomMin, kZoomMax] (zoom 25 with
+// the default 25 px dot at base 100; zoom 2 with the "from a dot" 2 px setting). Callers pass the base
+// and the dot in the SAME space - the GUI uses logical px, which makes the ceiling display-scale-
+// independent. Degenerate inputs (nothing measured/applied yet) fall back to the static kZoomMax.
+// 261020-ef2 review: one pixel of tolerance - the seed circle may overshoot the dot by 1 px, which is
+// sub-antialiasing noise, but it keeps the new 1 px minimum charge usable (1 px would otherwise cap
+// the zoom at exactly 1x).
+double zoomCeiling(double ppuBase, double dotRadiusPx) {
   if (!(ppuBase > 0.0) || !std::isfinite(ppuBase) || !(dotRadiusPx > 0.0) || !std::isfinite(dotRadiusPx))
     return kZoomMax;
   // v2.6 phase 2 (WR-02): the ceiling derives from the APPLIED dot - at the ceiling the floored seed
   // circle (kMinSeedWorld) exactly fills the drawn dot on screen. A small "from a dot" charge size
   // therefore caps zoom-in earlier instead of re-exposing the untraced white annulus.
-  return std::clamp(dotRadiusPx / ef::ComputeParams::kMinSeedWorld / ppuBase, kZoomMin, kZoomMax);
+  return std::clamp((dotRadiusPx + 1.0) / ef::ComputeParams::kMinSeedWorld / ppuBase, kZoomMin, kZoomMax);
 }
 
 // 261020-ef1: the SMALLEST effective dot in the tab drives the ceiling (see editor.hpp).

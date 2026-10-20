@@ -93,6 +93,26 @@ unsigned Workspace::spawn(const std::size_t presetIndex, const unsigned number, 
   return serial;
 }
 
+// 261020-ef2 review: the Options charge size is the fallback radius of every inherit-sized charge
+// (sizePx 0) - in the drawn dot AND in the per-charge seed/hit circles. Stamping a new default
+// updates every open tab's compute parameters and marks Done tabs that hold an inherit-sized
+// charge for recalculation; computing tabs pick the new radius up on their next computation.
+void Workspace::applyDefaults(const ef::ComputeParams& p) {
+  const bool sizeChanged = p.chargeRadiusPx != defaults_.chargeRadiusPx;
+  defaults_ = p;
+  for (auto& tp : tabs_) {
+    Tab& t = *tp;
+    t.params.chargeRadiusPx = p.chargeRadiusPx;
+    if (!sizeChanged || t.session != nullptr) continue;  // a computing tab re-fits on its next computation
+    for (const auto& c : t.field.charges)
+      if (c.sizePx == 0.f) {
+        t.stale = true;          // the lines' start/end circles move with the default
+        t.pendingRecalcAt = -2;  // Continuous calculation picks it up; otherwise the F5 hint shows
+        break;
+      }
+  }
+}
+
 bool Workspace::calculate(const unsigned serial) {
   Tab* t = find(serial);
   if (!t || t->session) return false;  // unknown serial or still computing (v2 D-03)

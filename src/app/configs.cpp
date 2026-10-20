@@ -113,6 +113,9 @@ ParsedConfigs parseConfigs(const std::string& text) {
       bool parsed = false;
       if (inSection && (fields.size() == 3 || fields.size() == 6) && ini::parseIntBounded(fields[0], -1000000, 1000000, value) &&
           ini::parseDouble(fields[1], x) && ini::parseDouble(fields[2], y)) {
+        // 261020-ef2 review: 0 is not a charge - a legacy 0-value line loads as +1 so the model
+        // only ever holds charges the editor could produce.
+        if (value == 0) value = 1;
         if (fields.size() == 3) {
           cur.charges.push_back(ef::PresetCharge{value, x, y});  // legacy: sizePx 0, id 0, derived name
           parsed = true;

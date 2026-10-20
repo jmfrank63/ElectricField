@@ -69,6 +69,7 @@ struct UiState {
   // v2.1 editor panel: Add-charge section and the per-tab rename buffer
   int addValue = 1;
   double addX = 0.0, addY = 0.0;
+  std::string addError;  // 261020-ef2: why the last Add was refused (a 0 value, a computing tab)
   char tabNameBuf[128] = "";
   unsigned tabNameBufSerial = 0;
   // v2.6 phase 3: the selected charge's name buffer (the tabNameBuf pattern, keyed on the active tab

@@ -181,6 +181,12 @@ bool App::init(const AppOptions& opt, std::string& step, std::string& message) {
       configDir_ = dir;
       optionsPath_ = dir / "options.ini";
       options_ = efapp::loadOptions(optionsPath_);
+      {  // 261020-ef2 review: the loaded Options charge size is the inherit-sized charges' seed/hit
+         // fallback - the compute defaults carry it from the very first tab on.
+        ef::ComputeParams defaults = options_.compute;
+        defaults.chargeRadiusPx = options_.draw.chargeRadiusPx;
+        ws_.applyDefaults(defaults);
+      }
       configsPath_ = dir / "configurations.ini";
       userConfigs_ = efapp::loadConfigs(configsPath_);
       sessionPath_ = dir / "session.ini";
@@ -368,7 +374,11 @@ void App::frame() {
     // computation options reach tabs opened afterwards; persist immediately (MFC parity: saved on Apply, D-03).
     options_ = *ui_.optionsToApply;
     ui_.optionsToApply.reset();
-    ws_.setDefaults(options_.compute);
+    {  // 261020-ef2 review: the applied charge size is the inherit-sized charges' seed/hit fallback.
+      ef::ComputeParams defaults = options_.compute;
+      defaults.chargeRadiusPx = options_.draw.chargeRadiusPx;
+      ws_.applyDefaults(defaults);
+    }
     env_.drawStyle = options_.draw;
     pacer_.notifyActivity();
     if (!optionsPath_.empty()) {
@@ -1425,6 +1435,7 @@ void App::enterCollectionAt(const std::filesystem::path& file, const bool restor
     for (const efapp::SavedTab& s : ses.tabs) {
       ef::ComputeParams params = options_.compute;
       if (const std::optional<ef::Method> m = ef::methodFromName(s.method)) params.method = *m;
+      params.chargeRadiusPx = options_.draw.chargeRadiusPx;  // 261020-ef2 review: inherit-sized charges seed/hit on the applied dot
       const unsigned serial = ws_.openRestored(s.title, s.preset, params, s.charges, s.autoRecalc, s.grid, s.source);
       ui_.activeSerial = ui_.selectSerial = serial;  // the newest restored tab is active (TAB/commands resolve "active")
     }
@@ -1919,6 +1930,8 @@ std::string App::command(const std::string& line) {
     long long v = 0;
     double x = 0, y = 0;
     if (!parseApiInt(tok[1], v) || !parseApiDouble(tok[2], x) || !parseApiDouble(tok[3], y)) return "error: charge.add needs <value> <x> <y>";
+    if (v == 0) return "error: the charge value must not be 0";  // 261020-ef2
+    if (v < -1000000 || v > 1000000) return "error: invalid value";  // the model's shared ceiling, before the int cast
     // IN-01: freeze the Options default exactly like the GUI add sites (SC3: the default applies to
     // NEW charges) - an API-added charge no longer tracks later Options changes while its GUI-added
     // siblings stay frozen. addCharge validates and would degrade an out-of-range default to 0.
@@ -2137,7 +2150,11 @@ std::string App::command(const std::string& line) {
     o.coupleValueSize = options_.coupleValueSize;  // 261020-ef2: the flag is not an options.set casualty
     const std::string verr = efapp::validate(o);
     if (!verr.empty()) return "error: " + verr;
-    ws_.setDefaults(c);
+    {  // 261020-ef2 review: the applied charge size is the inherit-sized charges' seed/hit fallback.
+      ef::ComputeParams defaults = c;
+      defaults.chargeRadiusPx = options_.draw.chargeRadiusPx;
+      ws_.applyDefaults(defaults);
+    }
     if (!optionsPath_.empty()) {
       std::string err;
       if (!efapp::saveOptions(optionsPath_, options_, err)) return "error: " + err;

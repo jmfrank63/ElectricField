@@ -160,6 +160,7 @@ TEST_CASE("legacy 3-field lines parse with defaults; 4/5-field lines are skipped
 // like the mutators' validation.
 TEST_CASE("out-of-range sizePx values are skipped and counted, never degraded into the model (WR-01)") {
   const std::string text = "[configuration \"Sizes\"]\n"
+                           "charge = 0, 9, 9, 0, 8, ZeroValue\n"    // 261020-ef2 review: a 0 value loads as +1
                            "charge = 1, 0, 0, 0, 1, Zero\n"        // 0 = inherit: legal
                            "charge = 1, 1, 0, 1, 2, Floor\n"       // the 1 px floor: legal
                            "charge = 1, 2, 0, 120, 3, Ceiling\n"   // the 120 px ceiling: legal
@@ -170,10 +171,12 @@ TEST_CASE("out-of-range sizePx values are skipped and counted, never degraded in
   const efapp::ParsedConfigs r = efapp::parseConfigs(text);
   CHECK(r.skippedCharges == 4);
   REQUIRE(r.value.size() == 1);
-  REQUIRE(r.value[0].charges.size() == 3);
-  CHECK(r.value[0].charges[0].sizePx == 0.0f);
-  CHECK(r.value[0].charges[1].sizePx == doctest::Approx(1.0));
-  CHECK(r.value[0].charges[2].sizePx == doctest::Approx(120.0));
+  REQUIRE(r.value[0].charges.size() == 4);
+  CHECK(r.value[0].charges[0].charge == 1);  // the legacy 0 loaded as +1 (261020-ef2 review)
+  CHECK(r.value[0].charges[0].x == doctest::Approx(9.0));
+  CHECK(r.value[0].charges[1].sizePx == 0.0f);
+  CHECK(r.value[0].charges[2].sizePx == doctest::Approx(1.0));
+  CHECK(r.value[0].charges[3].sizePx == doctest::Approx(120.0));
 }
 
 TEST_CASE("file round-trip through a real path (CFG-01)") {

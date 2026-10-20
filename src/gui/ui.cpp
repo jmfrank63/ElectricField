@@ -738,10 +738,15 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   ImGui::InputDouble("Y##add", &ui.addY, 0.0, 0.0, "%.3f");
   if (ImGui::Button("Add", ImVec2(-FLT_MIN, 0.f))) {
     // v2.6 phase 3: new charges take the Options charge size as their default (0 = inherit).
+    // 261020-ef2: a 0 value is not a charge - addCharge refuses it and the label says why.
     const float addDefaultPx = env.options ? env.options->draw.chargeRadiusPx : ef::DrawStyle{}.chargeRadiusPx;
-    efapp::editor::addCharge(t, ef::Vec2{ui.addX, ui.addY}, ui.addValue, addDefaultPx);
+    if (!efapp::editor::addCharge(t, ef::Vec2{ui.addX, ui.addY}, ui.addValue, addDefaultPx))
+      ui.addError = ui.addValue == 0 ? "A charge value of 0 is not allowed." : "The tab is computing.";
+    else
+      ui.addError.clear();
     armAutoRecalc(t);
   }
+  if (!ui.addError.empty()) ImGui::TextDisabled("%s", ui.addError.c_str());
   ImGui::Separator();
 
   const bool have = t.selected >= 0 && static_cast<std::size_t>(t.selected) < t.field.charges.size();

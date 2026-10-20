@@ -135,8 +135,12 @@ class Workspace {
   void viewRecalcTick(double nowSeconds);
   // v2.2: true when at least one open tab has charge edits that are not stored in any collection file.
   bool anyDirty() const;
-  // Options dialog (Phase 4): new tabs open with these params; tabs already open keep the params they were opened with.
-  void setDefaults(const ef::ComputeParams& p) { defaults_ = p; }
+  // Options dialog (Phase 4) + 261020-ef2 review: new tabs open with these params, and every open
+  // tab's params.chargeRadiusPx follows - the Options charge size is the fallback radius of every
+  // inherit-sized (sizePx 0) charge, in the drawn dot AND in the per-charge seed/hit circles. When
+  // that default changes, Done tabs holding an inherit-sized charge are marked for recalculation
+  // (their lines' start/end circles move with it); computing tabs pick the new radius up next time.
+  void applyDefaults(const ef::ComputeParams& p);
   // Cancels and destroys the session (RAII join) and removes the tab. False if the serial is unknown.
   bool close(unsigned serial);
   // One poll() per computing tab; Done -> takeResult + buildScene once; Failed -> error text.

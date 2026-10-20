@@ -112,10 +112,12 @@ inline constexpr double kZoomMax = 40.0;
 // dot - the user's charge size (Options draw.chargeRadiusPx, logical px) - must still cover the floored
 // seed circle (kMinSeedWorld = 0.01 world units), or the floored circle pokes out as a white ring.
 // The largest legal zoom for a view whose base scale is `ppuBase` px per world unit WITHOUT the zoom
-// factor: zoom <= dotRadiusPx / kMinSeedWorld / ppuBase, clamped to [kZoomMin, kZoomMax] (zoom 25 with
-// the default 25 px dot at base 100; zoom 2 with the "from a dot" 2 px setting). Callers pass the base
-// and the dot in the SAME space - the GUI uses logical px, which makes the ceiling display-scale-
+// factor: zoom <= (dotRadiusPx + 1) / kMinSeedWorld / ppuBase, clamped to [kZoomMin, kZoomMax] (zoom 26
+// with the default 25 px dot at base 100; zoom 3 with the "from a dot" 2 px setting). Callers pass the
+// base and the dot in the SAME space - the GUI uses logical px, which makes the ceiling display-scale-
 // independent. Degenerate inputs (nothing measured/applied yet) fall back to the static kZoomMax.
+// 261020-ef2 review: one pixel of tolerance (the seed circle may overshoot the dot by 1 px -
+// sub-antialiasing noise), so the new 1 px minimum charge keeps a usable 2x zoom instead of 1x.
 double zoomCeiling(double ppuBase, double dotRadiusPx);
 // 261020-ef1: per-charge sizes drive the ceiling too. The smallest EFFECTIVE dot in the tab (a charge
 // with sizePx 0 inherits defaultDotPx) must cover its floored seed circle at every legal zoom - the

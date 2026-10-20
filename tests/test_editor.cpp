@@ -207,12 +207,14 @@ TEST_CASE("flipSign and the view controls (v2.2 EDIT-09, ZOOM/PAN)") {
 
 // v2.6 phase 2 (WR-02): zoom-in is capped by the adapted-calculation limit derived from the APPLIED
 // dot: at the ceiling the floored seed circle (0.01 world) exactly fills the drawn dot
-// (zoomCeiling = dotRadiusPx / kMinSeedWorld / ppuBase). The h25 canvas-min-side rule is long superseded.
+// (zoomCeiling = (dotRadiusPx + 1) / kMinSeedWorld / ppuBase - the 1 px tolerance keeps a 1 px dot
+// zoomable, 261020-ef2 review). The h25 canvas-min-side rule is long superseded.
 TEST_CASE("zoom ceiling: the applied dot covers the floored seed circle (v2.6 phase 2 WR-02)") {
-  // zoomCeiling = dotRadiusPx / kMinSeedWorld / ppuBase, clamped to [kZoomMin, kZoomMax].
-  CHECK(efapp::editor::zoomCeiling(100.0, 25.0) == doctest::Approx(25.0));   // default dot at the logical base 100
-  CHECK(efapp::editor::zoomCeiling(100.0, 2.0) == doctest::Approx(2.0));     // "from a dot": the annulus stays covered
-  CHECK(efapp::editor::zoomCeiling(200.0, 25.0) == doctest::Approx(12.5));   // the formula is unit-agnostic: a doubled base halves it
+  // zoomCeiling = (dotRadiusPx + 1) / kMinSeedWorld / ppuBase, clamped to [kZoomMin, kZoomMax].
+  CHECK(efapp::editor::zoomCeiling(100.0, 25.0) == doctest::Approx(26.0));   // default dot at the logical base 100
+  CHECK(efapp::editor::zoomCeiling(100.0, 2.0) == doctest::Approx(3.0));     // "from a dot": the annulus stays covered
+  CHECK(efapp::editor::zoomCeiling(100.0, 1.0) == doctest::Approx(2.0));     // 261020-ef2: the 1 px minimum stays zoomable
+  CHECK(efapp::editor::zoomCeiling(200.0, 25.0) == doctest::Approx(13.0));   // the formula is unit-agnostic: a doubled base halves it
   CHECK(efapp::editor::zoomCeiling(100.0, 120.0) == doctest::Approx(efapp::editor::kZoomMax));  // a huge dot: the static cap binds
   CHECK(efapp::editor::zoomCeiling(100000.0, 25.0) == doctest::Approx(efapp::editor::kZoomMin));  // extreme base: floor wins
   CHECK(efapp::editor::zoomCeiling(0.0, 25.0) == doctest::Approx(efapp::editor::kZoomMax));       // degenerate: static cap
@@ -247,23 +249,61 @@ TEST_CASE("tabZoomCeiling: the smallest effective dot in the tab drives the limi
   ThrowFactory f;
   efapp::Tab& t = dipoleTab(f);  // +1 (-2,0), -1 (2,0); no per-charge sizes
   // No sizes anywhere: the plain default-dot ceiling.
-  CHECK(efapp::editor::tabZoomCeiling(t, 100.0, 25.0) == doctest::Approx(25.0));
+  CHECK(efapp::editor::tabZoomCeiling(t, 100.0, 25.0) == doctest::Approx(26.0));
   // One charge sized down to 2 px (the others inherit): the small dot caps the whole tab.
   REQUIRE(efapp::editor::setChargeSize(t, 0, 2.0f));
-  CHECK(efapp::editor::tabZoomCeiling(t, 100.0, 25.0) == doctest::Approx(2.0));
-  // At that ceiling the floored seed circle exactly fills the 2 px dot (0.01 world at viewScale 200).
+  CHECK(efapp::editor::tabZoomCeiling(t, 100.0, 25.0) == doctest::Approx(3.0));
+  // At that ceiling the floored seed circle fills the 2 px dot plus the 1 px tolerance
+  // (0.01 world at viewScale 300 = 3 px on screen, 1 px beyond the dot - sub-antialiasing).
   REQUIRE(efapp::editor::zoomAt(t, 100.0, ef::Vec2{0, 0}, efapp::editor::tabZoomCeiling(t, 100.0, 25.0)));
-  CHECK(t.zoom == doctest::Approx(2.0));
+  CHECK(t.zoom == doctest::Approx(3.0));
   ef::ComputeParams atCeiling;
   atCeiling.viewScale = 100.0 * t.zoom;
-  CHECK(atCeiling.seedRadiusFor(2.0) * atCeiling.viewScale == doctest::Approx(2.0));
+  CHECK(atCeiling.seedRadiusFor(2.0) * atCeiling.viewScale == doctest::Approx(3.0));
   // An empty system falls back to the default dot; a degenerate default falls back to the static cap.
   REQUIRE(efapp::editor::addCharge(t, ef::Vec2{0, 0}, 1, 4.f));
   efapp::editor::removeSelected(t);  // remove the added one; the dipole pair stays
   REQUIRE(efapp::editor::setChargeSize(t, 1, 0.0f));  // back to inheriting
   REQUIRE(efapp::editor::setChargeSize(t, 0, 0.0f));
-  CHECK(efapp::editor::tabZoomCeiling(t, 100.0, 25.0) == doctest::Approx(25.0));
+  CHECK(efapp::editor::tabZoomCeiling(t, 100.0, 25.0) == doctest::Approx(26.0));
   CHECK(efapp::editor::tabZoomCeiling(t, 100.0, 0.0) == doctest::Approx(efapp::editor::kZoomMax));
+}
+
+// 261020-ef2 review: the Options charge size is the inherit-sized charges' fallback radius. Applying
+// a changed default stamps every open tab's compute parameters and marks the tabs that hold an
+// inherit-sized charge for recalculation (their lines' start/end circles move with the default);
+// tabs whose charges all carry their own size are left alone.
+TEST_CASE("applyDefaults: the Options charge size reaches the tabs, inherit charges go stale (261020-ef2 review)") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);  // two charges, no per-charge sizes: both inherit
+  CHECK_FALSE(t.stale);
+  CHECK(t.params.chargeRadiusPx == 25.0);
+
+  ef::ComputeParams p;
+  p.chargeRadiusPx = 60.0;
+  f.ws.applyDefaults(p);
+  CHECK(t.params.chargeRadiusPx == 60.0);  // the next computation seeds/hits on the 60 px circle
+  CHECK(t.stale);                          // the drawn lines still show the 25 px circles
+  CHECK(t.pendingRecalcAt == -2.0);
+
+  // An unchanged default is inert.
+  t.stale = false;
+  t.pendingRecalcAt = -1.0;
+  f.ws.applyDefaults(p);
+  CHECK_FALSE(t.stale);
+
+  // A tab whose charges all carry their own size does not depend on the default.
+  ef::ComputeParams sized = p;
+  sized.chargeRadiusPx = 30.0;
+  const unsigned s2 = f.ws.open(1);  // Two Equal Charges
+  efapp::Tab& t2 = *f.ws.find(s2);
+  REQUIRE(efapp::editor::setChargeSize(t2, 0, 50.f));
+  REQUIRE(efapp::editor::setChargeSize(t2, 1, 50.f));
+  t2.stale = false;
+  f.ws.applyDefaults(sized);
+  CHECK(t2.params.chargeRadiusPx == 30.0);
+  CHECK_FALSE(t2.stale);  // every charge sized: nothing to refit
+  CHECK(t.stale);         // the inherit tab follows
 }
 
 // v2.6 phase 2: zoom-settle recalculation. The GUI arming lives in drawCanvas, so the doctest drives the

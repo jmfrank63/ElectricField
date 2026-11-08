@@ -114,7 +114,7 @@ Tagged releases publish native installers on the GitHub Releases page:
 
 - Linux x86-64: Debian/Ubuntu `.deb` package
 - macOS Apple silicon: `.dmg` app bundle (drag Electric Field into Applications)
-- Windows x86-64: `.exe` setup installer
+- Windows x86-64: per-user `.exe` setup installer (no administrator access needed)
 
 Install the Linux package with `sudo apt install ./ElectricField_<version>_amd64.deb`; open the
 macOS disk image and drag the app to Applications; run the Windows setup executable.

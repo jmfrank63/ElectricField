@@ -107,11 +107,13 @@ jobs:
           & $compiler "/O$env:RUNNER_TEMP\release-out" packaging\windows\ElectricField.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed: $LASTEXITCODE" }
           $installer = "$env:RUNNER_TEMP\release-out\ElectricField_0.0.0_windows-x64_setup.exe"
-          & $installer /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-
-          if ($LASTEXITCODE -ne 0) { throw "Installer execution failed: $LASTEXITCODE" }
+          $installLog = "$env:RUNNER_TEMP\ElectricField-setup.log"
+          $setupProcess = Start-Process -FilePath $installer -ArgumentList @(
+            "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/LOG=$installLog"
+          ) -Wait -PassThru
+          if ($setupProcess.ExitCode -ne 0) { throw "Installer execution failed: $($setupProcess.ExitCode)" }
           $uninstallRoots = @(
-            "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall",
-            "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+            "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall"
           )
           $installedApp = $null
           foreach ($root in $uninstallRoots) {
@@ -125,6 +127,7 @@ jobs:
             if ($null -ne $installedApp) { break }
           }
           if ($null -eq $installedApp -or [string]::IsNullOrWhiteSpace($installedApp.InstallLocation)) {
+            if (Test-Path $installLog) { Get-Content $installLog | Select-Object -Last 60 }
             throw "Installer did not register Electric Field in Windows Uninstall entries"
           }
           $installedExe = Join-Path $installedApp.InstallLocation "ElectricField.exe"

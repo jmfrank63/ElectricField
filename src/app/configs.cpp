@@ -122,13 +122,12 @@ ParsedConfigs parseConfigs(const std::string& text) {
         } else {
           double sizePx = 0;
           int id = 0;
-          // WR-01: the extended size field obeys the same contract as every mutator - 0 (inherit)
-          // or 1..120 px (261020-ef2: the minimum is 1). Anything else (1e30, -5, 0<x<1) is a
-          // malformed line: skipped and counted like an arity failure, never silently degraded
-          // into the model. (Legacy files with a 2..120 size still load: the range only grew.)
+          // 0 inherits; positive sizes below the current 2 px minimum are upgraded when loading
+          // older collections. Values below 1 or above 120 remain malformed.
           if (ini::parseDouble(fields[3], sizePx) && (sizePx == 0 || (sizePx >= 1 && sizePx <= 120)) &&
               ini::parseIntBounded(fields[4], 0, static_cast<int>(ef::kMaxChargeId), id)) {
-            cur.charges.push_back(ef::PresetCharge{value, x, y, static_cast<float>(sizePx), static_cast<std::uint64_t>(id), fields[5]});
+            const float size = sizePx > 0 ? static_cast<float>(std::max(sizePx, ef::kMinChargeSizePx)) : 0.f;
+            cur.charges.push_back(ef::PresetCharge{value, x, y, size, static_cast<std::uint64_t>(id), fields[5]});
             parsed = true;
           }
         }

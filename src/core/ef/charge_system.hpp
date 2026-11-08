@@ -9,6 +9,8 @@
 
 namespace ef {
 
+inline constexpr double kMinChargeSizePx = 2.0;
+
 struct Charge {
   int charge = 1;
   Vec2 position;

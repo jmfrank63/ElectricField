@@ -45,7 +45,7 @@ std::uint64_t nextChargeId(const ef::ChargeSystem& field);
 void assignChargeIds(ef::ChargeSystem& field);
 // Appends a charge at `world`, selects it, marks stale. Assigns the id itself (max over the system,
 // and never below the tab's high-water mark: a removed charge's id is not reused) and stores
-// `defaultSizePx` after validating (0 or 1..120 px; anything else degrades to 0 = inherit the
+// `defaultSizePx` after validating (0 or 2..120 px; anything else degrades to 0 = inherit the
 // Options default - the caller passes it).
 bool addCharge(Tab& t, ef::Vec2 world, int value, float defaultSizePx = 0.f);
 // Removes the selected charge; refuses when it is the last one (EDIT-04: at least one charge remains).
@@ -66,9 +66,9 @@ bool flipSign(Tab& t);
 // setChargeName strips ',' (the persistence field separator) and trims leading/trailing whitespace
 // (WR-03: splitCsv trims fields on read, so the model must never hold a trimmable-only difference);
 // an identical name is a no-op that returns true without a history entry. setChargeSize validates
-// 0 or 1..120 px (else false) and is a no-op for an identical pair; with `coupleValue` set,
+// 0 or 2..120 px (else false) and is a no-op for an identical pair; with `coupleValue` set,
 // applying a non-zero size also sets the charge's VALUE to that size (sign preserved, ONE history
-// entry) - the coupled pair starts at value 1 = size 1 (261020-ef2).
+// entry).
 bool setChargeName(Tab& t, std::size_t index, const std::string& name);
 bool setChargeSize(Tab& t, std::size_t index, float sizePx, bool coupleValue = false);
 
@@ -112,12 +112,10 @@ inline constexpr double kZoomMax = 40.0;
 // dot - the user's charge size (Options draw.chargeRadiusPx, logical px) - must still cover the floored
 // seed circle (kMinSeedWorld = 0.01 world units), or the floored circle pokes out as a white ring.
 // The largest legal zoom for a view whose base scale is `ppuBase` px per world unit WITHOUT the zoom
-// factor: zoom <= (dotRadiusPx + 1) / kMinSeedWorld / ppuBase, clamped to [kZoomMin, kZoomMax] (zoom 26
-// with the default 25 px dot at base 100; zoom 3 with the "from a dot" 2 px setting). Callers pass the
+// factor: zoom <= dotRadiusPx / kMinSeedWorld / ppuBase, clamped to [kZoomMin, kZoomMax] (zoom 25
+// with the default 25 px dot at base 100; zoom 2 with the minimum 2 px setting). Callers pass the
 // base and the dot in the SAME space - the GUI uses logical px, which makes the ceiling display-scale-
 // independent. Degenerate inputs (nothing measured/applied yet) fall back to the static kZoomMax.
-// 261020-ef2 review: one pixel of tolerance (the seed circle may overshoot the dot by 1 px -
-// sub-antialiasing noise), so the new 1 px minimum charge keeps a usable 2x zoom instead of 1x.
 double zoomCeiling(double ppuBase, double dotRadiusPx);
 // 261020-ef1: per-charge sizes drive the ceiling too. The smallest EFFECTIVE dot in the tab (a charge
 // with sizePx 0 inherits defaultDotPx) must cover its floored seed circle at every legal zoom - the

@@ -899,7 +899,7 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
 
     // 261020-ef2: the optional value-and-size coupling, right under the Size row. The flag is the
     // global Options value (persisted in options.ini); while set, applying a charge's size sets its
-    // value to that size (sign preserved) - the coupled pair starts at value 1 = size 1.
+    // value to that size (sign preserved).
     if (env.coupleValueSize != nullptr) {
       if (ImGui::Checkbox("Couple value and size", env.coupleValueSize))
         armAutoRecalc(t);  // a later resize recomputes anyway; arming here is harmless and keeps flow

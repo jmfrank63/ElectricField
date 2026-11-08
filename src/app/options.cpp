@@ -203,8 +203,8 @@ ParsedOptions parse(const std::string& text) {
         r.rejectedKeys.push_back(key);
     } else if (key == "chargeSize") {  // v2.5 SIZE-01
       unsigned long long v = 0;
-      if (parseUll(value, v) && v >= kChargeSizeMin && v <= kChargeSizeMax)
-        r.value.draw.chargeRadiusPx = static_cast<float>(v);
+      if (parseUll(value, v) && v >= 1 && v <= kChargeSizeMax)
+        r.value.draw.chargeRadiusPx = static_cast<float>(std::max<unsigned long long>(kChargeSizeMin, v));
       else
         r.rejectedKeys.push_back(key);
     } else if (key == "coupleValueSize") {  // 261020-ef2

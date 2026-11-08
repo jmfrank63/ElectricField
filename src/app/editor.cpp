@@ -136,7 +136,7 @@ bool addCharge(Tab& t, ef::Vec2 world, int value, float defaultSizePx) {
   const std::uint64_t next = std::max(nextChargeId(t.field), t.chargeIdWater + 1);
   t.chargeIdWater = next;  // the watermark advances regardless: the saturated range stays retired
   const std::uint64_t id = next <= ef::kMaxChargeId ? next : 0;
-  float sizePx = defaultSizePx == 0.f || (defaultSizePx >= 1.f && defaultSizePx <= 120.f) ? defaultSizePx : 0.f;
+  float sizePx = defaultSizePx == 0.f || (defaultSizePx >= ef::kMinChargeSizePx && defaultSizePx <= 120.f) ? defaultSizePx : 0.f;
   // 261020-ef2 review: charges must never overlap - a new charge's size is clamped to the distance
   // to its nearest neighbour (the same base-scale rule setChargeSize applies on resize).
   if (sizePx > 0.f) {
@@ -145,7 +145,8 @@ bool addCharge(Tab& t, ef::Vec2 world, int value, float defaultSizePx) {
       const double gap = (other.position - at).Length() * 100.0;
       maxPx = std::min(maxPx, static_cast<float>(gap));
     }
-    sizePx = std::clamp(sizePx, 1.f, std::max(1.f, maxPx));
+    sizePx = std::clamp(sizePx, static_cast<float>(ef::kMinChargeSizePx),
+                        std::max(static_cast<float>(ef::kMinChargeSizePx), maxPx));
   }
   t.field.charges.push_back(ef::Charge{value, at, id, std::string(), sizePx});
   t.scene.charges.push_back(ef::SceneCharge{at, value, sizePx});
@@ -231,21 +232,23 @@ bool setChargeName(Tab& t, std::size_t index, const std::string& name) {
 
 bool setChargeSize(Tab& t, std::size_t index, float sizePx, bool coupleValue) {
   if (!editable(t) || index >= t.field.charges.size()) return false;
-  if (!(sizePx == 0.f || (sizePx >= 1.f && sizePx <= 120.f))) return false;  // 0 = inherit, else 1..120 px
+  if (!(sizePx == 0.f || (sizePx >= ef::kMinChargeSizePx && sizePx <= 120.f))) return false;  // 0 = inherit, else 2..120 px
   ef::Charge& c = t.field.charges[index];
   // 261020-ef2 review: charges must never overlap - a non-zero size is clamped to the distance to
   // the nearest OTHER charge (logical px at the 100 px base scale; zooming scales dots and gaps
   // alike, so base-scale separation is the zoom-independent notion of "not overlapping"). The
-  // minimum of 1 px survives even a stacked placement.
+  // minimum of 2 px survives even a stacked placement.
   float maxPx = 120.f;
   for (std::size_t k = 0; k < t.field.charges.size(); ++k) {
     if (k == index) continue;
     const double gap = (t.field.charges[k].position - c.position).Length() * 100.0;
     maxPx = std::min(maxPx, static_cast<float>(gap));
   }
-  if (sizePx > 0.f) sizePx = std::clamp(sizePx, 1.f, std::max(1.f, maxPx));
-  // 261020-ef2: with the coupling set, the size IS the value's magnitude (the pair starts at
-  // value 1 = size 1); the sign survives. An inherit (0) resize couples nothing.
+  if (sizePx > 0.f)
+    sizePx = std::clamp(sizePx, static_cast<float>(ef::kMinChargeSizePx),
+                        std::max(static_cast<float>(ef::kMinChargeSizePx), maxPx));
+  // With the coupling set, the size IS the value's magnitude; the sign survives. An inherit
+  // (0) resize couples nothing.
   const int coupled = coupleValue && sizePx > 0.f ? (c.charge < 0 ? -1 : 1) * static_cast<int>(std::lround(sizePx)) : c.charge;
   if (sizePx == c.sizePx && coupled == c.charge) return true;                // nothing to do, no history entry
   recordHistory(t);                                                          // ONE entry covers size + coupled value
@@ -350,16 +353,13 @@ double arrowStep(const GridSettings& g) { return g.active && g.spacing > 0.0 ? g
 // the default 25 px dot at base 100; zoom 2 with the "from a dot" 2 px setting). Callers pass the base
 // and the dot in the SAME space - the GUI uses logical px, which makes the ceiling display-scale-
 // independent. Degenerate inputs (nothing measured/applied yet) fall back to the static kZoomMax.
-// 261020-ef2 review: one pixel of tolerance - the seed circle may overshoot the dot by 1 px, which is
-// sub-antialiasing noise, but it keeps the new 1 px minimum charge usable (1 px would otherwise cap
-// the zoom at exactly 1x).
 double zoomCeiling(double ppuBase, double dotRadiusPx) {
   if (!(ppuBase > 0.0) || !std::isfinite(ppuBase) || !(dotRadiusPx > 0.0) || !std::isfinite(dotRadiusPx))
     return kZoomMax;
   // v2.6 phase 2 (WR-02): the ceiling derives from the APPLIED dot - at the ceiling the floored seed
   // circle (kMinSeedWorld) exactly fills the drawn dot on screen. A small "from a dot" charge size
   // therefore caps zoom-in earlier instead of re-exposing the untraced white annulus.
-  return std::clamp((dotRadiusPx + 1.0) / ef::ComputeParams::kMinSeedWorld / ppuBase, kZoomMin, kZoomMax);
+  return std::clamp(dotRadiusPx / ef::ComputeParams::kMinSeedWorld / ppuBase, kZoomMin, kZoomMax);
 }
 
 // 261020-ef1: the SMALLEST effective dot in the tab drives the ceiling (see editor.hpp).

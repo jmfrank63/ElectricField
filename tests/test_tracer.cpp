@@ -290,6 +290,7 @@ TEST_CASE("adapted view scale: the field line escapes its own charge and ends on
   REQUIRE(line.points.size() > 10);
   const Vec2 last = line.points.back();
   CHECK((last - dipole.charges[1].position).Length() < 0.1);  // ends within the adapted hit zone of the - charge
+  CHECK(dipole.HitCharge(last, p));
   for (const auto& pt : line.points) CHECK(std::isfinite(pt.X + pt.Y));
 }
 

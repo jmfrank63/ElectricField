@@ -137,6 +137,7 @@ TEST_CASE("every method traces a dipole field line from the + charge that ends o
     REQUIRE(line.points.size() > 10);
     const Vec2 last = line.points.back();
     CHECK((last - field.charges[1].position).Length() < 0.35);  // arrives next to the negative charge
+    CHECK(field.HitCharge(last, p));  // the retained endpoint is the actual hit sample, not a thinned predecessor
     for (const auto& pt : line.points) CHECK(std::isfinite(pt.X + pt.Y));
   }
 }

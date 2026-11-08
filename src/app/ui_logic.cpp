@@ -24,10 +24,10 @@ double chargeSizeFromText(const char* text) {
   char* end = nullptr;
   const double v = std::strtod(b, &end);
   if (end != e || !std::isfinite(v)) return -1.0;  // full-string number or nothing (a transient "-" never applies)
-  // 261020-ef2: the minimum size allowed for a charge is 1 px (the coupled value-and-size pair
-  // starts at value 1 = size 1). Values below the minimum clamp UP to it; 0 stays 0 = inherit.
+  // The minimum size allowed for a charge is 2 px. Values below the minimum clamp UP to it;
+  // 0 stays 0 = inherit.
   if (v <= 0.0) return 0.0;
-  return std::min(120.0, std::max(1.0, v));
+  return std::min(120.0, std::max(ef::kMinChargeSizePx, v));
 }
 
 std::string tabLabel(const Tab& t, double seconds) {

@@ -19,9 +19,8 @@ namespace efapp {
 struct Options {
   ef::ComputeParams compute{};
   ef::DrawStyle draw{};
-  // 261020-ef2: when set, applying a charge's own drawn size also sets its VALUE to that size
-  // (sign preserved; the coupled pair starts at value 1 = size 1). The checkbox lives in the charge
-  // editor panel under the Size row; persisted here so it survives restarts.
+  // When set, applying a charge's own drawn size also sets its VALUE to that size (sign preserved).
+  // The checkbox lives in the charge editor panel under the Size row; persisted across restarts.
   bool coupleValueSize = false;
 };
 
@@ -52,9 +51,9 @@ constexpr double kIntervalMin = 0.01, kIntervalMax = 0.50;
 constexpr unsigned kThicknessMin = 1, kThicknessMax = 64;
 // v2.5 SIZE-01: the DRAWN charge size, from a dot to very large. Since the per-charge seed/hit
 // radii (261020-ef1) the size also drives where a charge's field lines start and end; a resize
-// therefore marks the tab for recalculation. 261020-ef2: the minimum is 1 px (the coupled
-// value-and-size mapping starts at value 1 = size 1).
-constexpr unsigned kChargeSizeMin = 1, kChargeSizeMax = 120;
+// therefore marks the tab for recalculation. The minimum is 2 px; the coupled value-and-size
+// mapping starts at value 2 = size 2.
+constexpr unsigned kChargeSizeMin = static_cast<unsigned>(ef::kMinChargeSizePx), kChargeSizeMax = 120;
 
 // "" when every field is in range, otherwise the first error message (shown in the dialog, D-04).
 std::string validate(const Options& o);
@@ -85,7 +84,7 @@ Options loadOptions(const std::filesystem::path& file);
 // widget values in and reads validation / the applied result out, so the rules are unit-testable.
 struct OptionsEdit {
   int lines = 16, threads = 4, electricThickness = 1, potentialThickness = 1;
-  double chargeSize = 25.0;  // v2.5 SIZE-01: the drawn charge radius, 1-120 px
+  double chargeSize = 25.0;  // v2.5 SIZE-01: the drawn charge radius, 2-120 px
   double interval = 0.10;
   int methodIndex = 0;  // index into ef::kMethods
   bool coupleValueSize = false;  // 261020-ef2: round-tripped so a dialog OK never resets the panel's flag

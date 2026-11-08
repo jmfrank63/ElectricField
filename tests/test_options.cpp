@@ -135,10 +135,12 @@ TEST_CASE("serialize -> parse round-trips every field (OPT-04)") {
   CHECK(r.value.draw.chargeRadiusPx == 60.f);
 }
 
-TEST_CASE("charge size (v2.5 SIZE-01, 261020-ef2): 1-120, persistable, couple flag round-trips") {
+TEST_CASE("charge size (v2.5 SIZE-01): 2-120 minimum, legacy 1 px migrates, couple flag round-trips") {
   efapp::Options o = defaults();
-  o.draw.chargeRadiusPx = 1.f;    // the dot end (the minimum since 261020-ef2)
+  o.draw.chargeRadiusPx = 2.f;
   CHECK(efapp::validate(o).empty());
+  o.draw.chargeRadiusPx = 1.f;
+  CHECK_FALSE(efapp::validate(o).empty());
   o.draw.chargeRadiusPx = 120.f;  // very large
   CHECK(efapp::validate(o).empty());
   o.draw.chargeRadiusPx = 0.5f;
@@ -150,7 +152,8 @@ TEST_CASE("charge size (v2.5 SIZE-01, 261020-ef2): 1-120, persistable, couple fl
   CHECK(efapp::parse("chargeSize = 45\n").value.draw.chargeRadiusPx == 45.f);
   CHECK(efapp::parse("chargeSize = 121\n").rejectedKeys.size() == 1);  // out of range -> default (25)
   CHECK(efapp::parse("chargeSize = 121\n").value.draw.chargeRadiusPx == 25.f);
-  CHECK(efapp::parse("chargeSize = 1\n").value.draw.chargeRadiusPx == 1.f);  // the new minimum loads
+  CHECK(efapp::parse("chargeSize = 1\n").value.draw.chargeRadiusPx == 2.f);  // legacy one-pixel values migrate
+  CHECK(efapp::parse("chargeSize = 2\n").value.draw.chargeRadiusPx == 2.f);
 
   // 261020-ef2: the couple flag round-trips through the ini and defaults to off.
   CHECK_FALSE(efapp::parse("chargeSize = 45\n").value.coupleValueSize);
@@ -308,8 +311,10 @@ TEST_CASE("OptionsEdit chargeSize: edges rejected without clamping, reset copies
   e.chargeSize = 121.0;
   CHECK_FALSE(e.validate());
   e.chargeSize = 1.0;
+  CHECK_FALSE(e.validate());
+  e.chargeSize = 2.0;
   CHECK(e.validate());
-  CHECK(e.apply().draw.chargeRadiusPx == 1.f);
+  CHECK(e.apply().draw.chargeRadiusPx == 2.f);
   e.chargeSize = 120.0;
   CHECK(e.validate());
   CHECK(e.apply().draw.chargeRadiusPx == 120.f);

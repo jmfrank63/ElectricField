@@ -2033,7 +2033,7 @@ std::string App::command(const std::string& line) {
     if (!parseApiInt(tok[1], i) || i < 0 || static_cast<std::size_t>(i) >= t->field.charges.size()) return "error: invalid charge index";
     double px = 0;
     if (!parseApiDouble(tok[2], px)) return "error: charge.size needs <index> <px>";
-    if (px != 0.0 && (px < 1.0 || px > 120.0)) return "error: charge size must be 0 or 1-120";  // 0 = the Options default
+    if (px != 0.0 && (px < ef::kMinChargeSizePx || px > 120.0)) return "error: charge size must be 0 or 2-120";  // 0 = the Options default
     if (!efapp::editor::setChargeSize(*t, static_cast<std::size_t>(i), static_cast<float>(px), options_.coupleValueSize))
       return "error: the tab is computing";
     return "ok";
@@ -2132,9 +2132,9 @@ std::string App::command(const std::string& line) {
       const std::optional<ef::Method> m = ef::methodFromName(efapp::ini::toLower(tok[2]));
       if (!m) return "error: unknown method '" + tok[2] + "'";
       c.method = *m;
-    } else if (key == "charge-size") {  // v2.5 SIZE-01: the DRAWN charge radius, 1-120 px
+    } else if (key == "charge-size") {  // v2.5 SIZE-01: the DRAWN charge radius, 2-120 px
       double v = 0;
-      if (!parseApiDouble(tok[2], v) || v < 1.0 || v > 120.0) return "error: charge-size needs a value in 1..120 px";
+      if (!parseApiDouble(tok[2], v) || v < ef::kMinChargeSizePx || v > 120.0) return "error: charge-size needs a value in 2..120 px";
       options_.draw.chargeRadiusPx = static_cast<float>(v);
       env_.drawStyle = options_.draw;
     } else if (key == "couple-value-size") {  // 261020-ef2: the panel's Couple checkbox

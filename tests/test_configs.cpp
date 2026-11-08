@@ -155,28 +155,28 @@ TEST_CASE("legacy 3-field lines parse with defaults; 4/5-field lines are skipped
   CHECK(r.value[0].charges[1].name == "Named");
 }
 
-// WR-01: the extended size field obeys the mutator contract - 0 (inherit) or 1..120 px (the
-// minimum is 1 since 261020-ef2); anything else is a malformed line, skipped and counted, exactly
-// like the mutators' validation.
+// WR-01: 0 inherits; old sizes from 1 to <2 px migrate to 2. Values below 1 or above 120 are malformed.
 TEST_CASE("out-of-range sizePx values are skipped and counted, never degraded into the model (WR-01)") {
   const std::string text = "[configuration \"Sizes\"]\n"
                            "charge = 0, 9, 9, 0, 8, ZeroValue\n"    // 261020-ef2 review: a 0 value loads as +1
                            "charge = 1, 0, 0, 0, 1, Zero\n"        // 0 = inherit: legal
-                           "charge = 1, 1, 0, 1, 2, Floor\n"       // the 1 px floor: legal
-                           "charge = 1, 2, 0, 120, 3, Ceiling\n"   // the 120 px ceiling: legal
-                           "charge = 1, 3, 0, -5, 4, Negative\n"   // negative: malformed
-                           "charge = 1, 4, 0, 0.5, 5, Below\n"     // 0 < x < 1: malformed
-                           "charge = 1, 5, 0, 1e30, 6, Huge\n"     // screen-filling dot: malformed
-                           "charge = 1, 6, 0, 121, 7, Over\n";     // above the ceiling: malformed
+                           "charge = 1, 1, 0, 1, 2, OldFloor\n"     // old legal 1 px size migrates to 2
+                           "charge = 1, 2, 0, 1.5, 3, OldFraction\n" // old fractional size migrates to 2
+                           "charge = 1, 3, 0, 120, 4, Ceiling\n"   // the 120 px ceiling: legal
+                           "charge = 1, 4, 0, -5, 5, Negative\n"   // negative: malformed
+                           "charge = 1, 5, 0, 0.5, 6, Below\n"     // below the migration range: malformed
+                           "charge = 1, 6, 0, 1e30, 7, Huge\n"     // screen-filling dot: malformed
+                           "charge = 1, 7, 0, 121, 8, Over\n";     // above the ceiling: malformed
   const efapp::ParsedConfigs r = efapp::parseConfigs(text);
   CHECK(r.skippedCharges == 4);
   REQUIRE(r.value.size() == 1);
-  REQUIRE(r.value[0].charges.size() == 4);
+  REQUIRE(r.value[0].charges.size() == 5);
   CHECK(r.value[0].charges[0].charge == 1);  // the legacy 0 loaded as +1 (261020-ef2 review)
   CHECK(r.value[0].charges[0].x == doctest::Approx(9.0));
   CHECK(r.value[0].charges[1].sizePx == 0.0f);
-  CHECK(r.value[0].charges[2].sizePx == doctest::Approx(1.0));
-  CHECK(r.value[0].charges[3].sizePx == doctest::Approx(120.0));
+  CHECK(r.value[0].charges[2].sizePx == doctest::Approx(2.0));
+  CHECK(r.value[0].charges[3].sizePx == doctest::Approx(2.0));
+  CHECK(r.value[0].charges[4].sizePx == doctest::Approx(120.0));
 }
 
 TEST_CASE("file round-trip through a real path (CFG-01)") {

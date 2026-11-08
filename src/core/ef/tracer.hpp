@@ -146,7 +146,13 @@ FieldLine traceElectricLine(Solver& solver, const ChargeSystem& field, const Com
     point = solver.SolveStep(functorE, point, t, step, next_step, precision, max_step);
 
     if (record) line.addPoint(point, px);
-    if (field.HitCharge(point, p)) break;
+    if (field.HitCharge(point, p)) {
+      // Point thinning may have dropped the hit sample. Keep the actual endpoint so the drawn
+      // field line reaches the charge instead of stopping at the previous retained point.
+      if (record && (line.points.empty() || line.points.back().X != point.X || line.points.back().Y != point.Y))
+        line.points.push_back(point);
+      break;
+    }
 
     t += step;
     if (solver.IsAdaptive()) step = next_step;

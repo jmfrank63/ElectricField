@@ -207,14 +207,13 @@ TEST_CASE("flipSign and the view controls (v2.2 EDIT-09, ZOOM/PAN)") {
 
 // v2.6 phase 2 (WR-02): zoom-in is capped by the adapted-calculation limit derived from the APPLIED
 // dot: at the ceiling the floored seed circle (0.01 world) exactly fills the drawn dot
-// (zoomCeiling = (dotRadiusPx + 1) / kMinSeedWorld / ppuBase - the 1 px tolerance keeps a 1 px dot
-// zoomable, 261020-ef2 review). The h25 canvas-min-side rule is long superseded.
+// (zoomCeiling = dotRadiusPx / kMinSeedWorld / ppuBase). The h25 canvas-min-side rule is long superseded.
 TEST_CASE("zoom ceiling: the applied dot covers the floored seed circle (v2.6 phase 2 WR-02)") {
-  // zoomCeiling = (dotRadiusPx + 1) / kMinSeedWorld / ppuBase, clamped to [kZoomMin, kZoomMax].
-  CHECK(efapp::editor::zoomCeiling(100.0, 25.0) == doctest::Approx(26.0));   // default dot at the logical base 100
-  CHECK(efapp::editor::zoomCeiling(100.0, 2.0) == doctest::Approx(3.0));     // "from a dot": the annulus stays covered
-  CHECK(efapp::editor::zoomCeiling(100.0, 1.0) == doctest::Approx(2.0));     // 261020-ef2: the 1 px minimum stays zoomable
-  CHECK(efapp::editor::zoomCeiling(200.0, 25.0) == doctest::Approx(13.0));   // the formula is unit-agnostic: a doubled base halves it
+  // zoomCeiling = dotRadiusPx / kMinSeedWorld / ppuBase, clamped to [kZoomMin, kZoomMax].
+  CHECK(efapp::editor::zoomCeiling(100.0, 25.0) == doctest::Approx(25.0));   // default dot at the logical base 100
+  CHECK(efapp::editor::zoomCeiling(100.0, 2.0) == doctest::Approx(2.0));     // minimum dot: seed circle stays covered
+  CHECK(efapp::editor::zoomCeiling(100.0, 1.0) == doctest::Approx(1.0));     // legacy size cannot zoom beyond its radius
+  CHECK(efapp::editor::zoomCeiling(200.0, 25.0) == doctest::Approx(12.5));   // the formula is unit-agnostic: a doubled base halves it
   CHECK(efapp::editor::zoomCeiling(100.0, 120.0) == doctest::Approx(efapp::editor::kZoomMax));  // a huge dot: the static cap binds
   CHECK(efapp::editor::zoomCeiling(100000.0, 25.0) == doctest::Approx(efapp::editor::kZoomMin));  // extreme base: floor wins
   CHECK(efapp::editor::zoomCeiling(0.0, 25.0) == doctest::Approx(efapp::editor::kZoomMax));       // degenerate: static cap
@@ -249,23 +248,22 @@ TEST_CASE("tabZoomCeiling: the smallest effective dot in the tab drives the limi
   ThrowFactory f;
   efapp::Tab& t = dipoleTab(f);  // +1 (-2,0), -1 (2,0); no per-charge sizes
   // No sizes anywhere: the plain default-dot ceiling.
-  CHECK(efapp::editor::tabZoomCeiling(t, 100.0, 25.0) == doctest::Approx(26.0));
+  CHECK(efapp::editor::tabZoomCeiling(t, 100.0, 25.0) == doctest::Approx(25.0));
   // One charge sized down to 2 px (the others inherit): the small dot caps the whole tab.
   REQUIRE(efapp::editor::setChargeSize(t, 0, 2.0f));
-  CHECK(efapp::editor::tabZoomCeiling(t, 100.0, 25.0) == doctest::Approx(3.0));
-  // At that ceiling the floored seed circle fills the 2 px dot plus the 1 px tolerance
-  // (0.01 world at viewScale 300 = 3 px on screen, 1 px beyond the dot - sub-antialiasing).
+  CHECK(efapp::editor::tabZoomCeiling(t, 100.0, 25.0) == doctest::Approx(2.0));
+  // At that ceiling the floored seed circle exactly fills the 2 px dot.
   REQUIRE(efapp::editor::zoomAt(t, 100.0, ef::Vec2{0, 0}, efapp::editor::tabZoomCeiling(t, 100.0, 25.0)));
-  CHECK(t.zoom == doctest::Approx(3.0));
+  CHECK(t.zoom == doctest::Approx(2.0));
   ef::ComputeParams atCeiling;
   atCeiling.viewScale = 100.0 * t.zoom;
-  CHECK(atCeiling.seedRadiusFor(2.0) * atCeiling.viewScale == doctest::Approx(3.0));
+  CHECK(atCeiling.seedRadiusFor(2.0) * atCeiling.viewScale == doctest::Approx(2.0));
   // An empty system falls back to the default dot; a degenerate default falls back to the static cap.
   REQUIRE(efapp::editor::addCharge(t, ef::Vec2{0, 0}, 1, 4.f));
   efapp::editor::removeSelected(t);  // remove the added one; the dipole pair stays
   REQUIRE(efapp::editor::setChargeSize(t, 1, 0.0f));  // back to inheriting
   REQUIRE(efapp::editor::setChargeSize(t, 0, 0.0f));
-  CHECK(efapp::editor::tabZoomCeiling(t, 100.0, 25.0) == doctest::Approx(26.0));
+  CHECK(efapp::editor::tabZoomCeiling(t, 100.0, 25.0) == doctest::Approx(25.0));
   CHECK(efapp::editor::tabZoomCeiling(t, 100.0, 0.0) == doctest::Approx(efapp::editor::kZoomMax));
 }
 
@@ -787,10 +785,10 @@ TEST_CASE("addCharge stores the validated default size on the charge and its sce
   CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 2}, 2, 999.f));  // out of range degrades to 0 = inherit
   CHECK(t.field.charges[3].sizePx == 0.0f);
   CHECK(t.scene.charges[3].sizePx == 0.0f);
-  CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 3}, 2, 0.5f));  // below the 1 px floor degrades too
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 3}, 2, 1.f));  // below the 2 px floor degrades too
   CHECK(t.field.charges[4].sizePx == 0.0f);
-  CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 3.5}, 2, 1.f));  // 1 px is legal now (261020-ef2)
-  CHECK(t.field.charges[5].sizePx == 1.0f);
+  CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 3.5}, 2, 2.f));  // 2 px is the legal minimum
+  CHECK(t.field.charges[5].sizePx == 2.0f);
   // 261020-ef2 review: the 120 px request clamps to the nearest neighbour - the charge at (0, 3.5)
   // sits 0.5 world (50 px) away.
   CHECK(efapp::editor::addCharge(t, ef::Vec2{0, 4}, 2, 120.f));
@@ -866,11 +864,12 @@ TEST_CASE("setChargeSize: validation, scene sync, stale + dirty, history (v2.6 p
   CHECK(efapp::editor::setChargeSize(t, 0, 40.f));  // identical size: no-op
   REQUIRE(t.undo.size() == 1);
 
-  // 0 (inherit), 1 and 120 are accepted; 0.5, 121 and -5 are refused without touching anything.
+  // 0 (inherit), 2 and 120 are accepted; sizes below 2, 121 and -5 are refused.
   CHECK(efapp::editor::setChargeSize(t, 1, 0.f));
   CHECK(t.field.charges[1].sizePx == 0.0f);
-  CHECK(efapp::editor::setChargeSize(t, 1, 1.f));
-  CHECK(t.field.charges[1].sizePx == 1.0f);
+  CHECK_FALSE(efapp::editor::setChargeSize(t, 1, 1.f));
+  CHECK(efapp::editor::setChargeSize(t, 1, 2.f));
+  CHECK(t.field.charges[1].sizePx == 2.0f);
   CHECK(efapp::editor::setChargeSize(t, 1, 120.f));
   CHECK_FALSE(efapp::editor::setChargeSize(t, 1, 0.5f));
   CHECK_FALSE(efapp::editor::setChargeSize(t, 1, 121.f));
@@ -1044,11 +1043,11 @@ TEST_CASE("chargeSizeFromText: the Size field's live parse (v2.6 review)") {
   CHECK(efapp::chargeSizeFromText("   ") == -1.0);
   CHECK(efapp::chargeSizeFromText("abc") == -1.0);
   CHECK(efapp::chargeSizeFromText("60x") == -1.0);   // trailing garbage never half-applies
-  // 261020-ef2: the minimum size allowed for a charge is 1 px - values below clamp UP to it
+  // The minimum size allowed for a charge is 2 px - positive values below clamp UP to it
   // (before v2.6's ef1 fix they were returned raw and silently refused by setChargeSize).
-  CHECK(efapp::chargeSizeFromText("1") == 1.0);
-  CHECK(efapp::chargeSizeFromText("1.5") == 1.5);
-  CHECK(efapp::chargeSizeFromText("0.5") == 1.0);    // clamped up to the minimum
+  CHECK(efapp::chargeSizeFromText("1") == 2.0);
+  CHECK(efapp::chargeSizeFromText("1.5") == 2.0);
+  CHECK(efapp::chargeSizeFromText("0.5") == 2.0);    // clamped up to the minimum
   CHECK(efapp::chargeSizeFromText("2") == 2.0);
 }
 

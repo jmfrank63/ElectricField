@@ -18,11 +18,12 @@ app.expect charges=1,0,0,0,1,My Charge
 # IN-05: the size is re-applied BEFORE the save so the collection file round-trip pins a NON-ZERO
 # sizePx on disk (the undo-only flow used to save size 0 and the file path went untested for 40).
 charge.size 0 40
-# 261020-ef2: the minimum size allowed for a charge is 1; 0.5 and 121 are refused.
-charge.size 0 1
-app.expect charges=1,0,0,1,1,My Charge
-app.expect-error "0 or 1-120" charge.size 0 0.5
-app.expect-error "0 or 1-120" charge.size 0 121
+# The minimum size allowed for a charge is 2; 1, 0.5 and 121 are refused.
+app.expect-error "0 or 2-120" charge.size 0 1
+charge.size 0 2
+app.expect charges=1,0,0,2,1,My Charge
+app.expect-error "0 or 2-120" charge.size 0 0.5
+app.expect-error "0 or 2-120" charge.size 0 121
 charge.size 0 40
 # 261020-ef2: the optional value-and-size coupling - a resize sets the charge's value to the size.
 app.expect couple=0

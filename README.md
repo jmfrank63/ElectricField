@@ -49,14 +49,14 @@ preserved in history and on the `v1.0` tag.
 - **Save Configuration**: a tab opened from a configuration (or saved with **Save Configuration
   As...**) can write its current charges back into that configuration with **File > Save
   Configuration**; the file on disk updates immediately.
-- **Charge size**: the drawn radius of the charges scales from a dot to very large (1-120 px) - set
+- **Charge size**: the drawn radius of the charges scales from a dot to very large (2-120 px) - set
   it in **View > Options** (Draw tab) or with `options.set charge-size`. The size also drives where
   a charge's field lines start and end (the per-charge seed/hit circles), so resizing a charge
   marks the tab for recalculation (F5, or automatically with **Continuous calculation**). Since
   v2.6 it is the DEFAULT size for new charges and the fallback for charges without a size of
   their own. The charge editor panel's **Couple value and size** checkbox (under the Size row,
   persisted in the options) makes a resize set the charge's value to the size as well (sign
-  preserved) - the coupled pair starts at value 1 = size 1.
+  preserved).
 - **Charge editor**: click a charge to select it, drag it with the mouse, nudge it with the arrow keys
   (Shift = bigger steps) or type exact numbers into the editor panel's value/x/y fields with their arrow
   buttons (press and hold to repeat; **+/-** flips the sign; a value of 0 is not allowed - a stepper
@@ -169,7 +169,7 @@ Everything lives in the per-user config directory (`SDL_GetPrefPath("ElectricFie
   drawn radius, stable id and editable name; legacy 3-field lines still load - size 0 = the Options
   default, no id, derived name). The file you have open is the working collection;
   **File > Save Collection / Save Collection As...** write it. `options.ini` also stores `chargeSize`
-  (v2.5): the drawn charge radius, 1-120 px, and `coupleValueSize` (261020-ef2): the value-and-size
+  (v2.5): the drawn charge radius, 2-120 px (legacy sizes below 2 px upgrade to 2), and `coupleValueSize`: the value-and-size
   coupling.
 
 - `session.ini` - a pointer to the last-opened collection plus the recently opened collection files

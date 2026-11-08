@@ -112,27 +112,10 @@ jobs:
             "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/LOG=$installLog"
           ) -Wait -PassThru
           if ($setupProcess.ExitCode -ne 0) { throw "Installer execution failed: $($setupProcess.ExitCode)" }
-          $uninstallRoots = @(
-            "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall"
-          )
-          $installedApp = $null
-          foreach ($root in $uninstallRoots) {
-            foreach ($entry in (Get-ChildItem -Path $root -ErrorAction SilentlyContinue)) {
-              $candidate = Get-ItemProperty -Path $entry.PSPath
-              if ($candidate.DisplayName -eq "Electric Field") {
-                $installedApp = $candidate
-                break
-              }
-            }
-            if ($null -ne $installedApp) { break }
-          }
-          if ($null -eq $installedApp -or [string]::IsNullOrWhiteSpace($installedApp.InstallLocation)) {
-            if (Test-Path $installLog) { Get-Content $installLog | Select-Object -Last 60 }
-            throw "Installer did not register Electric Field in Windows Uninstall entries"
-          }
-          $installedExe = Join-Path $installedApp.InstallLocation "ElectricField.exe"
+          $installedExe = Join-Path $env:LOCALAPPDATA "Programs\ElectricField\ElectricField.exe"
           if (-not (Test-Path $installedExe)) {
-            throw "Installer registered an installation directory without ElectricField.exe: $installedExe"
+            if (Test-Path $installLog) { Get-Content $installLog | Select-Object -Last 60 }
+            throw "Installer did not place ElectricField.exe in its configured per-user install directory: $installedExe"
           }
           & $installedExe --smoke
           if ($LASTEXITCODE -ne 0) { throw "Installed app smoke test failed: $LASTEXITCODE" }

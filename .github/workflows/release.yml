@@ -59,14 +59,16 @@ jobs:
 
       - name: Package Windows installer
         if: runner.os == 'Windows'
+        shell: pwsh
         env:
-          APP_VERSION: ${{ github.ref_name }}
+          TAG: ${{ github.ref_name }}
         run: |
-          export APP_VERSION="${APP_VERSION#v}"
-          mkdir -p release-out
-          "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" \
-            "/O$PWD/release-out" \
-            packaging/windows/ElectricField.iss
+          $env:APP_VERSION = $env:TAG -replace '^v', ''
+          $outputDirectory = Join-Path $PWD 'release-out'
+          New-Item -ItemType Directory -Force $outputDirectory | Out-Null
+          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $compiler "/O$outputDirectory" packaging\windows\ElectricField.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed: $LASTEXITCODE" }
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

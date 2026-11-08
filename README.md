@@ -108,6 +108,22 @@ zig build smoke    # headless start-up and tab-lifecycle check of the GUI (used 
 The core, the app logic and `ef-cli` are plain C++17 built with the Zig compiler; `-Dgui=false` builds
 only that GUI-free part and fetches no GUI dependency at all.
 
+### Installers
+
+Tagged releases publish native installers on the GitHub Releases page:
+
+- Linux x86-64: Debian/Ubuntu `.deb` package
+- macOS Apple silicon: `.dmg` app bundle (drag Electric Field into Applications)
+- Windows x86-64: `.exe` setup installer
+
+Install the Linux package with `sudo apt install ./ElectricField_<version>_amd64.deb`; open the
+macOS disk image and drag the app to Applications; run the Windows setup executable.
+
+Each package is built and smoke-tested in CI. Releases are created by pushing a version tag
+matching the version in `build.zig.zon` (for example, `v0.1.0`). The macOS app and Windows
+installer are currently unsigned; macOS may require opening the app through Finder's security
+prompt, and Windows SmartScreen may show a warning.
+
 ### Headless command-line modes
 
 ```sh

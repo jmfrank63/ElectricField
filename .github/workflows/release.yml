@@ -91,5 +91,6 @@ jobs:
       - name: Publish installers
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" release-assets/* --verify-tag --title "$TAG" --generate-notes
+        run: gh release create "$TAG" release-assets/* --repo "$GH_REPO" --verify-tag --title "$TAG" --generate-notes

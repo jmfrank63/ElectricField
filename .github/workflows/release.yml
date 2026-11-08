@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-x64, os: ubuntu-latest }
+          - { name: macos-arm64, os: macos-latest }
+          - { name: windows-x64, os: windows-latest }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.17.0
+
+      - name: Verify release tag matches app version
+        run: |
+          expected="$(sed -n 's/^[[:space:]]*\.version = "\([^"]*\)".*/\1/p' build.zig.zon)"
+          actual="${GITHUB_REF_NAME#v}"
+          if [[ ! "$actual" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tag must be vMAJOR.MINOR.PATCH: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          if [[ "$actual" != "$expected" ]]; then
+            echo "Tag version $actual does not match build.zig.zon version $expected" >&2
+            exit 1
+          fi
+
+      - name: Build
+        run: zig build -Doptimize=ReleaseFast --summary all
+
+      - name: Package Linux installer
+        if: runner.os == 'Linux'
+        run: bash packaging/linux/package.sh "${GITHUB_REF_NAME#v}" release-out
+
+      - name: Package macOS installer
+        if: runner.os == 'macOS'
+        run: bash packaging/macos/package.sh "${GITHUB_REF_NAME#v}" release-out
+
+      - name: Install Inno Setup
+        if: runner.os == 'Windows'
+        run: choco install innosetup --yes --no-progress
+
+      - name: Package Windows installer
+        if: runner.os == 'Windows'
+        env:
+          APP_VERSION: ${{ github.ref_name }}
+        run: |
+          export APP_VERSION="${APP_VERSION#v}"
+          mkdir -p release-out
+          "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" \
+            "/O$PWD/release-out" \
+            packaging/windows/ElectricField.iss
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installers-${{ matrix.name }}
+          path: release-out/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub release
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: release-assets
+          pattern: installers-*
+          merge-multiple: true
+
+      - name: Publish installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" release-assets/* --verify-tag --title "$TAG" --generate-notes

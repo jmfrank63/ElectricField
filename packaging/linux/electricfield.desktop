@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Electric Field
+Comment=Visualize electric field lines and equipotentials
+Exec=ElectricField
+Icon=electricfield
+Terminal=false
+Categories=Education;Science;
+StartupNotify=true

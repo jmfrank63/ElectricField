@@ -107,13 +107,29 @@ jobs:
           & $compiler "/O$env:RUNNER_TEMP\release-out" packaging\windows\ElectricField.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed: $LASTEXITCODE" }
           $installer = "$env:RUNNER_TEMP\release-out\ElectricField_0.0.0_windows-x64_setup.exe"
-          $installLog = "$env:RUNNER_TEMP\ElectricField-setup.log"
-          & $installer /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- "/LOG=$installLog"
+          & $installer /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-
           if ($LASTEXITCODE -ne 0) { throw "Installer execution failed: $LASTEXITCODE" }
-          $installedExe = "$env:ProgramFiles\ElectricField\ElectricField.exe"
+          $uninstallRoots = @(
+            "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+          )
+          $installedApp = $null
+          foreach ($root in $uninstallRoots) {
+            foreach ($entry in (Get-ChildItem -Path $root -ErrorAction SilentlyContinue)) {
+              $candidate = Get-ItemProperty -Path $entry.PSPath
+              if ($candidate.DisplayName -eq "Electric Field") {
+                $installedApp = $candidate
+                break
+              }
+            }
+            if ($null -ne $installedApp) { break }
+          }
+          if ($null -eq $installedApp -or [string]::IsNullOrWhiteSpace($installedApp.InstallLocation)) {
+            throw "Installer did not register Electric Field in Windows Uninstall entries"
+          }
+          $installedExe = Join-Path $installedApp.InstallLocation "ElectricField.exe"
           if (-not (Test-Path $installedExe)) {
-            Get-Content $installLog | Select-Object -Last 60
-            throw "Installer did not place ElectricField.exe at the default x64 path: $installedExe"
+            throw "Installer registered an installation directory without ElectricField.exe: $installedExe"
           }
           & $installedExe --smoke
           if ($LASTEXITCODE -ne 0) { throw "Installed app smoke test failed: $LASTEXITCODE" }

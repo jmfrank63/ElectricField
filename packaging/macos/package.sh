@@ -24,6 +24,7 @@ contents="$app/Contents"
 resources="$contents/Resources"
 mkdir -p "$contents/MacOS" "$resources" "$out_dir"
 install -m 755 "$root/zig-out/bin/ElectricField" "$contents/MacOS/ElectricField"
+install -m 755 "$root/zig-out/bin/ef-mcp" "$contents/MacOS/ef-mcp"
 install -m 644 "$root/LICENSE" "$resources/License.txt"
 printf 'APPL????' > "$contents/PkgInfo"
 sed "s/@VERSION@/$version/g" "$root/packaging/macos/Info.plist" > "$contents/Info.plist"
@@ -59,5 +60,6 @@ mounted=true
 plutil -lint "$mount/Electric Field.app/Contents/Info.plist"
 SDL_VIDEODRIVER=dummy SDL_RENDER_DRIVER=software \
   "$mount/Electric Field.app/Contents/MacOS/ElectricField" --smoke
+"$mount/Electric Field.app/Contents/MacOS/ef-mcp" --version
 hdiutil detach "$mount" -quiet
 mounted=false

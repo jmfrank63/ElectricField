@@ -119,6 +119,8 @@ jobs:
           }
           & $installedExe --smoke
           if ($LASTEXITCODE -ne 0) { throw "Installed app smoke test failed: $LASTEXITCODE" }
+          & (Join-Path $env:LOCALAPPDATA "Programs\ElectricField\ef-mcp.exe") --version
+          if ($LASTEXITCODE -ne 0) { throw "Installed ef-mcp failed: $LASTEXITCODE" }
 
       # API-03 (v2.4): the editor/collection scenarios through the command API, headless and sandboxed.
       # 41 must run in 40's user dir (it verifies the session restore of 40's quit); 43 in 42's (the
@@ -164,6 +166,14 @@ jobs:
         run: |
           mkdir -p parity-out
           ./zig-out/bin/ef-cli --all --out-dir parity-out --expect tools/parity/expected-counts.csv | tee parity-out/summary.txt
+
+      # The agent interface over real stdio: a modern MCP request must come back with an inline PNG.
+      - name: MCP server renders over stdio
+        run: |
+          meta='"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}'
+          request="{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"render_field\",\"arguments\":{\"preset\":\"dipole\"},$meta}}"
+          printf '%s\n' "$request" | ./zig-out/bin/ef-mcp > mcp-response.json
+          grep -q '"type":"image"' mcp-response.json
 
       # EXP-01/02: the GUI's own export path (menu -> save dialog -> renderPng/renderSvg between frames) with fixed
       # inputs must produce exactly the ef-cli oracle's bytes for the same preset, style and view.

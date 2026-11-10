@@ -99,7 +99,7 @@ You need [Zig 0.17](https://ziglang.org/download/) - no other toolchain, no Visu
 ImGui are fetched automatically on the first build.
 
 ```sh
-zig build          # build everything: the GUI app, ef-cli and the tests
+zig build          # build everything: the GUI app, ef-cli, ef-mcp and the tests
 zig build run      # build and start the application
 zig build test     # run the unit tests (physics core, app logic, render paths)
 zig build smoke    # headless start-up and tab-lifecycle check of the GUI (used by CI)
@@ -140,6 +140,18 @@ the committed `tools/parity/expected-counts.csv` pins the number of charges, fie
 equipotentials per preset, and the GUI's export is checked to be byte-identical to it. The
 `docs/baseline/mfc/` images were rendered by the original MFC application and are the visual reference
 for the port.
+
+### MCP server for agents
+
+`ef-mcp` exposes the simulation to AI agents over the Model Context Protocol: list presets and
+methods, evaluate the field at points, compute field lines and render PNG, SVG or PDF images, all
+headless. It is included in the installers. To connect it to Claude Code:
+
+```sh
+claude mcp add electric-field -- /path/to/ef-mcp
+```
+
+See [docs/mcp.md](docs/mcp.md) for the install paths and the tool reference.
 
 ### Command API
 
@@ -203,6 +215,7 @@ Everything lives in the per-user config directory (`SDL_GetPrefPath("ElectricFie
 - `src/render/` - Dear ImGui painter and the offscreen PNG export shared by the GUI and `ef-cli`.
 - `src/gui/` - the SDL3 + Dear ImGui application (window, menus, tabs, canvas, dialogs).
 - `src/cli/` - `ef-cli`, the headless renderer and CI parity oracle.
+- `src/mcp/` - `ef-mcp`, the Model Context Protocol server for agents.
 - `tests/`, `tests_gui/` - doctest suites (the GUI-free ones run without any display or GUI dependency).
 - `tools/parity/` - the committed line-count expectations.
 - `assets/` - application icons.

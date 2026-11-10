@@ -20,6 +20,10 @@
             .url = "https://github.com/doctest/doctest/archive/refs/tags/v2.5.3.tar.gz",
             .hash = "N-V-__8AAB9aPgADa6XPcoVfyGpb-2fhHYgVMX9InfAngj-p",
         },
+        .nlohmann_json = .{
+            .url = "https://github.com/nlohmann/json/releases/download/v3.12.0/include.zip",
+            .hash = "N-V-__8AAAFDHQDNCnDa9XDtz-3ojqIBiqs7YrUNurVe_JCU",
+        },
     },
     .paths = .{
         "build.zig",

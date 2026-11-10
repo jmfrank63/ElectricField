@@ -20,6 +20,7 @@ LicenseFile=..\..\LICENSE
 
 [Files]
 Source: "..\..\zig-out\bin\ElectricField.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\zig-out\bin\ef-mcp.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{userprograms}\Electric Field"; Filename: "{app}\ElectricField.exe"

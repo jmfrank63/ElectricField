@@ -99,4 +99,23 @@ std::string renderPng(const ef::FieldScene& scene, const ef::DrawStyle& style, c
   return std::string();
 }
 
+std::string renderPngBytes(const ef::FieldScene& scene, const ef::DrawStyle& style, const ef::View& view, std::string& png) {
+  std::string err;
+  std::unique_ptr<SDL_Surface, SurfaceDeleter> pixels(renderSurface(scene, style, view, err));
+  if (!pixels) return err;
+  SDL_IOStream* io = SDL_IOFromDynamicMem();
+  if (!io) return std::string("SDL_IOFromDynamicMem failed: ") + SDL_GetError();
+  if (!SDL_SavePNG_IO(pixels.get(), io, false)) {
+    err = std::string("SDL_SavePNG_IO failed: ") + SDL_GetError();
+    SDL_CloseIO(io);
+    return err;
+  }
+  const Sint64 size = SDL_GetIOSize(io);
+  const void* data = SDL_GetPointerProperty(SDL_GetIOProperties(io), SDL_PROP_IOSTREAM_DYNAMIC_MEMORY_POINTER, nullptr);
+  if (size < 0 || !data) err = "cannot read the encoded PNG back from memory";
+  else png.assign(static_cast<const char*>(data), static_cast<std::size_t>(size));
+  SDL_CloseIO(io);
+  return err;
+}
+
 }  // namespace efrender

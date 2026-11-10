@@ -55,6 +55,12 @@ const test_sources = [_][]const u8{
     "test_finalizer.cpp",
     "test_session.cpp",
     "test_scene.cpp",
+    "test_mcp.cpp",
+};
+
+const mcp_sources = [_][]const u8{
+    "mcp/server.cpp",
+    "mcp/tools.cpp",
 };
 
 const Sanitize = enum { none, thread };
@@ -75,12 +81,14 @@ pub fn build(b: *std.Build) void {
 
     const core_lib = addCore(b, ctx);
     const app_lib = addApp(b, ctx, core_lib);
-    const test_step = addTests(b, ctx, core_lib, app_lib);
+    const mcp_lib = addMcpLib(b, ctx, core_lib);
+    const test_step = addTests(b, ctx, core_lib, app_lib, mcp_lib);
 
     var gui: ?GuiDeps = null;
     if (with_gui) gui = addGuiDeps(b, ctx); // null while the lazy dependencies are not fetched yet (Zig re-runs build() after the fetch)
     const render_lib: ?*std.Build.Step.Compile = if (gui) |g| addRender(b, ctx, g) else null;
     addCli(b, ctx, core_lib, render_lib);
+    addMcp(b, ctx, core_lib, mcp_lib, render_lib);
     if (gui) |g| addRenderTests(b, ctx, test_step, core_lib, render_lib.?, g);
     if (gui) |g| addGui(b, ctx, core_lib, app_lib, render_lib.?, g);
 }
@@ -115,13 +123,15 @@ fn addApp(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile) *std.Build
 }
 
 /// `zig build test`: doctest suite (no SDL/ImGui involved).
-fn addTests(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, app_lib: *std.Build.Step.Compile) *std.Build.Step {
+fn addTests(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, app_lib: *std.Build.Step.Compile, mcp_lib: *std.Build.Step.Compile) *std.Build.Step {
     const doctest_dep = b.dependency("doctest", .{});
     const mod = coreModule(b, ctx);
     mod.addCSourceFiles(.{ .root = b.path("tests"), .files = &test_sources, .flags = &core_flags });
     mod.addIncludePath(b.path("src/core"));
     mod.addIncludePath(b.path("src"));
     mod.addSystemIncludePath(doctest_dep.path(".")); // -isystem: doctest's own warnings are not ours
+    mod.addSystemIncludePath(b.dependency("nlohmann_json", .{}).path("single_include"));
+    mod.linkLibrary(mcp_lib);
     mod.linkLibrary(app_lib);
     mod.linkLibrary(core_lib);
     const exe = b.addExecutable(.{ .name = "efcore-tests", .root_module = mod });
@@ -198,6 +208,35 @@ fn addCli(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, render_lib
     }
     const exe = b.addExecutable(.{ .name = "ef-cli", .root_module = mod });
     b.installArtifact(exe);
+}
+
+/// efmcp: MCP protocol layer + tools. Std-only apart from the header-only JSON library, strict flags, unit-tested without SDL.
+fn addMcpLib(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile) *std.Build.Step.Compile {
+    const mod = coreModule(b, ctx);
+    mod.addCSourceFiles(.{ .root = b.path("src"), .files = &mcp_sources, .flags = &core_flags });
+    mod.addIncludePath(b.path("src/core"));
+    mod.addIncludePath(b.path("src"));
+    mod.addSystemIncludePath(b.dependency("nlohmann_json", .{}).path("single_include"));
+    mod.linkLibrary(core_lib);
+    return b.addLibrary(.{ .name = "efmcp", .root_module = mod, .linkage = .static });
+}
+
+/// ef-mcp: MCP server on stdio. SVG/PDF always; PNG when the GUI deps are present.
+fn addMcp(b: *std.Build, ctx: Ctx, core_lib: *std.Build.Step.Compile, mcp_lib: *std.Build.Step.Compile, render_lib: ?*std.Build.Step.Compile) void {
+    const mod = coreModule(b, ctx);
+    mod.addIncludePath(b.path("src/core"));
+    mod.addIncludePath(b.path("src"));
+    mod.addSystemIncludePath(b.dependency("nlohmann_json", .{}).path("single_include"));
+    mod.addConfigHeader(b.addConfigHeader(.{ .style = .blank, .include_path = "ef_build_info.h" }, .{ .EF_VERSION = zon.version }));
+    mod.linkLibrary(mcp_lib);
+    mod.linkLibrary(core_lib);
+    if (render_lib) |r| {
+        mod.addCSourceFiles(.{ .root = b.path("src/mcp"), .files = &.{"main.cpp"}, .flags = &(core_flags ++ [_][]const u8{"-DEF_MCP_PNG=1"}) });
+        mod.linkLibrary(r);
+    } else {
+        mod.addCSourceFiles(.{ .root = b.path("src/mcp"), .files = &.{"main.cpp"}, .flags = &core_flags });
+    }
+    b.installArtifact(b.addExecutable(.{ .name = "ef-mcp", .root_module = mod }));
 }
 
 const zon = @import("build.zig.zon");

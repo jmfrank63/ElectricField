@@ -64,6 +64,7 @@ struct FieldScene {
   std::vector<ScenePath> electric;
   std::vector<ScenePath> potential;
   std::vector<SceneCharge> charges;
+  double chargeRadius = 0;  // ChargeSystem::radius: > 0 outlines each charge's ball (world units)
 };
 
 FieldScene buildScene(const ChargeSystem& field, const FieldResult& result);

@@ -93,6 +93,15 @@ preserved in history and on the `v1.0` tag.
 - Tabs can be closed while they compute; quitting mid-computation is safe. The computation is cancelled
   within a fraction of a second.
 
+### Finite charge radius
+
+Each configuration has a charge radius (the editor panel's **Charge radius** field, the script command
+`charge.radius <r>`, the MCP argument `charge_radius`). 0, the default, keeps point charges. Above 0 every
+charge becomes a uniformly charged ball of that radius in world units: the field outside is unchanged,
+the field inside is finite (`E = q r / R^3`), and the canvas outlines each ball. Field lines may pass
+through a ball and end on the field null inside the ball they flow into. The radius is saved with the
+configuration and the open tabs.
+
 ## Building
 
 You need [Zig 0.17](https://ziglang.org/download/) - no other toolchain, no Visual Studio. SDL3 and Dear

@@ -13,6 +13,7 @@ namespace efapp {
 struct UserConfig {
   std::string name;
   std::vector<ef::PresetCharge> charges;
+  double radius = 0;  // ef::ChargeSystem::radius (world units); 0 = point charges, not written to the file
 };
 
 // File format (D-01), mirroring the options.ini style:
@@ -20,6 +21,7 @@ struct UserConfig {
 //   [configuration "My Dipole"]
 //   charge = 1, -2, 0
 //   charge = -1, 2, 0
+//   radius = 1          # optional: ball radius of the charges in world units (absent = 0, point charges)
 // Coordinates are written with %.10g (round-trips through stod far below any meaningful world-unit
 // precision). Double quotes inside names are stripped on save.
 //

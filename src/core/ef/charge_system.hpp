@@ -22,10 +22,18 @@ struct Charge {
   std::string name{};
   float sizePx = 0.f;
 
-  double Potential(const Vec2& pos) const { return charge / (pos - position).Length(); }  // Charge.h:31
-  Vec2 E(const Vec2& pos) const {                                                          // Charge.h:37
+  // `radius` > 0 makes the charge a uniformly charged ball of that radius (world units): exact Coulomb
+  // outside, E = q r / R^3 and V = q (3R^2 - r^2) / (2R^3) inside, finite everywhere. radius 0 is the
+  // point charge of the original (Charge.h:31/37), the limit of the same rules for R -> 0.
+  double Potential(const Vec2& pos, double radius = 0) const {
+    const double r = (pos - position).Length();
+    if (r < radius) return charge * (3. * radius * radius - r * r) / (2. * radius * radius * radius);
+    return charge / r;
+  }
+  Vec2 E(const Vec2& pos, double radius = 0) const {
     const Vec2 toPos = pos - position;
     const double len2 = toPos * toPos;
+    if (len2 < radius * radius) return toPos * (charge / (radius * radius * radius));
     Vec2 result = toPos / (len2 * std::sqrt(len2));
     result *= charge;
     return result;
@@ -33,19 +41,40 @@ struct Charge {
   bool Hit(const Vec2& pos, double hitRadius) const { return (position - pos).Length() < hitRadius; }
 };
 
+// Largest ball radius accepted from files, scripts and the MCP server (world units).
+inline constexpr double kMaxChargeRadius = 1000.;
+
 class ChargeSystem {
  public:
   std::vector<Charge> charges;
+  // Ball radius of every charge in world units; 0 = point charges (presets, legacy files, parity).
+  double radius = 0;
 
   double Potential(const Vec2& pos) const {
     double P = 0;
-    for (const auto& c : charges) P += c.Potential(pos);
+    for (const auto& c : charges) P += c.Potential(pos, radius);
     return P;
   }
   Vec2 E(const Vec2& pos) const {
     Vec2 result;
-    for (const auto& c : charges) result += c.E(pos);
+    for (const auto& c : charges) result += c.E(pos, radius);
     return result;
+  }
+  // A field line flowing into a ball does not have to reach the centre: inside a ball the field has a
+  // null (where the ball's own field cancels the rest), and the line converges on it. True when `pos` lies
+  // inside a ball within `tolerance` of such a null, judged by the ball's own field gradient |q|/R^3.
+  bool AtBallNull(const Vec2& pos, double tolerance) const {
+    if (radius <= 0) return false;
+    const double r3 = radius * radius * radius;
+    double weakest = 0;  // the smallest own-field gradient among the balls containing pos
+    bool inside = false;
+    for (const auto& c : charges) {
+      if ((pos - c.position) * (pos - c.position) >= radius * radius) continue;
+      const double gradient = std::abs(static_cast<double>(c.charge)) / r3;
+      if (!inside || gradient < weakest) weakest = gradient;
+      inside = true;
+    }
+    return inside && E(pos).Length() < weakest * tolerance;
   }
   Vec2 ENormalized(const Vec2& pos) const { return E(pos).Normalize(); }
   bool HitCharge(const Vec2& pos, const ComputeParams& p) const {

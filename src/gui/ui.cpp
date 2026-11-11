@@ -509,6 +509,7 @@ void saveAsModal(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
     for (const ef::Preset& p : ef::presets()) reserved.emplace_back(p.displayName);
     efapp::UserConfig candidate;
     candidate.name = ui.saveAsName;
+    candidate.radius = t->field.radius;
     candidate.charges.reserve(t->field.charges.size());
     for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::toPresetCharge(c));
     // Check on a scratch copy: upsert is the single decision core (also used by App::frame for the real write).
@@ -537,7 +538,8 @@ void saveAsModal(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
     if (ImGui::Button("Overwrite")) {
       efapp::UserConfig candidate;
       candidate.name = ui.saveAsName;
-      candidate.charges.reserve(t->field.charges.size());
+      candidate.radius = t->field.radius;
+    candidate.charges.reserve(t->field.charges.size());
       for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::toPresetCharge(c));
       ui.saveAsApply = candidate;
       ImGui::CloseCurrentPopup();
@@ -916,6 +918,16 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   }
 
   ImGui::Separator();
+  {  // the tab's physical charge radius: 0 = point charges, > 0 = uniformly charged balls
+    double radius = t.field.radius;
+    ImGui::SetNextItemWidth(120.f * env.k);
+    if (ImGui::InputDouble("Charge radius", &radius, 0.1, 1.0, "%.4g", ImGuiInputTextFlags_EnterReturnsTrue)) {
+      if (efapp::editor::setChargeRadius(t, std::clamp(radius, 0.0, ef::kMaxChargeRadius))) armAutoRecalc(t);
+    }
+    if (ImGui::IsItemHovered())
+      ImGui::SetTooltip("Physical radius of every charge in world units. 0 = point charges; above 0 each charge is a\n"
+                        "uniformly charged ball (Coulomb outside, finite inside) and field lines may pass through it.");
+  }
   const int mIdx = static_cast<int>(t.params.method);
   const std::string mCurrent(ef::kMethods[static_cast<std::size_t>(mIdx)].display);
   ImGui::SetNextItemWidth(-FLT_MIN);
@@ -1143,7 +1155,7 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
   if (ui.openUserConfig >= 0) {  // v2 CFG-02: a user configuration from the chooser
     if (static_cast<std::size_t>(ui.openUserConfig) < ui.userConfigs.size()) {
       const efapp::UserConfig& c = ui.userConfigs[static_cast<std::size_t>(ui.openUserConfig)];
-      ui.selectSerial = ws.openUser(c.name, c.charges);
+      ui.selectSerial = ws.openUser(c.name, c.charges, c.radius);
     }
     ui.openUserConfig = -1;
   }
@@ -1153,7 +1165,7 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
   }
   if (ui.calculateAll) {  // v2.2 COL-03: open every configuration of the current collection in tabs
     ws.closeAll();
-    for (const efapp::UserConfig& c : ui.userConfigs) ws.openUser(c.name, c.charges);
+    for (const efapp::UserConfig& c : ui.userConfigs) ws.openUser(c.name, c.charges, c.radius);
     ui.calculateAll = false;
   }
   if (ui.undoRequest || ui.redoRequest) {  // v2.3 EDIT-12

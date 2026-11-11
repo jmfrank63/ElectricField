@@ -11,6 +11,7 @@
 //   method = euler      # a kMethods name; unknown names fall back to the default on restore
 //   charge = 1, -2, 0
 //   charge = -1, 2, 0
+//   radius = 1          # optional: ball radius of the charges (absent = 0, point charges)
 #include <cstddef>
 #include <filesystem>
 #include <string>
@@ -32,6 +33,7 @@ struct SavedTab {
   bool autoRecalc = false;         // v2.2 CALC-03: continuous calculation
   GridSettings grid;               // v2.3 GRID: snap grid settings
   std::vector<ef::PresetCharge> charges;
+  double radius = 0;               // ef::ChargeSystem::radius; written only when > 0
   std::string source{};            // h22: the configuration the tab came from; empty = derive from the title on restore (the pre-change convention)
 };
 

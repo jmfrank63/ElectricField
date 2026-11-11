@@ -2,6 +2,7 @@
 // Port of FieldLinesCalculator::CalcThread::{CalculateElectricFieldLine, CalculateEquipotential, PostCalculateEquipotential}
 // (FieldLinesCalculator.cpp:23-150) and FieldLine::AddPoint (FieldLine.h:18-29).
 // Direction functors = FunctorForE / FunctorForV (FieldLinesCalculator.h:49-77).
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <vector>
@@ -146,11 +147,19 @@ FieldLine traceElectricLine(Solver& solver, const ChargeSystem& field, const Com
     point = solver.SolveStep(functorE, point, t, step, next_step, precision, max_step);
 
     if (record) line.addPoint(point, px);
-    if (field.HitCharge(point, p)) {
+    // Point charges end on the drawn dot; a ball has a finite field everywhere, so a line may cross its
+    // centre region and ends only on the field null below.
+    if (field.radius <= 0 && field.HitCharge(point, p)) {
       // Point thinning may have dropped the hit sample. Keep the actual endpoint so the drawn
       // field line reaches the charge instead of stopping at the previous retained point.
       if (record && (line.points.empty() || line.points.back().X != point.X || line.points.back().Y != point.Y))
         line.points.push_back(point);
+      break;
+    }
+    // Finite charges: the line has converged on the field null inside a ball. Within a few steps of it
+    // the unit-speed direction field only oscillates, so the line ends here.
+    if (field.AtBallNull(point, std::min(field.radius, std::max(0.01 * field.radius, 4. * std::abs(step))))) {
+      if (record && (line.points.empty() || !(line.points.back() == point))) line.points.push_back(point);
       break;
     }
 

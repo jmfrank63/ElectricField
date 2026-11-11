@@ -477,7 +477,7 @@ void App::frame() {
   if (ui_.calculateAll) {  // v2.2 COL-03: open every configuration of the current collection in tabs
     ui_.calculateAll = false;
     ws_.closeAll();
-    for (const efapp::UserConfig& c : userConfigs_) ws_.openUser(c.name, c.charges);
+    for (const efapp::UserConfig& c : userConfigs_) ws_.openUser(c.name, c.charges, c.radius);
     pacer_.notifyActivity();
   }
   if (!ui_.removeConfigApply.empty()) {  // v2.3 COL-05 / v2.4: removal through the shared action
@@ -580,6 +580,7 @@ int App::runInteractive() {
       s.source = tp->sourceConfig;  // h22: the tab's configuration provenance survives the restart
       s.method = std::string(ef::info(tp->params.method).name);
       s.charges.reserve(tp->field.charges.size());
+      s.radius = tp->field.radius;
       for (const ef::Charge& c : tp->field.charges) s.charges.push_back(ef::toPresetCharge(c));
       saved.push_back(std::move(s));
     }
@@ -1309,6 +1310,7 @@ std::string App::exportConfigurationTo(const std::string& path) {
   // rendering the cache. wait() is fine here: the command path is offline (a script / quick action,
   // already user-visible-latency), not the frame loop.
   ef::ChargeSystem field;
+  field.radius = t->field.radius;
   field.charges.reserve(t->field.charges.size());
   for (const ef::Charge& c : t->field.charges) field.charges.push_back(c);
   ef::ComputeParams params = t->params;
@@ -1331,6 +1333,7 @@ std::string App::exportCollectionTo(const std::string& path) {
   ef::PdfPainter painter;
   for (const efapp::UserConfig& c : userConfigs_) {
     ef::ChargeSystem field;
+    field.radius = c.radius;
     field.charges.reserve(c.charges.size());
     // CR-02: carry the identity fields explicitly (the same field naming as workspace.cpp) - a
     // positional 2-field initializer silently dropped id/name/sizePx, so whole-collection PDF
@@ -1436,7 +1439,7 @@ void App::enterCollectionAt(const std::filesystem::path& file, const bool restor
       ef::ComputeParams params = options_.compute;
       if (const std::optional<ef::Method> m = ef::methodFromName(s.method)) params.method = *m;
       params.chargeRadiusPx = options_.draw.chargeRadiusPx;  // 261020-ef2 review: inherit-sized charges seed/hit on the applied dot
-      const unsigned serial = ws_.openRestored(s.title, s.preset, params, s.charges, s.autoRecalc, s.grid, s.source);
+      const unsigned serial = ws_.openRestored(s.title, s.preset, params, s.charges, s.autoRecalc, s.grid, s.source, s.radius);
       ui_.activeSerial = ui_.selectSerial = serial;  // the newest restored tab is active (TAB/commands resolve "active")
     }
     pacer_.notifyActivity();
@@ -1483,7 +1486,8 @@ void App::saveSessionNow() {
     s.autoRecalc = tp->autoRecalc;
     s.grid = tp->grid;
     s.charges.reserve(tp->field.charges.size());
-    for (const ef::Charge& c : tp->field.charges) s.charges.push_back(ef::toPresetCharge(c));
+    s.radius = tp->field.radius;
+      for (const ef::Charge& c : tp->field.charges) s.charges.push_back(ef::toPresetCharge(c));
     saved.push_back(std::move(s));
   }
   std::string err;
@@ -1503,6 +1507,7 @@ void App::mergeDirtyTabsInto(std::vector<efapp::UserConfig>& configs) {
     if (at < 0) continue;
     efapp::UserConfig& c = configs[static_cast<std::size_t>(at)];
     c.charges.clear();
+    c.radius = t.field.radius;
     c.charges.reserve(t.field.charges.size());
     for (const ef::Charge& ch : t.field.charges) c.charges.push_back(ef::toPresetCharge(ch));
     t.dirty = false;
@@ -1574,6 +1579,7 @@ std::string App::saveConfigurationAs(const std::string& name) {
   for (const ef::Preset& p : ef::presets()) reserved.emplace_back(p.displayName);
   efapp::UserConfig candidate;
   candidate.name = name;
+  candidate.radius = t->field.radius;
   candidate.charges.reserve(t->field.charges.size());
   for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::toPresetCharge(c));
   if (efapp::upsertUserConfig(userConfigs_, candidate, reserved) != efapp::UpsertResult::OK) return "error: invalid or reserved name";
@@ -1602,6 +1608,7 @@ std::string App::saveConfiguration() {
   for (const ef::Preset& p : ef::presets()) reserved.emplace_back(p.displayName);
   efapp::UserConfig candidate;
   candidate.name = efapp::baseTitle(t->title);
+  candidate.radius = t->field.radius;
   candidate.charges.reserve(t->field.charges.size());
   for (const ef::Charge& ch : t->field.charges) candidate.charges.push_back(ef::toPresetCharge(ch));
   const efapp::SaveIntoResult r = efapp::saveIntoUserConfig(userConfigs_, t->sourceConfig, candidate, reserved);
@@ -1734,7 +1741,7 @@ std::string App::command(const std::string& line) {
          << " stale=" << (t.stale ? 1 : 0) << " dirty=" << (t.dirty ? 1 : 0) << " selected=" << t.selected << " lines=" << t.scene.electric.size()
          << " zoom=" << t.zoom << " centre=" << t.centre.X << "," << t.centre.Y << " grid=" << (t.grid.active ? 1 : 0) << ','
          << (t.grid.visible ? 1 : 0) << ',' << (t.grid.polar ? 1 : 0) << ',' << (t.grid.intersectionsOnly ? 1 : 0) << ',' << t.grid.origin.X << ',' << t.grid.origin.Y << ','
-         << t.grid.spacing << ',' << t.grid.angleStepDeg << " charges=";
+         << t.grid.spacing << ',' << t.grid.angleStepDeg << " radius=" << t.field.radius << " charges=";
       // v2.6 phase 3: charges=v,x,y,sizePx,id,displayName (substring-compatible: the old v,x,y prefix
       // is untouched; the name shown is the stored one or the derived "Charge N").
       for (std::size_t i = 0; i < t.field.charges.size(); ++i)
@@ -1834,7 +1841,7 @@ std::string App::command(const std::string& line) {
     const int at = efapp::findUserConfig(userConfigs_, tok[1]);
     if (at < 0) return "error: no configuration named '" + tok[1] + "'";
     const efapp::UserConfig& c = userConfigs_[static_cast<std::size_t>(at)];
-    ui_.selectSerial = ws_.openUser(c.name, c.charges);
+    ui_.selectSerial = ws_.openUser(c.name, c.charges, c.radius);
     ui_.activeSerial = ui_.selectSerial;
     pacer_.notifyActivity();
     return "ok";
@@ -1896,7 +1903,7 @@ std::string App::command(const std::string& line) {
   if (cmd == "tab.calculate" || cmd == "tab.calculate-all") {
     if (cmd == "tab.calculate-all") {
       ws_.closeAll();
-      for (const efapp::UserConfig& c : userConfigs_) ws_.openUser(c.name, c.charges);
+      for (const efapp::UserConfig& c : userConfigs_) ws_.openUser(c.name, c.charges, c.radius);
       pacer_.notifyActivity();
       return "ok";
     }
@@ -2036,6 +2043,16 @@ std::string App::command(const std::string& line) {
     if (px != 0.0 && (px < ef::kMinChargeSizePx || px > 120.0)) return "error: charge size must be 0 or 2-120";  // 0 = the Options default
     if (!efapp::editor::setChargeSize(*t, static_cast<std::size_t>(i), static_cast<float>(px), options_.coupleValueSize))
       return "error: the tab is computing";
+    return "ok";
+  }
+
+  if (cmd == "charge.radius") {  // the tab's ball radius: 0 = point charges
+    if (const std::string e = need(1); !e.empty()) return e;
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    double r = 0;
+    if (!parseApiDouble(tok[1], r) || r < 0 || r > ef::kMaxChargeRadius) return "error: charge.radius needs a radius from 0 to 1000";
+    if (!efapp::editor::setChargeRadius(*t, r)) return "error: the tab is computing";
     return "ok";
   }
 

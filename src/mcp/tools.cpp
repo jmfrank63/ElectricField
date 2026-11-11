@@ -133,16 +133,22 @@ ef::Charge parseCharge(const json& item, std::size_t index) {
 ef::ChargeSystem parseField(const json& args) {
   const bool hasPreset = args.contains("preset"), hasCharges = args.contains("charges");
   if (hasPreset == hasCharges) throw ToolError("provide exactly one of 'preset' or 'charges'");
+  const double radius = getNumber(args, "charge_radius", 0, ef::kMaxChargeRadius, 0);
   if (hasPreset) {
     const std::string slug = getString(args, "preset", "");
     for (const auto& p : ef::presets())
-      if (p.slug == slug) return ef::makeSystem(p);
+      if (p.slug == slug) {
+        ef::ChargeSystem field = ef::makeSystem(p);
+        field.radius = radius;
+        return field;
+      }
     throw ToolError("unknown preset '" + slug + "'; available: " + presetSlugs());
   }
   const json& list = args.at("charges");
   if (!list.is_array() || list.empty() || list.size() > kMaxCharges)
     throw ToolError("'charges' must be an array of 1 to " + std::to_string(kMaxCharges) + " charges");
   ef::ChargeSystem field;
+  field.radius = radius;
   field.charges.reserve(list.size());
   for (std::size_t i = 0; i < list.size(); ++i) {
     ef::Charge c = parseCharge(list[i], i);
@@ -276,7 +282,7 @@ json listMethods(const json& args) {
 }
 
 json evaluateField(const json& args) {
-  checkKeys(args, {"preset", "charges", "points"}, "arguments");
+  checkKeys(args, {"preset", "charges", "charge_radius", "points"}, "arguments");
   const ef::ChargeSystem field = parseField(args);
   const auto it = args.find("points");
   if (it == args.end()) throw ToolError("missing required field 'points'");
@@ -304,7 +310,7 @@ json evaluateField(const json& args) {
 }
 
 json computeFieldLines(const json& args, const std::atomic<bool>* cancel) {
-  checkKeys(args, {"preset", "charges", "method", "lines_per_unit_charge", "equipotentials", "potential_interval", "threads", "timeout_ms", "include_lines", "max_points_per_line"}, "arguments");
+  checkKeys(args, {"preset", "charges", "charge_radius", "method", "lines_per_unit_charge", "equipotentials", "potential_interval", "threads", "timeout_ms", "include_lines", "max_points_per_line"}, "arguments");
   const Computation c = parseComputation(args);
   const bool includeLines = getBool(args, "include_lines", false);
   const auto limit = static_cast<std::size_t>(getInt(args, "max_points_per_line", 2, 5000, 200));
@@ -383,7 +389,7 @@ void writeFile(const fs::path& path, const std::string& bytes) {
 }
 
 json renderField(const json& args, const PngEncoder& encodePng, const std::atomic<bool>* cancel) {
-  checkKeys(args, {"preset", "charges", "method", "lines_per_unit_charge", "equipotentials", "potential_interval", "threads", "timeout_ms", "format", "width", "height", "pixels_per_unit", "center_x", "center_y", "output_path", "overwrite"}, "arguments");
+  checkKeys(args, {"preset", "charges", "charge_radius", "method", "lines_per_unit_charge", "equipotentials", "potential_interval", "threads", "timeout_ms", "format", "width", "height", "pixels_per_unit", "center_x", "center_y", "output_path", "overwrite"}, "arguments");
   const Computation c = parseComputation(args);
   const std::string format = getString(args, "format", encodePng ? "png" : "svg");
   if (format != "png" && format != "svg" && format != "pdf") throw ToolError("'format' must be png, svg or pdf");
@@ -449,7 +455,8 @@ const char* const kFieldProperties = R"json({
         "size_px": {"type": "number", "minimum": 0, "maximum": 120, "default": 0, "description": "Drawn radius in px: 0 (the 25 px default) or 2 to 120. Field lines start and end on this circle."}
       }
     }
-  }
+  },
+  "charge_radius": {"type": "number", "minimum": 0, "maximum": 1000, "default": 0, "description": "Physical radius of every charge in world units. 0 = point charges. Above 0 each charge is a uniformly charged ball: Coulomb outside, finite inside (E = q r / R^3), so field lines may pass through a ball."}
 })json";
 
 const char* const kComputeProperties = R"json({

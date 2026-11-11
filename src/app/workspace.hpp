@@ -114,8 +114,9 @@ class Workspace {
   // Opens a tab from arbitrary charges (a user configuration, v2 Phase 1). The name is trimmed; the title is
   // "<name> <N>" with a per-name counter that is never reused after a close. The 3-arg form stores the
   // configuration the tab came from (v2.5 CFG-04); openEmpty passes "" (an unsaved tab has no source).
-  unsigned openUser(const std::string& name, const std::vector<ef::PresetCharge>& charges);
-  unsigned openUser(const std::string& name, const std::vector<ef::PresetCharge>& charges, const std::string& source);
+  // `radius` = ef::ChargeSystem::radius of the new tab (0 = point charges).
+  unsigned openUser(const std::string& name, const std::vector<ef::PresetCharge>& charges, double radius = 0);
+  unsigned openUser(const std::string& name, const std::vector<ef::PresetCharge>& charges, const std::string& source, double radius = 0);
   // The "Empty Configuration" entry: a single +1 charge at the origin, immediately computable — the Phase 2
   // editor's starting point.
   unsigned openEmpty();
@@ -130,7 +131,7 @@ class Workspace {
   // empty keeps the legacy derivation.
   unsigned openRestored(const std::string& title, std::size_t presetIndex, const ef::ComputeParams& params,
                         const std::vector<ef::PresetCharge>& charges, bool autoRecalc = false, const GridSettings& grid = GridSettings{},
-                        const std::string& source = std::string());
+                        const std::string& source = std::string(), double radius = 0);
   // Continuous calculation (v2.2 CALC-03): recalculates every tab that has autoRecalc on, is stale, and
   // whose pending deadline has passed. Called every frame by the GUI with the current time in seconds.
   void autoRecalcTick(double nowSeconds);

@@ -267,13 +267,25 @@ bool setChargeSize(Tab& t, std::size_t index, float sizePx, bool coupleValue) {
   return true;
 }
 
+bool setChargeRadius(Tab& t, double radius) {
+  if (!editable(t) || !(radius >= 0 && radius <= ef::kMaxChargeRadius)) return false;
+  if (radius == t.field.radius) return true;  // nothing to do, no history entry
+  recordHistory(t);
+  t.field.radius = radius;
+  t.scene.chargeRadius = radius;  // the canvas outlines the balls at once
+  t.stale = true;
+  t.pendingRecalcAt = -2;
+  t.dirty = true;
+  return true;
+}
+
 // WR-04: the physics slice of a ChargeSystem - the only part the drawn lines depend on. Names are
 // excluded; the SIZE is included since the per-charge seed/hit radii (261020-ef1): undoing a size
 // edit restores lines whose start/end circles differ, so the tab must claim "the lines show the
 // previous calculation". Exact == comparisons, the same convention moveCharge and commitDrag use
 // for no-op detection.
 bool samePhysics(const ef::ChargeSystem& a, const ef::ChargeSystem& b) {
-  if (a.charges.size() != b.charges.size()) return false;
+  if (a.charges.size() != b.charges.size() || a.radius != b.radius) return false;
   for (std::size_t i = 0; i < a.charges.size(); ++i)
     if (a.charges[i].charge != b.charges[i].charge || a.charges[i].position.X != b.charges[i].position.X ||
         a.charges[i].position.Y != b.charges[i].position.Y || a.charges[i].sizePx != b.charges[i].sizePx)

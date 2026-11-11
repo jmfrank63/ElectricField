@@ -53,6 +53,11 @@ std::string serializeSession(const std::vector<SavedTab>& tabs, const std::strin
     }
     os << "method = " << (t.method.empty() ? std::string("euler") : t.method) << '\n';
     if (t.autoRecalc) os << "autocalc = true\n";
+    if (t.radius > 0) {
+      char r[32];
+      std::snprintf(r, sizeof(r), "%.10g", t.radius);
+      os << "radius = " << r << '\n';
+    }
     char gx[32], gy[32], gs[32], ga[32];
     std::snprintf(gx, sizeof(gx), "%.10g", t.grid.origin.X);
     std::snprintf(gy, sizeof(gy), "%.10g", t.grid.origin.Y);
@@ -113,6 +118,9 @@ ParsedSession parseSession(const std::string& text) {
       }
     } else if (key == "recent") {  // 261012-h26: a recently opened collection file (UTF-8 path, newest first)
       if (!value.empty() && r.recents.size() < 100) r.recents.push_back(value);
+    } else if (key == "radius") {
+      double radius = 0;
+      if (inTab && ini::parseDouble(value, radius) && radius >= 0 && radius <= ef::kMaxChargeRadius) cur.radius = radius;
     } else if (key == "autocalc") {
       if (inTab && ini::toLower(value) == "true") cur.autoRecalc = true;
     } else if (key == "grid") {

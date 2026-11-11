@@ -14,6 +14,7 @@ FieldScene buildScene(const ChargeSystem& field, const FieldResult& result) {
   for (const auto& l : result.potential)
     s.potential.push_back(ScenePath{l.points, l.points.size() > 1 && l.points.front() == l.points.back()});
   for (const auto& c : field.charges) s.charges.push_back(SceneCharge{c.position, c.charge, c.sizePx});
+  s.chargeRadius = field.radius;
   return s;
 }
 
@@ -289,6 +290,21 @@ void renderScene(Painter& painter, const FieldScene& scene, const DrawStyle& sty
 
   const double cx = view.widthPx / 2.0 - view.centre.X * view.pixelsPerUnit;
   const double cy = view.heightPx / 2.0 + view.centre.Y * view.pixelsPerUnit;
+  // Finite charges: each ball's surface as a thin outline in the charge colour, under the dots.
+  const double ballPx = scene.chargeRadius * view.pixelsPerUnit;
+  if (ballPx >= 1.0 && ballPx <= 1e6) {
+    const std::size_t N = static_cast<std::size_t>(std::clamp(std::ceil(2.2214 * std::sqrt(ballPx)), 48.0, 2048.0));
+    std::vector<PointF> pts(N);
+    for (const auto& c : scene.charges) {
+      const double x = cx + c.position.X * view.pixelsPerUnit, y = cy - c.position.Y * view.pixelsPerUnit;
+      if (x + ballPx < vis.l || x - ballPx > vis.r || y + ballPx < vis.t || y - ballPx > vis.b) continue;
+      for (std::size_t k = 0; k < N; ++k) {
+        const double a = static_cast<double>(k) * 6.283185307179586 / static_cast<double>(N);
+        pts[k] = PointF{static_cast<float>(x + ballPx * std::cos(a)), static_cast<float>(y - ballPx * std::sin(a))};
+      }
+      painter.strokePath(pts.data(), pts.size(), 0, true, c.charge > 0 ? style.positiveCharge : style.negativeCharge, 1.f);
+    }
+  }
   for (const auto& c : scene.charges) {
     const PointF center{static_cast<float>(cx + c.position.X * view.pixelsPerUnit), static_cast<float>(cy - c.position.Y * view.pixelsPerUnit)};
     // v2.6 phase 3: a charge with its own size draws at it; 0 inherits the style radius (draw-only).

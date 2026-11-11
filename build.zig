@@ -56,6 +56,7 @@ const test_sources = [_][]const u8{
     "test_session.cpp",
     "test_scene.cpp",
     "test_mcp.cpp",
+    "test_radius.cpp",
 };
 
 const mcp_sources = [_][]const u8{

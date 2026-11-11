@@ -1080,3 +1080,21 @@ TEST_CASE("setValue / stepValue: 0 is not a charge, steppers skip it (261020-ef2
   CHECK(t.field.charges[1].charge == -5);
   CHECK_FALSE(efapp::editor::setValue(t, 9, 3));   // bad index
 }
+
+TEST_CASE("setChargeRadius: physics edit with one history entry, undo restores it") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);
+  CHECK(t.field.radius == 0);
+  CHECK_FALSE(efapp::editor::setChargeRadius(t, -1));
+  CHECK_FALSE(efapp::editor::setChargeRadius(t, ef::kMaxChargeRadius * 2));
+  REQUIRE(efapp::editor::setChargeRadius(t, 1));
+  CHECK(t.field.radius == 1);
+  CHECK(t.scene.chargeRadius == 1);
+  CHECK(t.stale);
+  CHECK(t.dirty);
+  const std::size_t entries = t.undo.size();
+  REQUIRE(efapp::editor::setChargeRadius(t, 1));  // identical: no history entry
+  CHECK(t.undo.size() == entries);
+  CHECK(efapp::editor::undo(t));
+  CHECK(t.field.radius == 0);
+}

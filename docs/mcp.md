@@ -56,6 +56,12 @@ Every tool that takes a configuration needs exactly one of:
 `charge` is a non-zero integer. World coordinates have y pointing up. The field uses a unit Coulomb
 constant: `E = sum q*r/|r|^3` and `V = sum q/|r|`.
 
+`charge_radius` (default 0, at most 1000, world units) works with a preset or with `charges` and gives
+every charge a physical size: each becomes a uniformly charged ball of that radius. Outside a ball the
+field is unchanged; inside it is finite, `E = q*r/R^3` and `V = q*(3R^2 - r^2)/(2R^3)`, so
+`evaluate_field` never reports a point as singular. Field lines may pass through a ball and end on the
+field null inside the ball they flow into, which is not necessarily its centre.
+
 `compute_field_lines` and `render_field` also accept:
 
 | Argument | Default | Range |

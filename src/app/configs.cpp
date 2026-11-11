@@ -44,6 +44,11 @@ std::string serializeConfigs(const std::vector<UserConfig>& configs) {
     std::string name = c.name;
     name.erase(std::remove(name.begin(), name.end(), '"'), name.end());  // names cannot contain the delimiter
     os << "\n[configuration \"" << name << "\"]\n";
+    if (c.radius > 0) {
+      char r[32];
+      std::snprintf(r, sizeof(r), "%.10g", c.radius);
+      os << "radius = " << r << '\n';
+    }
     for (const ef::PresetCharge& ch : c.charges) {
       char x[32], y[32], s[32];
       std::snprintf(x, sizeof(x), "%.10g", ch.x);
@@ -94,6 +99,15 @@ ParsedConfigs parseConfigs(const std::string& text) {
       continue;
     }
     if (t[0] == '[') continue;  // foreign section: ignored
+    if (t.rfind("radius", 0) == 0) {
+      const std::size_t eq = t.find('=');
+      double radius = 0;
+      // a malformed or out-of-range radius keeps point charges (0): the charges themselves stay valid
+      if (inSection && eq != std::string::npos && trim(t.substr(6, eq - 6)).empty() && ini::parseDouble(trim(t.substr(eq + 1)), radius) &&
+          radius >= 0 && radius <= ef::kMaxChargeRadius)
+        cur.radius = radius;
+      continue;
+    }
     if (t.rfind("charge", 0) == 0) {
       const std::size_t eq = t.find('=');
       if (eq == std::string::npos) {
@@ -180,6 +194,7 @@ UpsertResult upsertUserConfig(std::vector<UserConfig>& configs, const UserConfig
   if (at >= 0) {
     configs[static_cast<std::size_t>(at)].name = name;  // keep the list position, adopt the new spelling
     configs[static_cast<std::size_t>(at)].charges = candidate.charges;
+    configs[static_cast<std::size_t>(at)].radius = candidate.radius;
     return UpsertResult::OK;
   }
   configs.push_back(candidate);
@@ -203,6 +218,7 @@ SaveIntoResult saveIntoUserConfig(std::vector<UserConfig>& configs, const std::s
   if (at >= 0) {  // the tab's own entry (unrenamed or renamed): in place - position and other entries kept
     configs[static_cast<std::size_t>(at)].name = name;  // keep the list position, adopt the new spelling
     configs[static_cast<std::size_t>(at)].charges = candidate.charges;
+    configs[static_cast<std::size_t>(at)].radius = candidate.radius;
     return SaveIntoResult::OK;
   }
   configs.push_back(candidate);  // vanished source with a fresh name: Save-As creation semantics

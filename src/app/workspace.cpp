@@ -44,13 +44,14 @@ unsigned Workspace::open(std::size_t presetIndex) {
   return spawn(presetIndex, number, std::string(p.displayName) + " " + std::to_string(number), std::move(field), std::string(p.displayName));
 }
 
-unsigned Workspace::openUser(const std::string& name, const std::vector<ef::PresetCharge>& charges) {
-  return openUser(name, charges, std::string());
+unsigned Workspace::openUser(const std::string& name, const std::vector<ef::PresetCharge>& charges, const double radius) {
+  return openUser(name, charges, std::string(), radius);
 }
 
-unsigned Workspace::openUser(const std::string& name, const std::vector<ef::PresetCharge>& charges, const std::string& source) {
+unsigned Workspace::openUser(const std::string& name, const std::vector<ef::PresetCharge>& charges, const std::string& source, const double radius) {
   const std::string trimmed = trim(name);
   ef::ChargeSystem field;
+  field.radius = radius;
   field.charges.reserve(charges.size());
   for (const ef::PresetCharge& c : charges) field.charges.push_back(ef::Charge{c.charge, ef::Vec2{c.x, c.y}, c.id, c.name, c.sizePx});
   editor::assignChargeIds(field);  // file-provided ids are preserved; only id == 0 charges get assigned
@@ -185,8 +186,9 @@ bool Workspace::rename(const unsigned serial, const std::string& name) {
 
 unsigned Workspace::openRestored(const std::string& title, const std::size_t presetIndex, const ef::ComputeParams& params,
                                  const std::vector<ef::PresetCharge>& charges, const bool autoRecalc, const GridSettings& grid,
-                                 const std::string& source) {
+                                 const std::string& source, const double radius) {
   ef::ChargeSystem field;
+  field.radius = radius;
   field.charges.reserve(charges.size());
   for (const ef::PresetCharge& c : charges) field.charges.push_back(ef::Charge{c.charge, ef::Vec2{c.x, c.y}, c.id, c.name, c.sizePx});
   editor::assignChargeIds(field);  // persisted ids survive the restore; legacy id == 0 lines get assigned

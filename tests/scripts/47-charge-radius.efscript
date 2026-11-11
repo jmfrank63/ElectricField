@@ -1,0 +1,26 @@
+# 47-charge-radius: the finite charge radius through the API: set, validate, compute, undo, save and
+# reload with the configuration.
+collection.open Original
+config.open Dipole
+app.wait-done
+app.expect radius=0
+charge.radius 1
+app.expect radius=1
+app.expect stale=1
+app.expect dirty=1
+app.expect-error "0 to 1000" charge.radius -1
+app.expect-error "0 to 1000" charge.radius 1001
+app.expect-error "0 to 1000" charge.radius abc
+app.expect radius=1
+editor.undo
+app.expect radius=0
+editor.redo
+app.expect radius=1
+config.save
+app.expect dirty=0
+tab.close
+config.open Dipole
+app.wait-done
+app.expect radius=1
+app.expect lines=16
+app.quit force

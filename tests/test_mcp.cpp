@@ -179,6 +179,22 @@ TEST_CASE("mcp: evaluate_field") {
   CHECK(onCharge["potential"].is_null());
 }
 
+TEST_CASE("mcp: charge_radius makes the field finite at the charges") {
+  Server server("1", nullptr);
+  json points = json::array({json::object({{"x", -2}, {"y", 0}}), json::object({{"x", -1.5}, {"y", 0}}), json::object({{"x", 0}, {"y", 0}})});
+  const json result = callModern(server, "evaluate_field", json::object({{"charges", kDipole}, {"charge_radius", 1}, {"points", points}}));
+  REQUIRE(result["isError"] == false);
+  const json& values = result["structuredContent"]["values"];
+  CHECK(values[0]["singular"] == false);
+  CHECK(values[0]["potential"].get<double>() == doctest::Approx(1.5 - 0.25));  // 3q/(2R) from +1, -1/4 from the -1 at distance 4
+  CHECK(values[1]["ex"].get<double>() == doctest::Approx(0.5 + 1.0 / (3.5 * 3.5)));  // q r / R^3 inside, plus the partner
+  CHECK(values[2]["ex"].get<double>() == doctest::Approx(0.5));  // outside both balls: unchanged
+  const json preset = callModern(server, "compute_field_lines", json::object({{"preset", "dipole"}, {"charge_radius", 1}, {"lines_per_unit_charge", 4}, {"potential_interval", 0.5}}));
+  REQUIRE(preset["isError"] == false);
+  CHECK(preset["structuredContent"]["field_lines"] == 4);
+  CHECK(errorText(callModern(server, "evaluate_field", json::object({{"charges", kDipole}, {"charge_radius", -1}, {"points", points}}))).find("charge_radius") != std::string::npos);
+}
+
 TEST_CASE("mcp: invalid arguments come back as tool errors") {
   Server server("1", nullptr);
   const auto fails = [&](json arguments, const char* expected) {

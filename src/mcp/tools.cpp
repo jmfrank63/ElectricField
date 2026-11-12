@@ -156,7 +156,7 @@ ef::ChargeSystem parseField(const json& args) {
   for (std::size_t i = 0; i < list.size(); ++i) {
     ef::Charge c = parseCharge(list[i], i);
     for (std::size_t j = 0; j < field.charges.size(); ++j)
-      if ((field.charges[j].position3() - c.position3()).Length() < kMinSeparation)
+      if (radius <= 0 && (field.charges[j].position3() - c.position3()).Length() < kMinSeparation)
         throw ToolError("charges[" + std::to_string(j) + "] and charges[" + std::to_string(i) + "] are at the same position");
     field.charges.push_back(std::move(c));
   }
@@ -458,7 +458,7 @@ json exportCsv(const json& args, const std::atomic<bool>* cancel) {
   checkKeys(args, {"preset", "charges", "charge_radius", "method", "lines_per_unit_charge", "equipotentials", "potential_interval", "threads", "timeout_ms", "view_yaw", "view_pitch", "table", "output_path", "overwrite"}, "arguments");
   const Computation c = parseComputation(args);
   const std::string table = getString(args, "table", "lines");
-  if (table != "lines" && table != "charges") throw ToolError("'table' must be lines or charges");
+  if (table != "lines" && table != "charges" && table != "bodies") throw ToolError("'table' must be lines, charges or bodies");
   const std::string outputText = getString(args, "output_path", "");
   const bool overwrite = getBool(args, "overwrite", false);
   if (args.contains("overwrite") && outputText.empty()) throw ToolError("'overwrite' needs 'output_path'");
@@ -469,6 +469,8 @@ json exportCsv(const json& args, const std::atomic<bool>* cancel) {
   std::string csv;
   if (table == "charges") {
     csv = ef::chargesCsv(c.field);
+  } else if (table == "bodies") {
+    csv = ef::bodiesCsv(c.field);
   } else {
     const Computed done = compute(c, cancel);
     csv = ef::linesCsv(c.field, ef::buildScene(c.field, done.result));
@@ -492,7 +494,7 @@ const char* const kFieldProperties = R"json({
   "preset": {"type": "string", "description": "Slug of a built-in configuration (see list_presets). Provide exactly one of preset or charges."},
   "charges": {
     "type": "array", "minItems": 1, "maxItems": 64,
-    "description": "Point charges at distinct positions. Provide exactly one of preset or charges.",
+    "description": "Charges at distinct positions (balls, with charge_radius above 0, may coincide). Provide exactly one of preset or charges.",
     "items": {
       "type": "object", "additionalProperties": false, "required": ["charge", "x", "y"],
       "properties": {
@@ -504,7 +506,7 @@ const char* const kFieldProperties = R"json({
       }
     }
   },
-  "charge_radius": {"type": "number", "minimum": 0, "maximum": 1000, "default": 0, "description": "Physical radius of every charge in world units. 0 = point charges. Above 0 each charge is a uniformly charged ball: Coulomb outside. Field lines start and end on ball surfaces; the inside is not traced. Balls whose centres are at most 2R apart melt into one body."}
+  "charge_radius": {"type": "number", "minimum": 0, "maximum": 1000, "default": 0, "description": "Physical radius of every charge in world units. 0 = point charges. Above 0 each charge is a uniformly charged ball: Coulomb outside. Each ball keeps its uniform charge and overlapping charges add. Balls whose centres are at most 2R apart form one body (they may even share a centre); field lines are placed on a body's outer surface in proportion to the field flowing through it and end where they meet a surface; the inside is not traced."}
 })json";
 
 const char* const kComputeProperties = R"json({
@@ -575,7 +577,7 @@ json toolDefinitions(bool pngAvailable) {
   json csv = fieldProperties;
   csv.update(computeProperties);
   csv.update(json::parse(R"json({
-    "table": {"type": "string", "enum": ["lines", "charges"], "default": "lines", "description": "lines: one row per point of every field line and equipotential with x, y, z, screen position, potential, field vector, magnitude and direction angles. charges: one row per charge with position, body, potential and field of the other charges at its centre, the force on it and the system energy."},
+    "table": {"type": "string", "enum": ["lines", "charges", "bodies"], "default": "lines", "description": "lines: one row per point of every field line and equipotential with x, y, z, screen position, potential, field vector, magnitude and direction angles. charges: one row per charge with position, body, potential and field of the other charges at its centre, the force on it and the system energy. bodies: one row per group of touching balls with net charge, dipole moment and the field flux leaving and entering its surface."},
     "output_path": {"type": "string", "description": "Absolute path of a .csv file to write, in an existing directory. Omit to get the CSV inline."},
     "overwrite": {"type": "boolean", "default": false, "description": "Allow output_path to replace an existing file."}
   })json"));

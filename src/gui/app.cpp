@@ -1311,8 +1311,8 @@ ef::View fittedView(const std::vector<ef::SceneCharge>& charges, int widthPx, in
 
 }  // namespace
 
-// Numeric export of the active tab: `path` gets the points of the lines on screen, and a second file next
-// to it, "<name>-charges.csv", the table of the charges. Both describe the calculated state (t->computed),
+// Numeric export of the active tab: `path` gets the points of the lines on screen, and two more files
+// next to it: "<name>-charges.csv", the table of the charges, and "<name>-bodies.csv", the melted bodies. Both describe the calculated state (t->computed),
 // which is what the lines belong to, also when the tab has uncalculated edits.
 std::string App::exportCsvTo(const std::string& path) {
   const efapp::Tab* t = ws_.find(ui_.activeSerial);
@@ -1323,7 +1323,10 @@ std::string App::exportCsvTo(const std::string& path) {
   std::filesystem::path charges = lines;
   charges.replace_filename(lines.stem().u8string() + "-charges" + lines.extension().u8string());
   if (std::string e = writeTextFile(lines.u8string(), ef::linesCsv(t->computed, t->scene)); !e.empty()) return e;
-  return writeTextFile(charges.u8string(), ef::chargesCsv(t->computed));
+  if (std::string e = writeTextFile(charges.u8string(), ef::chargesCsv(t->computed)); !e.empty()) return e;
+  std::filesystem::path bodies = lines;
+  bodies.replace_filename(lines.stem().u8string() + "-bodies" + lines.extension().u8string());
+  return writeTextFile(bodies.u8string(), ef::bodiesCsv(t->computed));
 }
 
 std::string App::exportConfigurationTo(const std::string& path) {

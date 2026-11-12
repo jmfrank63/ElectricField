@@ -26,6 +26,17 @@ std::vector<Seed> planSeeds(const ChargeSystem& field, const ComputeParams& p);
 // from the sources, and equipotentials (surfaces in space) are not traced.
 std::vector<Seed> planSeeds3(const ChargeSystem& field, const ComputeParams& p);
 
+// Balls (ChargeSystem::radius > 0) are seeded per body, in proportion to the field flowing through the
+// body's outer surface (see planFluxSeeds in seeds.cpp); planSeeds and planSeeds3 switch to it themselves.
+
+// The field flowing out of and into each body's outer surface, in charge units (the surface integral of
+// E . n over 4 pi): out - in is the body's net charge. Indexed like ChargeSystem::bodies().
+struct BodyFlux {
+  double out = 0;
+  double in = 0;
+};
+std::vector<BodyFlux> bodyFlux(const ChargeSystem& field);
+
 // FieldLinesCalculator::GetNumberOfElectricFieldLines (FieldLinesCalculator.cpp:261), with the unsigned-wrap defect fixed (std::abs).
 int expectedLineCount(const ChargeSystem& field, const ComputeParams& p);
 

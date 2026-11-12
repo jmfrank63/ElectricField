@@ -60,6 +60,7 @@ const test_sources = [_][]const u8{
     "test_radius.cpp",
     "test_3d.cpp",
     "test_csv.cpp",
+    "test_flux.cpp",
 };
 
 const mcp_sources = [_][]const u8{

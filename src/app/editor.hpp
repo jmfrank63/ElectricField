@@ -9,6 +9,7 @@
 #include <string>
 
 #include "app/workspace.hpp"
+#include "ef/shapes.hpp"
 #include "ef/vec2.hpp"
 
 namespace efapp {
@@ -87,6 +88,22 @@ bool setChargeRadius(Tab& t, double radius);
 // The tab's charge model for balls (uniform charge or equipotential surface): a physics edit with one
 // history entry, like setChargeRadius.
 bool setChargeModel(Tab& t, ef::ChargeModel model);
+
+// --- Shapes (ef/shapes.hpp): rigid groups of balls for the equipotential charge model ---------------
+// The balls that move with charge `index`: its whole group, or just itself when it has none.
+std::vector<std::size_t> groupMembers(const ef::ChargeSystem& field, std::size_t index);
+// The value the panel shows and edits for a charge: its own, or its group's total charge. Inside a
+// group setValue / stepValue / flipSign act on that total and 0 is allowed (a neutral body).
+int chargeValue(const ef::ChargeSystem& field, std::size_t index);
+// Places `shape` centred at `centre` as one new group carrying `totalCharge`, and selects it. Only for
+// tabs with a charge radius above 0 and the equipotential model (false otherwise); one history entry.
+bool insertShape(Tab& t, const ef::Shape& shape, ef::Vec3 centre, int totalCharge);
+// Turns the group of charge `index` about its own centre, around the world axis 0 = x, 1 = y, 2 = z, by
+// `degrees`. One history entry; false for a charge without a group.
+bool rotateGroup(Tab& t, std::size_t index, int axis, double degrees);
+// The shape formed by the body (all balls touching, directly or through others) that charge `index`
+// belongs to, under `name`. An invalid shape (ef::validShape) when the tab has no charge radius.
+ef::Shape shapeFromBody(const Tab& t, std::size_t index, const std::string& name);
 
 // Value edits (261020-ef2): 0 is not a charge. setValue refuses it (the typed field then refreshes
 // back to the model value); stepValue continues a step that would land on 0 to the neighbour

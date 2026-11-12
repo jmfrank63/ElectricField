@@ -82,6 +82,14 @@ std::string serializeSession(const std::vector<SavedTab>& tabs, const std::strin
       chargeName.erase(std::remove(chargeName.begin(), chargeName.end(), ','), chargeName.end());
       os << "charge = " << c.charge << ", " << x << ", " << y << ", " << s << ", " << c.id << ", " << chargeName << '\n';
     }
+    if (std::any_of(t.charges.begin(), t.charges.end(), [](const ef::PresetCharge& q) { return q.group != 0; })) {
+      os << "group = ";
+      // A ball holding charge 0 (allowed inside a group only) is written with a negative group number:
+      // its charge line alone would load as +1, the rule for a 0 outside a group.
+      for (std::size_t i = 0; i < t.charges.size(); ++i)
+        os << (i ? ", " : "") << (t.charges[i].charge == 0 ? "-" : "") << t.charges[i].group;
+      os << '\n';
+    }
     if (std::any_of(t.charges.begin(), t.charges.end(), [](const ef::PresetCharge& q) { return q.z != 0; })) {
       os << "z = ";
       for (std::size_t i = 0; i < t.charges.size(); ++i) {
@@ -141,6 +149,16 @@ ParsedSession parseSession(const std::string& text) {
       if (inTab && ini::parseDoubleList(value, list) && list.size() == 2 && std::abs(list[0]) <= 360 && std::abs(list[1]) <= 90) {
         cur.camera.yaw = list[0] * ef::kPi / 180.;
         cur.camera.pitch = list[1] * ef::kPi / 180.;
+      }
+    } else if (key == "group") {
+      std::vector<double> list;
+      if (inTab) {
+        if (ini::parseDoubleList(value, list))
+          for (std::size_t i = 0; i < list.size() && i < cur.charges.size(); ++i)
+            if (std::abs(list[i]) <= 1e6 && list[i] == std::floor(list[i])) {
+              cur.charges[i].group = static_cast<unsigned>(std::abs(list[i]));
+              if (list[i] < 0) cur.charges[i].charge = 0;  // negative: this ball of the group holds no charge
+            }
       }
     } else if (key == "z") {
       std::vector<double> list;

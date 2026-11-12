@@ -12,6 +12,7 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "app/shapes_file.hpp"
 #include "app/session_file.hpp"
 #include "app/ui_logic.hpp"
 #include "app/ini_text.hpp"
@@ -188,6 +189,9 @@ bool App::init(const AppOptions& opt, std::string& step, std::string& message) {
         defaults.chargeRadiusPx = options_.draw.chargeRadiusPx;
         ws_.applyDefaults(defaults);
       }
+      shapesPath_ = dir / "Shapes.ini";
+      shapes_ = efapp::loadShapes(shapesPath_);
+      ui_.customShapes = shapes_;
       configsPath_ = dir / "configurations.ini";
       userConfigs_ = efapp::loadConfigs(configsPath_);
       sessionPath_ = dir / "session.ini";
@@ -386,6 +390,11 @@ void App::frame() {
       std::string err;
       if (!efapp::saveOptions(optionsPath_, options_, err)) std::fprintf(stderr, "options: %s\n", err.c_str());
     }
+  }
+  if (ui_.saveShape) {  // the panel's "Save as shape"
+    ui_.saveShape = false;
+    const std::string e = saveShape(ui_.pendingShape);
+    ui_.shapeNote = e.empty() ? "Saved shape \"" + ui_.pendingShape.name + "\"." : e.substr(e.rfind("error: ", 0) == 0 ? 7 : 0);
   }
   exportStep();  // EXP-01/02: start the save dialog / run a chosen export on the UI thread between frames
   if (ui_.saveAsApply) {  // v2 CFG-03 / v2.4 COL: Save Configuration As accepted (the modal pre-validated;
@@ -1145,6 +1154,19 @@ int App::runScreenshot() {
 
 // Consumed every frame after drawUi: a menu request opens the native save dialog; a path chosen in an
 // earlier frame is exported here — on the UI thread, between frames (renderPng's ImGui-context rule).
+std::string App::saveShape(const ef::Shape& shape) {
+  switch (efapp::upsertShape(shapes_, shape)) {
+    case efapp::SaveShapeResult::EMPTY_NAME: return "error: the shape needs a name";
+    case efapp::SaveShapeResult::RESERVED_NAME: return "error: that name belongs to a built-in shape";
+    case efapp::SaveShapeResult::INVALID_SHAPE: return "error: not a shape (needs a charge radius, at most 32 balls, all touching)";
+    case efapp::SaveShapeResult::OK: break;
+  }
+  ui_.customShapes = shapes_;
+  std::string error;
+  if (!shapesPath_.empty() && !efapp::saveShapes(shapesPath_, shapes_, error)) return "error: " + error;
+  return std::string();
+}
+
 void App::exportStep() {
   // The five dialog kinds share this machinery; exportFormat_ says which dialog was started (and
   // therefore what to do with the chosen path below):
@@ -1771,6 +1793,9 @@ std::string App::command(const std::string& line) {
     os << "configs=";
     for (std::size_t i = 0; i < userConfigs_.size(); ++i) os << (i ? "|" : "") << userConfigs_[i].name;
     os << '\n';
+    os << "shapes=";  // built-in shapes, then the custom ones
+    for (std::size_t i = 0; i < ef::builtinShapes().size() + shapes_.size(); ++i) os << (i ? "|" : "") << efapp::shapeAt(shapes_, static_cast<int>(i)).name;
+    os << '\n';
     os << "drawsize=" << options_.draw.chargeRadiusPx << '\n';  // v2.5 SIZE-01: the applied charge radius, the script oracle for the Draw tab
     os << "couple=" << (options_.coupleValueSize ? 1 : 0) << '\n';  // 261020-ef2: the value-and-size coupling
     const auto& tabs = ws_.tabs();
@@ -1786,6 +1811,8 @@ std::string App::command(const std::string& line) {
          << t.grid.spacing << ',' << t.grid.angleStepDeg << " radius=" << t.field.radius << " model=" << (t.field.model == ef::ChargeModel::Conductor ? "conductor" : "uniform") << " angle="
          << std::round(t.field.camera.yaw * 180. / ef::kPi * 1e6) / 1e6 << ',' << std::round(t.field.camera.pitch * 180. / ef::kPi * 1e6) / 1e6 << " z=";
       for (std::size_t i = 0; i < t.field.charges.size(); ++i) os << (i ? ";" : "") << t.field.charges[i].z;
+      os << " groups=";
+      for (std::size_t i = 0; i < t.field.charges.size(); ++i) os << (i ? ";" : "") << t.field.charges[i].group;
       os << " charges=";
       // v2.6 phase 3: charges=v,x,y,sizePx,id,displayName (substring-compatible: the old v,x,y prefix
       // is untouched; the name shown is the stored one or the derived "Charge N").
@@ -2120,6 +2147,46 @@ std::string App::command(const std::string& line) {
     return "ok";
   }
 
+  if (cmd == "shape.insert") {  // <total> <x> <y> <z> <name...>: a rigid shape as one new group
+    if (const std::string e = need(5); !e.empty()) return e;
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    long long total = 0;
+    double x = 0, y = 0, z = 0;
+    if (!parseApiInt(tok[1], total) || total < -1000000 || total > 1000000 || !parseApiDouble(tok[2], x) || !parseApiDouble(tok[3], y) || !parseApiDouble(tok[4], z))
+      return "error: shape.insert needs <total> <x> <y> <z> <name>";
+    std::string name;
+    for (std::size_t k = 5; k < tok.size(); ++k) name += (k > 5 ? " " : "") + tok[k];
+    const int index = efapp::findShape(shapes_, name);
+    if (index < 0) return "error: unknown shape '" + name + "'";
+    if (!t->field.conductor()) return "error: shapes need a charge radius above 0 and the conductor charge model";
+    if (!efapp::editor::insertShape(*t, efapp::shapeAt(shapes_, index), ef::Vec3(x, y, z), static_cast<int>(total))) return "error: the tab is computing";
+    return "ok";
+  }
+  if (cmd == "shape.rotate") {  // <index> <x|y|z> <degrees>: turn the shape of that charge about its centre
+    if (const std::string e = need(3); !e.empty()) return e;
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    long long i = 0;
+    double degrees = 0;
+    if (!parseApiInt(tok[1], i) || i < 0 || static_cast<std::size_t>(i) >= t->field.charges.size()) return "error: invalid charge index";
+    const int axis = tok[2] == "x" ? 0 : tok[2] == "y" ? 1 : tok[2] == "z" ? 2 : -1;
+    if (axis < 0 || !parseApiDouble(tok[3], degrees)) return "error: shape.rotate needs <index> <x|y|z> <degrees>";
+    if (t->field.charges[static_cast<std::size_t>(i)].group == 0) return "error: that charge is not part of a shape";
+    if (!efapp::editor::rotateGroup(*t, static_cast<std::size_t>(i), axis, degrees)) return "error: the tab is computing";
+    return "ok";
+  }
+  if (cmd == "shape.save") {  // <index> <name...>: keep the body of that charge as a custom shape
+    if (const std::string e = need(2); !e.empty()) return e;
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    long long i = 0;
+    if (!parseApiInt(tok[1], i) || i < 0 || static_cast<std::size_t>(i) >= t->field.charges.size()) return "error: invalid charge index";
+    std::string name;
+    for (std::size_t k = 2; k < tok.size(); ++k) name += (k > 2 ? " " : "") + tok[k];
+    const std::string err = saveShape(efapp::editor::shapeFromBody(*t, static_cast<std::size_t>(i), name));
+    return err.empty() ? "ok" : err;
+  }
   if (cmd == "charge.model") {  // how the charge of the balls is distributed
     if (const std::string e = need(1); !e.empty()) return e;
     efapp::Tab* t = activeTab();

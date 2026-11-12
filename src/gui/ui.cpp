@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "app/shapes_file.hpp"
 #include "app/ui_logic.hpp"
 #include "app/configs.hpp"
 #include "app/editor.hpp"
@@ -764,7 +765,35 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   ImGui::InputDouble("X##add", &ui.addX, 0.0, 0.0, "%.3f");
   ImGui::InputDouble("Y##add", &ui.addY, 0.0, 0.0, "%.3f");
   ImGui::InputDouble("Z##add", &ui.addZ, 0.0, 0.0, "%.3f");
-  if (ImGui::Button("Add", ImVec2(-FLT_MIN, 0.f))) {
+  {  // what to add: a single charge, or a shape (a rigid group of balls, equipotential model only)
+    const int shapeCount = static_cast<int>(ef::builtinShapes().size() + ui.customShapes.size());
+    if (ui.addShape > shapeCount) ui.addShape = 0;
+    const char* current = ui.addShape == 0 ? "Single charge" : efapp::shapeAt(ui.customShapes, ui.addShape - 1).name.c_str();
+    if (ImGui::BeginCombo("Shape##add", current)) {
+      if (ImGui::Selectable("Single charge", ui.addShape == 0)) ui.addShape = 0;
+      for (int i = 0; i < shapeCount; ++i) {
+        const ef::Shape& shape = efapp::shapeAt(ui.customShapes, i);
+        const std::string label = shape.name + " (" + std::to_string(shape.balls.size()) + ")##shape" + std::to_string(i);
+        if (ImGui::Selectable(label.c_str(), ui.addShape == i + 1)) ui.addShape = i + 1;
+      }
+      ImGui::EndCombo();
+    }
+    if (ImGui::IsItemHovered())
+      ImGui::SetTooltip("A shape is a rigid group of balls: it is placed, moved and turned as one unit and carries\n"
+                        "one total charge (the Value). Shapes need a charge radius above 0 and the\n"
+                        "Equipotential surface charge model.");
+  }
+  if (ui.addShape != 0) {
+    if (ImGui::Button("Add shape", ImVec2(-FLT_MIN, 0.f))) {
+      if (!t.field.conductor())
+        ui.addError = "Shapes need a charge radius above 0 and the Equipotential surface model.";
+      else if (!efapp::editor::insertShape(t, efapp::shapeAt(ui.customShapes, ui.addShape - 1), ef::Vec3(ui.addX, ui.addY, ui.addZ), ui.addValue))
+        ui.addError = "The tab is computing.";
+      else
+        ui.addError.clear();
+      armAutoRecalc(t);
+    }
+  } else if (ImGui::Button("Add", ImVec2(-FLT_MIN, 0.f))) {
     // v2.6 phase 3: new charges take the Options charge size as their default (0 = inherit).
     // 261020-ef2: a 0 value is not a charge - addCharge refuses it and the label says why.
     const float addDefaultPx = env.options ? env.options->draw.chargeRadiusPx : ef::DrawStyle{}.chargeRadiusPx;
@@ -786,12 +815,13 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     const std::size_t at = static_cast<std::size_t>(t.selected);
     ef::Charge& c = t.field.charges[at];
 
-    int value = c.charge;
+    const bool grouped = c.group != 0;
+    int value = efapp::editor::chargeValue(t.field, at);  // a shape shows and edits its total charge
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 3 * (22.f + 6.f * env.k) - 8.f * env.k);
     if (ImGui::InputInt("##value", &value, 0, 0)) {
       // 261020-ef2: 0 is not a charge - a typed 0 is refused and the field refreshes back to the
       // model value (the refresh below runs while the item is not active).
-      if (value != 0) {
+      if (value != 0 || grouped) {  // a shape may be neutral
         efapp::editor::setValue(t, at, value);  // realtime per keystroke
         armAutoRecalc(t);
       }
@@ -815,6 +845,35 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     ImGui::SameLine(0.f, 8.f * env.k);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Value");
+
+    if (grouped) {  // a shape: one rigid unit
+      ImGui::TextDisabled("Shape of %d balls: moves as one, Value is its total", static_cast<int>(efapp::editor::groupMembers(t.field, at).size()));
+      ImGui::SetNextItemWidth(60.f * env.k);
+      ImGui::InputFloat("##turnstep", &ui.shapeTurnDeg, 0.f, 0.f, "%.0f deg");
+      ui.shapeTurnDeg = std::clamp(ui.shapeTurnDeg, 1.f, 180.f);
+      static const char* const kAxis[3] = {"X", "Y", "Z"};
+      for (int axis = 0; axis < 3; ++axis) {
+        for (int dir = -1; dir <= 1; dir += 2) {
+          ImGui::SameLine(0.f, 4.f * env.k);
+          const std::string label = std::string(kAxis[axis]) + (dir < 0 ? "-" : "+") + "##turn";
+          if (ImGui::SmallButton(label.c_str())) {
+            if (efapp::editor::rotateGroup(t, at, axis, dir * static_cast<double>(ui.shapeTurnDeg))) armAutoRecalc(t);
+          }
+        }
+      }
+      if (ImGui::IsItemHovered()) ImGui::SetTooltip("Turn the shape about its own centre, around the X, Y or Z axis.");
+    }
+    if (t.field.conductor()) {  // any body (balls that touch) can be kept as a custom shape
+      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
+      ImGui::InputTextWithHint("##shapename", "shape name", ui.shapeNameBuf, sizeof(ui.shapeNameBuf));
+      ImGui::SameLine(0.f, 6.f * env.k);
+      if (ImGui::Button("Save as shape")) {
+        ui.pendingShape = efapp::editor::shapeFromBody(t, at, ui.shapeNameBuf);
+        ui.saveShape = true;
+      }
+      if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stores the body this ball belongs to (all balls that touch) as a custom shape.");
+      if (!ui.shapeNote.empty()) ImGui::TextDisabled("%s", ui.shapeNote.c_str());
+    }
 
     double x = c.position.X;
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2 * (22.f + 8.f * env.k));

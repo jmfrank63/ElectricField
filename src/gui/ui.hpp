@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "ef/shapes.hpp"
 #include "app/configs.hpp"
 #include "app/options.hpp"
 #include "app/workspace.hpp"
@@ -69,6 +70,15 @@ struct UiState {
   // v2.1 editor panel: Add-charge section and the per-tab rename buffer
   int addValue = 1;
   double addX = 0.0, addY = 0.0, addZ = 0.0;
+  // Shapes (ef/shapes.hpp): what "Add" places (0 = a single charge, else 1 + index into built-in + custom
+  // shapes), the turn step of the shape buttons, and the request to save a body as a custom shape.
+  int addShape = 0;
+  float shapeTurnDeg = 15.f;
+  char shapeNameBuf[64] = "";
+  std::vector<ef::Shape> customShapes;  // mirror of the App's custom shapes (one owner: App)
+  bool saveShape = false;               // consumed by the App: store pendingShape in the shapes file
+  ef::Shape pendingShape;
+  std::string shapeNote;                // the result of the last save, shown under the button
   std::string addError;  // 261020-ef2: why the last Add was refused (a 0 value, a computing tab)
   char tabNameBuf[128] = "";
   unsigned tabNameBufSerial = 0;

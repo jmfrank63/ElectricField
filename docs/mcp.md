@@ -55,7 +55,8 @@ Every tool that takes a configuration needs exactly one of:
 - `charges`: 1 to 64 charges at distinct positions, each `{"charge": 1, "x": -2, "y": 0}` with an
   optional `z` (default 0) and an optional drawn radius `size_px` (0, or 2 to 120)
 
-`charge` is a non-zero integer. World coordinates have y pointing up. The field uses a unit Coulomb
+`charge` is a non-zero integer (0 is accepted with `charge_model` `conductor`, for an uncharged ball of
+a body or a neutral conductor). World coordinates have y pointing up. The field uses a unit Coulomb
 constant: `E = sum q*r/|r|^3` and `V = sum q/|r|`.
 
 `charge_radius` (default 0, at most 1000, world units) works with a preset or with `charges` and gives

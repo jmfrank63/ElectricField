@@ -38,6 +38,7 @@ const app_sources = [_][]const u8{
     "app/configs.cpp",
     "app/editor.cpp",
     "app/session_file.cpp",
+    "app/shapes_file.cpp",
 };
 
 const test_sources = [_][]const u8{
@@ -63,6 +64,7 @@ const test_sources = [_][]const u8{
     "test_csv.cpp",
     "test_flux.cpp",
     "test_conductor.cpp",
+    "test_shapes.cpp",
 };
 
 const mcp_sources = [_][]const u8{

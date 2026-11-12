@@ -112,6 +112,10 @@ class App {
   bool persistedCoupleValueSize_ = false;  // 261020-ef2: the shadow for the panel toggle's persist-on-flip
   std::filesystem::path optionsPath_; // empty in headless modes (nothing is loaded or persisted there)
   std::vector<efapp::UserConfig> userConfigs_;  // user configurations (v2 CFG-01); master list, mirrored into ui_
+  // Custom shapes (ef/shapes.hpp): the master list, mirrored into ui_, stored in Shapes.ini.
+  std::vector<ef::Shape> shapes_;
+  std::filesystem::path shapesPath_;            // empty in headless modes without a user directory
+  std::string saveShape(const ef::Shape& shape);  // "" or "error: ..."; persists when shapesPath_ is set
   std::filesystem::path configsPath_;           // configurations.ini; empty in headless modes
   std::filesystem::path configDir_;             // the user config directory (v2.1 SES-03: Help > Open Configuration Folder)
   std::filesystem::path sessionPath_;           // session.ini (v2.4: the POINTER file, collection = <name>)

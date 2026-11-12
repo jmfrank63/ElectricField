@@ -29,6 +29,7 @@ struct PresetCharge {
   std::uint64_t id = 0;
   std::string name{};
   double z = 0;  // third coordinate; persisted on its own line, so the charge line keeps its 6 fields
+  unsigned group = 0;  // shape group (Charge::group); persisted on its own line too
 };
 
 // v2.6 phase 3: the Charge -> PresetCharge conversion used by every save/merge/dump site, so the
@@ -42,6 +43,7 @@ inline PresetCharge toPresetCharge(const Charge& c) {
   p.name = c.name;
   p.sizePx = c.sizePx;
   p.z = c.z;
+  p.group = c.group;
   return p;
 }
 
@@ -49,6 +51,7 @@ inline PresetCharge toPresetCharge(const Charge& c) {
 inline Charge toCharge(const PresetCharge& p) {
   Charge c{p.charge, Vec2{p.x, p.y}, p.id, p.name, p.sizePx};
   c.z = p.z;
+  c.group = p.group;
   return c;
 }
 

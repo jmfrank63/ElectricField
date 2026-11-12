@@ -15,6 +15,9 @@ namespace ef {
 
 struct FieldLine {
   std::vector<Vec2> points;
+  // Lines traced in space only: the 3D point behind every recorded point, before the Bezier fit turns
+  // `points` into control points. Used for numeric export; empty for planar lines.
+  std::vector<Vec3> space;
 
   // Thinning thresholds are in pixels of the 100 px/unit scale (dif) and in WORLD units (pt.Length()), as in the original.
   void addPoint(const Vec2& pt, double pixelsPerUnit) {
@@ -201,11 +204,20 @@ FieldLine traceElectricLine3(Solver& solver, const ChargeSystem& field, const Co
   double step = 0.001;
   double next_step = step;
   const double px = static_cast<double>(p.pixelsPerUnit);
-  line.addPoint(field.camera.project(point), px);
+  // Records the projection (thinned like every line) and, for each kept point, the point in space.
+  const auto record = [&line, &field, px](const Vec3& at) {
+    const std::size_t before = line.points.size();
+    line.addPoint(field.camera.project(at), px);
+    if (line.points.size() != before) line.space.push_back(at);
+  };
+  record(point);
 
   const auto endAt = [&line, &field](const Vec3& at) {
     const Vec2 flat = field.camera.project(at);
-    if (line.points.empty() || !(line.points.back() == flat)) line.points.push_back(flat);
+    if (line.points.empty() || !(line.points.back() == flat)) {
+      line.points.push_back(flat);
+      line.space.push_back(at);
+    }
   };
 
   for (std::size_t i = 0; i < steps; ++i) {
@@ -222,7 +234,7 @@ FieldLine traceElectricLine3(Solver& solver, const ChargeSystem& field, const Co
     }
 
     point = solver.SolveStep(direction, point, t, step, next_step, precision, max_step);
-    line.addPoint(field.camera.project(point), px);
+    record(point);
 
     if (field.radius <= 0 && field.HitCharge(point, p)) {
       endAt(point);
@@ -230,7 +242,10 @@ FieldLine traceElectricLine3(Solver& solver, const ChargeSystem& field, const Co
     }
     if (const int ball = field.BallAt(point); ball >= 0) {
       const Vec2 flat = field.camera.project(point);
-      if (!line.points.empty() && line.points.back() == flat) line.points.pop_back();
+      if (!line.points.empty() && line.points.back() == flat) {
+        line.points.pop_back();
+        line.space.pop_back();
+      }
       endAt(field.OnSurface(ball, point));
       break;
     }

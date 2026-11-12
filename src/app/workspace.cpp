@@ -44,16 +44,17 @@ unsigned Workspace::open(std::size_t presetIndex) {
   return spawn(presetIndex, number, std::string(p.displayName) + " " + std::to_string(number), std::move(field), std::string(p.displayName));
 }
 
-unsigned Workspace::openUser(const std::string& name, const std::vector<ef::PresetCharge>& charges, const double radius) {
-  return openUser(name, charges, std::string(), radius);
+unsigned Workspace::openUser(const std::string& name, const std::vector<ef::PresetCharge>& charges, const double radius, const ef::Camera& camera) {
+  return openUser(name, charges, std::string(), radius, camera);
 }
 
-unsigned Workspace::openUser(const std::string& name, const std::vector<ef::PresetCharge>& charges, const std::string& source, const double radius) {
+unsigned Workspace::openUser(const std::string& name, const std::vector<ef::PresetCharge>& charges, const std::string& source, const double radius, const ef::Camera& camera) {
   const std::string trimmed = trim(name);
   ef::ChargeSystem field;
   field.radius = radius;
+  field.camera = camera;
   field.charges.reserve(charges.size());
-  for (const ef::PresetCharge& c : charges) field.charges.push_back(ef::Charge{c.charge, ef::Vec2{c.x, c.y}, c.id, c.name, c.sizePx});
+  for (const ef::PresetCharge& c : charges) field.charges.push_back(ef::toCharge(c));
   editor::assignChargeIds(field);  // file-provided ids are preserved; only id == 0 charges get assigned
   const unsigned number = ++userCounters_[trimmed];
   return spawn(kNoPreset, number, trimmed + " " + std::to_string(number), std::move(field), source.empty() ? trimmed : source);
@@ -186,11 +187,12 @@ bool Workspace::rename(const unsigned serial, const std::string& name) {
 
 unsigned Workspace::openRestored(const std::string& title, const std::size_t presetIndex, const ef::ComputeParams& params,
                                  const std::vector<ef::PresetCharge>& charges, const bool autoRecalc, const GridSettings& grid,
-                                 const std::string& source, const double radius) {
+                                 const std::string& source, const double radius, const ef::Camera& camera) {
   ef::ChargeSystem field;
   field.radius = radius;
+  field.camera = camera;
   field.charges.reserve(charges.size());
-  for (const ef::PresetCharge& c : charges) field.charges.push_back(ef::Charge{c.charge, ef::Vec2{c.x, c.y}, c.id, c.name, c.sizePx});
+  for (const ef::PresetCharge& c : charges) field.charges.push_back(ef::toCharge(c));
   editor::assignChargeIds(field);  // persisted ids survive the restore; legacy id == 0 lines get assigned
   const unsigned serial = spawn(presetIndex, 0, trim(title), std::move(field));
   Tab* t = find(serial);

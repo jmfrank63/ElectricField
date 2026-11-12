@@ -28,6 +28,7 @@ struct PresetCharge {
   float sizePx = 0.f;
   std::uint64_t id = 0;
   std::string name{};
+  double z = 0;  // third coordinate; persisted on its own line, so the charge line keeps its 6 fields
 };
 
 // v2.6 phase 3: the Charge -> PresetCharge conversion used by every save/merge/dump site, so the
@@ -40,7 +41,15 @@ inline PresetCharge toPresetCharge(const Charge& c) {
   p.id = c.id;
   p.name = c.name;
   p.sizePx = c.sizePx;
+  p.z = c.z;
   return p;
+}
+
+// The reverse conversion, used by every open/restore/export site.
+inline Charge toCharge(const PresetCharge& p) {
+  Charge c{p.charge, Vec2{p.x, p.y}, p.id, p.name, p.sizePx};
+  c.z = p.z;
+  return c;
 }
 
 struct Preset {

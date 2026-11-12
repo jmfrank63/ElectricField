@@ -93,6 +93,7 @@ class App {
   void mergeDirtyTabsInto(std::vector<efapp::UserConfig>& configs);
   // v2.5 EXP-03: script/file-exports with deterministic fitted views (the GUI export keeps the canvas view).
   std::string exportConfigurationTo(const std::string& path);
+  std::string exportCsvTo(const std::string& path);
   std::string exportCollectionTo(const std::string& path);
 
   AppOptions opt_;

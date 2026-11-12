@@ -124,7 +124,16 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   {
     efrender::ImGuiPainter painter(dl, p);
     // v2.4 BUG-01: the grid is a core pass inside renderScene (after the background, before the lines).
-    ef::renderScene(painter, t.scene, style, view, t.grid.visible ? &t.grid : nullptr);
+    if (t.scene.camera == t.field.camera) {
+      ef::renderScene(painter, t.scene, style, view, t.grid.visible ? &t.grid : nullptr);
+    } else {
+      // The view was turned since the lines were computed: they belong to the old angle, so only the
+      // charges are shown until the next calculation.
+      ef::FieldScene balls;
+      balls.charges = t.scene.charges;
+      balls.chargeRadius = t.scene.chargeRadius;
+      ef::renderScene(painter, balls, style, view, t.grid.visible ? &t.grid : nullptr);
+    }
   }
   ui.canvasMin = p;
   ui.canvasMax = ImVec2(p.x + static_cast<float>(view.widthPx), p.y + static_cast<float>(view.heightPx));
@@ -138,10 +147,22 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   // the zoom-relative 100 * zoom (what armViewRecalc stamps) and the default radius is the unscaled
   // Options value, so bounds are display-scale-independent and per-charge sizePx needs no scaling.
   const int hoverIdx = (canEdit && hovered) ? efapp::editor::hitCharge(t.field, mouseWorld, 100.0 * t.zoom, dotPx) : -1;
-  if (canEdit && hovered) {
+  // 3D: Alt + left-drag turns the view (yaw with the horizontal, pitch with the vertical movement).
+  // Only the charges follow while turning; the lines are recalculated afterwards.
+  const bool turning = canEdit && io.KeyAlt && ImGui::IsMouseDragging(0) && (hovered || ui.canvasTurn);
+  if (turning) {
+    if (efapp::editor::setCamera(t, t.field.camera.yaw + static_cast<double>(io.MouseDelta.x) * 0.01,
+                                 t.field.camera.pitch + static_cast<double>(io.MouseDelta.y) * 0.01))
+      armAutoRecalc(t);
+    ui.canvasTurn = ImGui::IsMouseDown(0);
+  } else {
+    ui.canvasTurn = false;
+  }
+  if (canEdit && hovered && !io.KeyAlt) {
     if (ImGui::IsMouseDoubleClicked(0)) {  // EDIT-13: double-click empty canvas adds a charge in one go
       if (hoverIdx < 0) {
-        efapp::editor::addCharge(t, mouseWorld, 1, static_cast<float>(dotPx));
+        const ef::Vec3 at = t.field.camera.unproject(mouseWorld);  // in the view plane through the origin
+        efapp::editor::addCharge(t, ef::Vec2{at.X, at.Y}, 1, static_cast<float>(dotPx), at.Z);
         armAutoRecalc(t);
       }
     } else if (ImGui::IsMouseClicked(0)) {  // single click selects the charge for editing
@@ -149,12 +170,12 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     }
   }
   // A drag that started on the canvas keeps moving the charge even past the edge until the button is released.
-  if (canEdit && t.selected >= 0 && ImGui::IsMouseDragging(0) && (hovered || ui.canvasDrag)) {
+  if (canEdit && !turning && !io.KeyAlt && t.selected >= 0 && ImGui::IsMouseDragging(0) && (hovered || ui.canvasDrag)) {
     // v2.5 (261012-h24): the whole physical drag coalesces into ONE undo entry — open the transaction on
     // the first drag frame, keyed on dragActive (not the canvasDrag transition) so one that survived a
     // mid-drag computation is never re-begun (beginDrag's own guard is the backstop).
     if (!efapp::editor::dragActive(t)) efapp::editor::beginDrag(t, static_cast<std::size_t>(t.selected));
-    if (efapp::editor::moveCharge(t, static_cast<std::size_t>(t.selected), mouseWorld)) armAutoRecalc(t);
+    if (efapp::editor::moveChargeOnScreen(t, static_cast<std::size_t>(t.selected), mouseWorld)) armAutoRecalc(t);
     ui.canvasDrag = ImGui::IsMouseDown(0);
   } else {
     ui.canvasDrag = false;
@@ -510,6 +531,7 @@ void saveAsModal(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
     efapp::UserConfig candidate;
     candidate.name = ui.saveAsName;
     candidate.radius = t->field.radius;
+    candidate.camera = t->field.camera;
     candidate.charges.reserve(t->field.charges.size());
     for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::toPresetCharge(c));
     // Check on a scratch copy: upsert is the single decision core (also used by App::frame for the real write).
@@ -539,6 +561,7 @@ void saveAsModal(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
       efapp::UserConfig candidate;
       candidate.name = ui.saveAsName;
       candidate.radius = t->field.radius;
+      candidate.camera = t->field.camera;
     candidate.charges.reserve(t->field.charges.size());
       for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::toPresetCharge(c));
       ui.saveAsApply = candidate;
@@ -738,11 +761,12 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   ImGui::InputInt("Value##add", &ui.addValue, 0, 0);
   ImGui::InputDouble("X##add", &ui.addX, 0.0, 0.0, "%.3f");
   ImGui::InputDouble("Y##add", &ui.addY, 0.0, 0.0, "%.3f");
+  ImGui::InputDouble("Z##add", &ui.addZ, 0.0, 0.0, "%.3f");
   if (ImGui::Button("Add", ImVec2(-FLT_MIN, 0.f))) {
     // v2.6 phase 3: new charges take the Options charge size as their default (0 = inherit).
     // 261020-ef2: a 0 value is not a charge - addCharge refuses it and the label says why.
     const float addDefaultPx = env.options ? env.options->draw.chargeRadiusPx : ef::DrawStyle{}.chargeRadiusPx;
-    if (!efapp::editor::addCharge(t, ef::Vec2{ui.addX, ui.addY}, ui.addValue, addDefaultPx))
+    if (!efapp::editor::addCharge(t, ef::Vec2{ui.addX, ui.addY}, ui.addValue, addDefaultPx, ui.addZ))
       ui.addError = ui.addValue == 0 ? "A charge value of 0 is not allowed." : "The tab is computing.";
     else
       ui.addError.clear();
@@ -829,6 +853,26 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     ImGui::SameLine(0.f, 8.f * env.k);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Y");
+
+    double z = c.z;  // 3D: towards the viewer in the default view
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2 * (22.f + 8.f * env.k));
+    if (ImGui::InputDouble("##z", &z, 0.0, 0.0, "%.3f")) {
+      efapp::editor::setChargeZ(t, at, z);
+      armAutoRecalc(t);
+    }
+    ImGui::SameLine(0.f, 8.f * env.k);
+    if (stepArrowButton("##z-", 3)) {
+      efapp::editor::setChargeZ(t, at, c.z - 0.1);
+      armAutoRecalc(t);
+    }
+    ImGui::SameLine(0.f, 4.f * env.k);
+    if (stepArrowButton("##z+", 1)) {
+      efapp::editor::setChargeZ(t, at, c.z + 0.1);
+      armAutoRecalc(t);
+    }
+    ImGui::SameLine(0.f, 8.f * env.k);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Z");
 
     // v2.6 phase 3: the charge's identity - an editable name (empty = the derived "Charge N", shown as
     // disabled context so the user sees what the tooltip will say) and its own drawn size. Both edits
@@ -918,6 +962,23 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   }
 
   ImGui::Separator();
+  {  // 3D: the view angles in degrees; Alt + left-drag on the canvas turns the same camera
+    float angles[2] = {static_cast<float>(t.field.camera.yaw * 180. / ef::kPi), static_cast<float>(t.field.camera.pitch * 180. / ef::kPi)};
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f);
+    if (ImGui::DragFloat2("View angle", angles, 1.f, -360.f, 360.f, "%.0f deg")) {
+      if (efapp::editor::setCamera(t, static_cast<double>(angles[0]) * ef::kPi / 180., static_cast<double>(angles[1]) * ef::kPi / 180.)) armAutoRecalc(t);
+    }
+    if (ImGui::IsItemHovered())
+      ImGui::SetTooltip("Yaw and pitch of the view. Drag here, or hold Alt and drag on the canvas.\n"
+                        "While turning only the charges move; the lines are recalculated afterwards.\n"
+                        "A turned view, or a charge with Z other than 0, is computed in 3D (no equipotentials).");
+    if (!t.field.camera.isDefault()) {
+      ImGui::SameLine();
+      if (ImGui::SmallButton("Front")) {
+        if (efapp::editor::setCamera(t, 0, 0)) armAutoRecalc(t);
+      }
+    }
+  }
   {  // the tab's physical charge radius: 0 = point charges, > 0 = uniformly charged balls
     double radius = t.field.radius;
     ImGui::SetNextItemWidth(120.f * env.k);
@@ -1106,6 +1167,8 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
         if (ImGui::MenuItem("PNG...", nullptr, false, active != nullptr && active->state == efapp::TabState::Done)) ui.exportRequest = 1;
         if (ImGui::MenuItem("SVG...", nullptr, false, active != nullptr && active->state == efapp::TabState::Done)) ui.exportRequest = 2;
         if (ImGui::MenuItem("PDF...", nullptr, false, active != nullptr && active->state == efapp::TabState::Done)) ui.exportRequest = 3;
+        // Numbers: the points of every line with potential, field and angles, plus a table of the charges.
+        if (ImGui::MenuItem("CSV...", nullptr, false, active != nullptr && active->state == efapp::TabState::Done)) ui.exportRequest = 4;
         ImGui::EndMenu();
       }
       if (ImGui::MenuItem("Export Collection...", nullptr, false, collectionOpen && !ui.userConfigs.empty())) ui.exportRequest = 13;
@@ -1155,7 +1218,7 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
   if (ui.openUserConfig >= 0) {  // v2 CFG-02: a user configuration from the chooser
     if (static_cast<std::size_t>(ui.openUserConfig) < ui.userConfigs.size()) {
       const efapp::UserConfig& c = ui.userConfigs[static_cast<std::size_t>(ui.openUserConfig)];
-      ui.selectSerial = ws.openUser(c.name, c.charges, c.radius);
+      ui.selectSerial = ws.openUser(c.name, c.charges, c.radius, c.camera);
     }
     ui.openUserConfig = -1;
   }
@@ -1165,7 +1228,7 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
   }
   if (ui.calculateAll) {  // v2.2 COL-03: open every configuration of the current collection in tabs
     ws.closeAll();
-    for (const efapp::UserConfig& c : ui.userConfigs) ws.openUser(c.name, c.charges, c.radius);
+    for (const efapp::UserConfig& c : ui.userConfigs) ws.openUser(c.name, c.charges, c.radius, c.camera);
     ui.calculateAll = false;
   }
   if (ui.undoRequest || ui.redoRequest) {  // v2.3 EDIT-12

@@ -14,6 +14,7 @@ struct UserConfig {
   std::string name;
   std::vector<ef::PresetCharge> charges;
   double radius = 0;  // ef::ChargeSystem::radius (world units); 0 = point charges, not written to the file
+  ef::Camera camera{};  // the view angles; the default (0, 0) is not written to the file
 };
 
 // File format (D-01), mirroring the options.ini style:
@@ -22,6 +23,8 @@ struct UserConfig {
 //   charge = 1, -2, 0
 //   charge = -1, 2, 0
 //   radius = 1          # optional: ball radius of the charges in world units (absent = 0, point charges)
+//   view = 30, 20       # optional: camera yaw and pitch in degrees (absent = 0, 0)
+//   z = 0, 1.5          # optional, after the charge lines: the z coordinate of each charge in order
 // Coordinates are written with %.10g (round-trips through stod far below any meaningful world-unit
 // precision). Double quotes inside names are stripped on save.
 //

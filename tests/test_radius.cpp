@@ -135,3 +135,37 @@ TEST_CASE("radius: collections and sessions round-trip the radius; absent means 
   REQUIRE(s.value.size() == 1);
   CHECK(s.value[0].radius == 0.5);
 }
+
+TEST_CASE("3d: collections and sessions round-trip z and the view angle; absent means planar") {
+  efapp::UserConfig c{"Space", {{1, -2, 0}, {-1, 2, 0}}};
+  c.charges[1].z = 1.5;
+  c.camera.yaw = 30 * ef::kPi / 180;
+  c.camera.pitch = -20 * ef::kPi / 180;
+  const std::string text = efapp::serializeConfigs({c, efapp::UserConfig{"Flat", {{1, 0, 0}}}});
+  const efapp::ParsedConfigs configs = efapp::parseConfigs(text);
+  REQUIRE(configs.value.size() == 2);
+  CHECK(configs.value[0].charges[0].z == 0);
+  CHECK(configs.value[0].charges[1].z == 1.5);
+  CHECK(configs.value[0].camera.yaw == doctest::Approx(c.camera.yaw));
+  CHECK(configs.value[0].camera.pitch == doctest::Approx(c.camera.pitch));
+  CHECK(configs.value[1].camera.isDefault());
+  const std::string flat = efapp::serializeConfigs({configs.value[1]});
+  CHECK(flat.find("view") == std::string::npos);  // planar configurations write nothing new
+  CHECK(flat.find("z =") == std::string::npos);
+  // malformed lines keep the planar defaults and the charges
+  const efapp::ParsedConfigs bad = efapp::parseConfigs("[configuration \"X\"]\nview = 10\ncharge = 1, 0, 0\nz = abc\n");
+  REQUIRE(bad.value.size() == 1);
+  CHECK(bad.value[0].camera.isDefault());
+  CHECK(bad.value[0].charges[0].z == 0);
+
+  efapp::SavedTab t;
+  t.title = "Space 1";
+  t.charges = {{1, -2, 0}, {-1, 2, 0}};
+  t.charges[0].z = -0.75;
+  t.camera.yaw = 0.25;
+  const efapp::ParsedSession s = efapp::parseSession(efapp::serializeSession({t}));
+  REQUIRE(s.value.size() == 1);
+  CHECK(s.value[0].charges[0].z == -0.75);
+  CHECK(s.value[0].charges[1].z == 0);
+  CHECK(s.value[0].camera.yaw == doctest::Approx(0.25));
+}

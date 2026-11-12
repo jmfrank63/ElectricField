@@ -27,6 +27,7 @@ const core_sources = [_][]const u8{
     "ef/scene.cpp",
     "ef/svg.cpp",
     "ef/pdf.cpp",
+    "ef/csv.cpp",
 };
 
 const app_sources = [_][]const u8{
@@ -58,6 +59,7 @@ const test_sources = [_][]const u8{
     "test_mcp.cpp",
     "test_radius.cpp",
     "test_3d.cpp",
+    "test_csv.cpp",
 };
 
 const mcp_sources = [_][]const u8{

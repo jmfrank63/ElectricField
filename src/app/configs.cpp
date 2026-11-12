@@ -49,6 +49,12 @@ std::string serializeConfigs(const std::vector<UserConfig>& configs) {
       std::snprintf(r, sizeof(r), "%.10g", c.radius);
       os << "radius = " << r << '\n';
     }
+    if (!c.camera.isDefault()) {
+      char a[32], b[32];
+      std::snprintf(a, sizeof(a), "%.10g", c.camera.yaw * 180. / ef::kPi);
+      std::snprintf(b, sizeof(b), "%.10g", c.camera.pitch * 180. / ef::kPi);
+      os << "view = " << a << ", " << b << '\n';
+    }
     for (const ef::PresetCharge& ch : c.charges) {
       char x[32], y[32], s[32];
       std::snprintf(x, sizeof(x), "%.10g", ch.x);
@@ -59,6 +65,15 @@ std::string serializeConfigs(const std::vector<UserConfig>& configs) {
       std::string chargeName = ch.name;
       chargeName.erase(std::remove(chargeName.begin(), chargeName.end(), ','), chargeName.end());
       os << "charge = " << ch.charge << ", " << x << ", " << y << ", " << s << ", " << ch.id << ", " << chargeName << '\n';
+    }
+    if (std::any_of(c.charges.begin(), c.charges.end(), [](const ef::PresetCharge& q) { return q.z != 0; })) {
+      os << "z = ";
+      for (std::size_t i = 0; i < c.charges.size(); ++i) {
+        char z[32];
+        std::snprintf(z, sizeof(z), "%.10g", c.charges[i].z);
+        os << (i ? ", " : "") << z;
+      }
+      os << '\n';
     }
   }
   return os.str();
@@ -99,6 +114,23 @@ ParsedConfigs parseConfigs(const std::string& text) {
       continue;
     }
     if (t[0] == '[') continue;  // foreign section: ignored
+    if (const std::size_t eq = t.find('='); inSection && eq != std::string::npos) {
+      const std::string key = trim(t.substr(0, eq));
+      std::vector<double> list;
+      if (key == "view") {  // camera yaw, pitch in degrees; anything malformed keeps the default view
+        if (ini::parseDoubleList(trim(t.substr(eq + 1)), list) && list.size() == 2 && std::abs(list[0]) <= 360 && std::abs(list[1]) <= 90) {
+          cur.camera.yaw = list[0] * ef::kPi / 180.;
+          cur.camera.pitch = list[1] * ef::kPi / 180.;
+        }
+        continue;
+      }
+      if (key == "z") {  // the z of the charges read so far, in order
+        if (ini::parseDoubleList(trim(t.substr(eq + 1)), list))
+          for (std::size_t i = 0; i < list.size() && i < cur.charges.size(); ++i)
+            if (std::abs(list[i]) <= 1e5) cur.charges[i].z = list[i];
+        continue;
+      }
+    }
     if (t.rfind("radius", 0) == 0) {
       const std::size_t eq = t.find('=');
       double radius = 0;
@@ -195,6 +227,7 @@ UpsertResult upsertUserConfig(std::vector<UserConfig>& configs, const UserConfig
     configs[static_cast<std::size_t>(at)].name = name;  // keep the list position, adopt the new spelling
     configs[static_cast<std::size_t>(at)].charges = candidate.charges;
     configs[static_cast<std::size_t>(at)].radius = candidate.radius;
+    configs[static_cast<std::size_t>(at)].camera = candidate.camera;
     return UpsertResult::OK;
   }
   configs.push_back(candidate);
@@ -219,6 +252,7 @@ SaveIntoResult saveIntoUserConfig(std::vector<UserConfig>& configs, const std::s
     configs[static_cast<std::size_t>(at)].name = name;  // keep the list position, adopt the new spelling
     configs[static_cast<std::size_t>(at)].charges = candidate.charges;
     configs[static_cast<std::size_t>(at)].radius = candidate.radius;
+    configs[static_cast<std::size_t>(at)].camera = candidate.camera;
     return SaveIntoResult::OK;
   }
   configs.push_back(candidate);  // vanished source with a fresh name: Save-As creation semantics

@@ -58,6 +58,12 @@ std::string serializeSession(const std::vector<SavedTab>& tabs, const std::strin
       std::snprintf(r, sizeof(r), "%.10g", t.radius);
       os << "radius = " << r << '\n';
     }
+    if (!t.camera.isDefault()) {
+      char a[32], b[32];
+      std::snprintf(a, sizeof(a), "%.10g", t.camera.yaw * 180. / ef::kPi);
+      std::snprintf(b, sizeof(b), "%.10g", t.camera.pitch * 180. / ef::kPi);
+      os << "view = " << a << ", " << b << '\n';
+    }
     char gx[32], gy[32], gs[32], ga[32];
     std::snprintf(gx, sizeof(gx), "%.10g", t.grid.origin.X);
     std::snprintf(gy, sizeof(gy), "%.10g", t.grid.origin.Y);
@@ -74,6 +80,15 @@ std::string serializeSession(const std::vector<SavedTab>& tabs, const std::strin
       std::string chargeName = c.name;
       chargeName.erase(std::remove(chargeName.begin(), chargeName.end(), ','), chargeName.end());
       os << "charge = " << c.charge << ", " << x << ", " << y << ", " << s << ", " << c.id << ", " << chargeName << '\n';
+    }
+    if (std::any_of(t.charges.begin(), t.charges.end(), [](const ef::PresetCharge& q) { return q.z != 0; })) {
+      os << "z = ";
+      for (std::size_t i = 0; i < t.charges.size(); ++i) {
+        char z[32];
+        std::snprintf(z, sizeof(z), "%.10g", t.charges[i].z);
+        os << (i ? ", " : "") << z;
+      }
+      os << '\n';
     }
   }
   return os.str();
@@ -118,6 +133,17 @@ ParsedSession parseSession(const std::string& text) {
       }
     } else if (key == "recent") {  // 261012-h26: a recently opened collection file (UTF-8 path, newest first)
       if (!value.empty() && r.recents.size() < 100) r.recents.push_back(value);
+    } else if (key == "view") {
+      std::vector<double> list;
+      if (inTab && ini::parseDoubleList(value, list) && list.size() == 2 && std::abs(list[0]) <= 360 && std::abs(list[1]) <= 90) {
+        cur.camera.yaw = list[0] * ef::kPi / 180.;
+        cur.camera.pitch = list[1] * ef::kPi / 180.;
+      }
+    } else if (key == "z") {
+      std::vector<double> list;
+      if (inTab && ini::parseDoubleList(value, list))
+        for (std::size_t i = 0; i < list.size() && i < cur.charges.size(); ++i)
+          if (std::abs(list[i]) <= 1e5) cur.charges[i].z = list[i];
     } else if (key == "radius") {
       double radius = 0;
       if (inTab && ini::parseDouble(value, radius) && radius >= 0 && radius <= ef::kMaxChargeRadius) cur.radius = radius;

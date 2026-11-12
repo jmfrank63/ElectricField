@@ -111,7 +111,7 @@ TEST_CASE("mcp: initialize opens a legacy session") {
     CHECK(init["result"]["protocolVersion"] == "2025-06-18");
     CHECK(init["result"]["serverInfo"]["name"] == "electric-field");
     const json list = send(server, request("tools/list"));
-    CHECK(list["result"]["tools"].size() == 6);
+    CHECK(list["result"]["tools"].size() == 7);
     CHECK_FALSE(list["result"].contains("resultType"));
   }
   SUBCASE("an unknown version falls back to the latest legacy one") {
@@ -229,6 +229,20 @@ TEST_CASE("mcp: z coordinates, a turned view and compute_forces") {
   const json plain = callModern(server, "compute_field_lines", json::object({{"preset", "dipole"}, {"lines_per_unit_charge", 4}}));
   CHECK(plain["structuredContent"]["dimensions"] == 2);
   CHECK(errorText(callModern(server, "compute_field_lines", json::object({{"preset", "dipole"}, {"view_pitch", 120}}))).find("view_pitch") != std::string::npos);
+}
+
+TEST_CASE("mcp: export_csv returns the tables inline") {
+  Server server("1", nullptr);
+  const json charges = callModern(server, "export_csv", json::object({{"charges", kDipole}, {"table", "charges"}}));
+  REQUIRE(charges["isError"] == false);
+  CHECK(charges["structuredContent"]["rows"] == 2);
+  CHECK(charges["content"][1]["text"].get<std::string>().rfind("index,name,charge,x,y,z", 0) == 0);
+  const json lines = callModern(server, "export_csv", json::object({{"preset", "dipole"}, {"lines_per_unit_charge", 4}, {"potential_interval", 0.5}}));
+  REQUIRE(lines["isError"] == false);
+  CHECK(lines["structuredContent"]["field_lines"] == 4);
+  CHECK(lines["structuredContent"]["rows"].get<int>() > 10);
+  CHECK(lines["content"][1]["text"].get<std::string>().rfind("kind,line,point,x,y,z", 0) == 0);
+  CHECK(errorText(callModern(server, "export_csv", json::object({{"preset", "dipole"}, {"table", "nope"}}))).find("'table'") != std::string::npos);
 }
 
 TEST_CASE("mcp: invalid arguments come back as tool errors") {

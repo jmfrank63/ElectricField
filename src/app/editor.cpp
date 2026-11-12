@@ -63,7 +63,7 @@ int hitCharge(const ef::ChargeSystem& field, ef::Vec2 world, const double pixels
   double bestDist = 0;
   for (std::size_t i = 0; i < field.charges.size(); ++i) {
     const ef::Charge& c = field.charges[i];
-    const ef::Vec2 d = c.position - world;
+    const ef::Vec2 d = field.camera.project(c.position3()) - world;  // where the charge is drawn
     const double dist = std::sqrt(d * d);
     const double bound = (c.sizePx > 0.f ? static_cast<double>(c.sizePx) : defaultRadiusPx) / ppu + kEditorHitSlack;
     if (dist <= bound && (best < 0 || dist <= bestDist)) {  // nearest wins among each charge's own bound
@@ -74,22 +74,61 @@ int hitCharge(const ef::ChargeSystem& field, ef::Vec2 world, const double pixels
   return best;
 }
 
+namespace {
+bool moveTo(Tab& t, std::size_t index, ef::Vec2 world, double z);
+}
+bool samePhysics(const ef::ChargeSystem& a, const ef::ChargeSystem& b);
+
 bool moveCharge(Tab& t, std::size_t index, ef::Vec2 world) {
   if (!editable(t) || index >= t.field.charges.size()) return false;
+  return moveTo(t, index, world, t.field.charges[index].z);
+}
+
+bool setChargeZ(Tab& t, std::size_t index, double z) {
+  if (!editable(t) || index >= t.field.charges.size() || !std::isfinite(z)) return false;
+  return moveTo(t, index, t.field.charges[index].position, z);
+}
+
+bool moveChargeOnScreen(Tab& t, std::size_t index, ef::Vec2 screen) {
+  if (!editable(t) || index >= t.field.charges.size()) return false;
+  const ef::Camera& cam = t.field.camera;
+  const ef::Vec3 p = cam.unproject(screen, cam.depth(t.field.charges[index].position3()));
+  return moveTo(t, index, ef::Vec2{p.X, p.Y}, p.Z);
+}
+
+bool setCamera(Tab& t, double yaw, double pitch) {
+  if (!editable(t) || !std::isfinite(yaw) || !std::isfinite(pitch)) return false;
+  pitch = std::clamp(pitch, -ef::kPi / 2, ef::kPi / 2);
+  yaw = std::remainder(yaw, 2 * ef::kPi);
+  if (t.field.camera.yaw == yaw && t.field.camera.pitch == pitch) return true;
+  t.field.camera.yaw = yaw;
+  t.field.camera.pitch = pitch;
+  syncAllScene(t);
+  t.stale = !samePhysics(t.field, t.computed);
+  t.dirty = true;
+  t.pendingRecalcAt = t.stale ? -2 : -1.0;
+  return true;
+}
+
+namespace {
+bool moveTo(Tab& t, std::size_t index, ef::Vec2 world, double z) {
   const ef::Vec2 target = clamped(world);
+  z = std::clamp(z, -kPositionLimit, kPositionLimit);
   ef::Charge& c = t.field.charges[index];
-  if (c.position.X == target.X && c.position.Y == target.Y) return true;  // nothing to do, no history entry
+  if (c.position.X == target.X && c.position.Y == target.Y && c.z == z) return true;  // nothing to do, no history entry
   // v2.5 (261012-h24): while a drag transaction is open for this index the moves are silent for history —
   // commitDrag records the whole drag as ONE entry (pre-drag state). Every other index keeps per-move
   // history, and everything after this line stays unconditional (realtime-draw semantics untouched).
   if (t.dragIndex < 0 || t.dragIndex != static_cast<int>(index)) recordHistory(t);
   c.position = target;
+  c.z = z;
   syncScene(t, index);
   t.stale = true;
   t.dirty = true;
   t.pendingRecalcAt = -2;
   return true;
 }
+}  // namespace
 
 // v2.5 (261012-h24): begin a mouse-drag transaction by capturing the pre-drag state. No-ops when the
 // tab is computing (no NEW drags — D-02), the index is out of range, or a transaction is already open
@@ -115,13 +154,13 @@ void commitDrag(Tab& t) {
   if (index >= t.field.charges.size()) return;  // the dragged charge was removed mid-drag
   const ef::Vec2& now = t.field.charges[index].position;
   const ef::Vec2& was = pre.field.charges[index].position;
-  if (now.X == was.X && now.Y == was.Y) return;  // no net movement, nothing to record
+  if (now.X == was.X && now.Y == was.Y && t.field.charges[index].z == pre.field.charges[index].z) return;  // no net movement
   t.undo.push_back(std::move(pre));
   if (t.undo.size() > kHistoryLimit) t.undo.erase(t.undo.begin());  // same cap-erase-oldest rule as recordHistory
   t.redo.clear();  // a new edit branch invalidates redo
 }
 
-bool addCharge(Tab& t, ef::Vec2 world, int value, float defaultSizePx) {
+bool addCharge(Tab& t, ef::Vec2 world, int value, float defaultSizePx, double z) {
   if (!editable(t)) return false;
   if (value == 0) return false;  // 261020-ef2: 0 will not be allowed
   const ef::Vec2 at = clamped(world);
@@ -145,6 +184,7 @@ bool addCharge(Tab& t, ef::Vec2 world, int value, float defaultSizePx) {
                         std::max(static_cast<float>(ef::kMinChargeSizePx), maxPx));
   }
   t.field.charges.push_back(ef::Charge{value, at, id, std::string(), sizePx});
+  t.field.charges.back().z = std::isfinite(z) ? std::clamp(z, -kPositionLimit, kPositionLimit) : 0;
   ef::syncSceneCharges(t.scene, t.field);
   t.selected = static_cast<int>(t.field.charges.size()) - 1;
   t.stale = true;
@@ -268,7 +308,7 @@ bool setChargeRadius(Tab& t, double radius) {
   if (radius == t.field.radius) return true;  // nothing to do, no history entry
   recordHistory(t);
   t.field.radius = radius;
-  t.scene.chargeRadius = radius;  // the canvas outlines the balls at once
+  syncAllScene(t);  // the canvas outlines the balls at once, melted where they touch
   t.stale = true;
   t.pendingRecalcAt = -2;
   t.dirty = true;
@@ -281,10 +321,10 @@ bool setChargeRadius(Tab& t, double radius) {
 // previous calculation". Exact == comparisons, the same convention moveCharge and commitDrag use
 // for no-op detection.
 bool samePhysics(const ef::ChargeSystem& a, const ef::ChargeSystem& b) {
-  if (a.charges.size() != b.charges.size() || a.radius != b.radius) return false;
+  if (a.charges.size() != b.charges.size() || a.radius != b.radius || !(a.camera == b.camera)) return false;
   for (std::size_t i = 0; i < a.charges.size(); ++i)
     if (a.charges[i].charge != b.charges[i].charge || a.charges[i].position.X != b.charges[i].position.X ||
-        a.charges[i].position.Y != b.charges[i].position.Y || a.charges[i].sizePx != b.charges[i].sizePx)
+        a.charges[i].position.Y != b.charges[i].position.Y || a.charges[i].z != b.charges[i].z || a.charges[i].sizePx != b.charges[i].sizePx)
       return false;
   return true;
 }
@@ -295,8 +335,10 @@ bool undo(Tab& t) {
   if (t.redo.size() > kHistoryLimit) t.redo.erase(t.redo.begin());
   const Tab::HistoryEntry e = std::move(t.undo.back());
   t.undo.pop_back();
+  const ef::Camera view = t.field.camera;  // the view angle is not part of the edit history
   t.field = e.field;
-  t.params.method = e.method;
+  t.field.camera = view;
+  t.params.method = e.method; 
   t.pendingRecalcAt = -2;
   syncAllScene(t);
   if (t.selected >= static_cast<int>(t.field.charges.size())) t.selected = -1;
@@ -313,8 +355,10 @@ bool redo(Tab& t) {
   if (t.undo.size() > kHistoryLimit) t.undo.erase(t.undo.begin());
   const Tab::HistoryEntry e = std::move(t.redo.back());
   t.redo.pop_back();
+  const ef::Camera view = t.field.camera;  // the view angle is not part of the edit history
   t.field = e.field;
-  t.params.method = e.method;
+  t.field.camera = view;
+  t.params.method = e.method; 
   t.pendingRecalcAt = -2;
   syncAllScene(t);
   if (t.selected >= static_cast<int>(t.field.charges.size())) t.selected = -1;

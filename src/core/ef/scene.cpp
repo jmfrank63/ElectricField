@@ -9,11 +9,12 @@ namespace ef {
 FieldScene buildScene(const ChargeSystem& field, const FieldResult& result) {
   FieldScene s;
   s.electric.reserve(result.electric.size());
-  for (const auto& l : result.electric) s.electric.push_back(ScenePath{l.points, false});
+  for (const auto& l : result.electric) s.electric.push_back(ScenePath{l.points, false, l.space, 0});
   s.potential.reserve(result.potential.size());
   for (const auto& l : result.potential)
-    s.potential.push_back(ScenePath{l.points, l.points.size() > 1 && l.points.front() == l.points.back()});
+    s.potential.push_back(ScenePath{l.points, l.points.size() > 1 && l.points.front() == l.points.back(), {}, l.potential});
   syncSceneCharges(s, field);
+  s.camera = field.camera;
   return s;
 }
 

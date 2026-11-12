@@ -20,6 +20,7 @@
 #include "app/editor.hpp"
 #include "ef/presets.hpp"
 #include "ef/svg.hpp"
+#include "ef/csv.hpp"
 #include "ef/pdf.hpp"
 #include "ef_build_info.h"
 #include "ef_git_hash.h"
@@ -477,7 +478,7 @@ void App::frame() {
   if (ui_.calculateAll) {  // v2.2 COL-03: open every configuration of the current collection in tabs
     ui_.calculateAll = false;
     ws_.closeAll();
-    for (const efapp::UserConfig& c : userConfigs_) ws_.openUser(c.name, c.charges, c.radius);
+    for (const efapp::UserConfig& c : userConfigs_) ws_.openUser(c.name, c.charges, c.radius, c.camera);
     pacer_.notifyActivity();
   }
   if (!ui_.removeConfigApply.empty()) {  // v2.3 COL-05 / v2.4: removal through the shared action
@@ -581,6 +582,7 @@ int App::runInteractive() {
       s.method = std::string(ef::info(tp->params.method).name);
       s.charges.reserve(tp->field.charges.size());
       s.radius = tp->field.radius;
+      s.camera = tp->field.camera;
       for (const ef::Charge& c : tp->field.charges) s.charges.push_back(ef::toPresetCharge(c));
       saved.push_back(std::move(s));
     }
@@ -1167,6 +1169,9 @@ void App::exportStep() {
     if (exportFormat_ >= 1 && exportFormat_ <= 3) {
       const SDL_DialogFileFilter filters[] = {{"PNG image", "png"}, {"SVG image", "svg"}, {"PDF document", "pdf"}};
       SDL_ShowSaveFileDialog(callback, this, window_, filters, 3, nullptr);
+    } else if (exportFormat_ == 4) {
+      const SDL_DialogFileFilter filters[] = {{"CSV table", "csv"}};
+      SDL_ShowSaveFileDialog(callback, this, window_, filters, 1, nullptr);
     } else if (exportFormat_ == 10) {
       const SDL_DialogFileFilter filters[] = {{"Collection files", "ini"}, {"All files", "*"}};
       SDL_ShowOpenFileDialog(callback, this, window_, filters, 2, collectionsDir_.string().c_str(), false);
@@ -1202,6 +1207,12 @@ void App::exportStep() {
     case 3:
       runExport(path);
       break;
+    case 4: {
+      std::string e = exportCsvTo(path);
+      if (e.rfind("error: ", 0) == 0) e = e.substr(7);
+      if (!e.empty()) exportFailed(e);
+      break;
+    }
     case 10: {  // v2.5: open the chosen file (the current collection is switched away, prompt first)
       if (ws_.anyDirty() && !leaveConfirmed_) {
         pendingCollectionFile_ = std::filesystem::u8path(path);
@@ -1300,6 +1311,21 @@ ef::View fittedView(const std::vector<ef::SceneCharge>& charges, int widthPx, in
 
 }  // namespace
 
+// Numeric export of the active tab: `path` gets the points of the lines on screen, and a second file next
+// to it, "<name>-charges.csv", the table of the charges. Both describe the calculated state (t->computed),
+// which is what the lines belong to, also when the tab has uncalculated edits.
+std::string App::exportCsvTo(const std::string& path) {
+  const efapp::Tab* t = ws_.find(ui_.activeSerial);
+  if (!t) return "error: no active tab";
+  if (t->state != efapp::TabState::Done) return "error: the active configuration is still computing";
+  std::filesystem::path lines = std::filesystem::u8path(path);
+  if (lines.extension().empty()) lines += ".csv";
+  std::filesystem::path charges = lines;
+  charges.replace_filename(lines.stem().u8string() + "-charges" + lines.extension().u8string());
+  if (std::string e = writeTextFile(lines.u8string(), ef::linesCsv(t->computed, t->scene)); !e.empty()) return e;
+  return writeTextFile(charges.u8string(), ef::chargesCsv(t->computed));
+}
+
 std::string App::exportConfigurationTo(const std::string& path) {
   const efapp::Tab* t = ws_.find(ui_.activeSerial);
   if (!t) return "error: no active tab";
@@ -1311,6 +1337,7 @@ std::string App::exportConfigurationTo(const std::string& path) {
   // already user-visible-latency), not the frame loop.
   ef::ChargeSystem field;
   field.radius = t->field.radius;
+  field.camera = t->field.camera;
   field.charges.reserve(t->field.charges.size());
   for (const ef::Charge& c : t->field.charges) field.charges.push_back(c);
   ef::ComputeParams params = t->params;
@@ -1334,12 +1361,13 @@ std::string App::exportCollectionTo(const std::string& path) {
   for (const efapp::UserConfig& c : userConfigs_) {
     ef::ChargeSystem field;
     field.radius = c.radius;
+    field.camera = c.camera;
     field.charges.reserve(c.charges.size());
     // CR-02: carry the identity fields explicitly (the same field naming as workspace.cpp) - a
     // positional 2-field initializer silently dropped id/name/sizePx, so whole-collection PDF
     // export ignored per-charge sizes entirely.
     for (const ef::PresetCharge& ch : c.charges)
-      field.charges.push_back(ef::Charge{ch.charge, ef::Vec2{ch.x, ch.y}, ch.id, ch.name, ch.sizePx});
+      field.charges.push_back(ef::toCharge(ch));
     // WR-04: the DEFAULT view scale (0 = legacy), spelled out so the export stays zoom-history
     // independent even if options_.compute ever carried a stamped scale.
     ef::ComputeParams params = options_.compute;
@@ -1439,7 +1467,7 @@ void App::enterCollectionAt(const std::filesystem::path& file, const bool restor
       ef::ComputeParams params = options_.compute;
       if (const std::optional<ef::Method> m = ef::methodFromName(s.method)) params.method = *m;
       params.chargeRadiusPx = options_.draw.chargeRadiusPx;  // 261020-ef2 review: inherit-sized charges seed/hit on the applied dot
-      const unsigned serial = ws_.openRestored(s.title, s.preset, params, s.charges, s.autoRecalc, s.grid, s.source, s.radius);
+      const unsigned serial = ws_.openRestored(s.title, s.preset, params, s.charges, s.autoRecalc, s.grid, s.source, s.radius, s.camera);
       ui_.activeSerial = ui_.selectSerial = serial;  // the newest restored tab is active (TAB/commands resolve "active")
     }
     pacer_.notifyActivity();
@@ -1487,6 +1515,7 @@ void App::saveSessionNow() {
     s.grid = tp->grid;
     s.charges.reserve(tp->field.charges.size());
     s.radius = tp->field.radius;
+    s.camera = tp->field.camera;
       for (const ef::Charge& c : tp->field.charges) s.charges.push_back(ef::toPresetCharge(c));
     saved.push_back(std::move(s));
   }
@@ -1508,6 +1537,7 @@ void App::mergeDirtyTabsInto(std::vector<efapp::UserConfig>& configs) {
     efapp::UserConfig& c = configs[static_cast<std::size_t>(at)];
     c.charges.clear();
     c.radius = t.field.radius;
+    c.camera = t.field.camera;
     c.charges.reserve(t.field.charges.size());
     for (const ef::Charge& ch : t.field.charges) c.charges.push_back(ef::toPresetCharge(ch));
     t.dirty = false;
@@ -1580,6 +1610,7 @@ std::string App::saveConfigurationAs(const std::string& name) {
   efapp::UserConfig candidate;
   candidate.name = name;
   candidate.radius = t->field.radius;
+  candidate.camera = t->field.camera;
   candidate.charges.reserve(t->field.charges.size());
   for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::toPresetCharge(c));
   if (efapp::upsertUserConfig(userConfigs_, candidate, reserved) != efapp::UpsertResult::OK) return "error: invalid or reserved name";
@@ -1609,6 +1640,7 @@ std::string App::saveConfiguration() {
   efapp::UserConfig candidate;
   candidate.name = efapp::baseTitle(t->title);
   candidate.radius = t->field.radius;
+  candidate.camera = t->field.camera;
   candidate.charges.reserve(t->field.charges.size());
   for (const ef::Charge& ch : t->field.charges) candidate.charges.push_back(ef::toPresetCharge(ch));
   const efapp::SaveIntoResult r = efapp::saveIntoUserConfig(userConfigs_, t->sourceConfig, candidate, reserved);
@@ -1741,7 +1773,10 @@ std::string App::command(const std::string& line) {
          << " stale=" << (t.stale ? 1 : 0) << " dirty=" << (t.dirty ? 1 : 0) << " selected=" << t.selected << " lines=" << t.scene.electric.size()
          << " zoom=" << t.zoom << " centre=" << t.centre.X << "," << t.centre.Y << " grid=" << (t.grid.active ? 1 : 0) << ','
          << (t.grid.visible ? 1 : 0) << ',' << (t.grid.polar ? 1 : 0) << ',' << (t.grid.intersectionsOnly ? 1 : 0) << ',' << t.grid.origin.X << ',' << t.grid.origin.Y << ','
-         << t.grid.spacing << ',' << t.grid.angleStepDeg << " radius=" << t.field.radius << " charges=";
+         << t.grid.spacing << ',' << t.grid.angleStepDeg << " radius=" << t.field.radius << " angle="
+         << std::round(t.field.camera.yaw * 180. / ef::kPi * 1e6) / 1e6 << ',' << std::round(t.field.camera.pitch * 180. / ef::kPi * 1e6) / 1e6 << " z=";
+      for (std::size_t i = 0; i < t.field.charges.size(); ++i) os << (i ? ";" : "") << t.field.charges[i].z;
+      os << " charges=";
       // v2.6 phase 3: charges=v,x,y,sizePx,id,displayName (substring-compatible: the old v,x,y prefix
       // is untouched; the name shown is the stored one or the derived "Charge N").
       for (std::size_t i = 0; i < t.field.charges.size(); ++i)
@@ -1841,7 +1876,7 @@ std::string App::command(const std::string& line) {
     const int at = efapp::findUserConfig(userConfigs_, tok[1]);
     if (at < 0) return "error: no configuration named '" + tok[1] + "'";
     const efapp::UserConfig& c = userConfigs_[static_cast<std::size_t>(at)];
-    ui_.selectSerial = ws_.openUser(c.name, c.charges, c.radius);
+    ui_.selectSerial = ws_.openUser(c.name, c.charges, c.radius, c.camera);
     ui_.activeSerial = ui_.selectSerial;
     pacer_.notifyActivity();
     return "ok";
@@ -1856,6 +1891,13 @@ std::string App::command(const std::string& line) {
   if (cmd == "config.save-as") {
     if (const std::string e = need(1); !e.empty()) return e;
     return saveConfigurationAs(tok[1]);
+  }
+  if (cmd == "export.csv") {  // numbers of the active tab: <path> (lines) and <path stem>-charges.csv
+    if (const std::string e = need(1); !e.empty()) return e;
+    std::filesystem::path file = std::filesystem::u8path(efapp::ini::trim(tok[1]));
+    if (file.is_relative() && !opt_.userDir.empty()) file = std::filesystem::u8path(opt_.userDir) / file;
+    const std::string err = exportCsvTo(file.u8string());
+    return err.empty() ? "ok" : err;
   }
   if (cmd == "export.configuration" || cmd == "export.collection") {  // v2.5 EXP-03: PDF by path
     if (const std::string e = need(1); !e.empty()) return e;
@@ -1903,7 +1945,7 @@ std::string App::command(const std::string& line) {
   if (cmd == "tab.calculate" || cmd == "tab.calculate-all") {
     if (cmd == "tab.calculate-all") {
       ws_.closeAll();
-      for (const efapp::UserConfig& c : userConfigs_) ws_.openUser(c.name, c.charges, c.radius);
+      for (const efapp::UserConfig& c : userConfigs_) ws_.openUser(c.name, c.charges, c.radius, c.camera);
       pacer_.notifyActivity();
       return "ok";
     }
@@ -2043,6 +2085,28 @@ std::string App::command(const std::string& line) {
     if (px != 0.0 && (px < ef::kMinChargeSizePx || px > 120.0)) return "error: charge size must be 0 or 2-120";  // 0 = the Options default
     if (!efapp::editor::setChargeSize(*t, static_cast<std::size_t>(i), static_cast<float>(px), options_.coupleValueSize))
       return "error: the tab is computing";
+    return "ok";
+  }
+
+  if (cmd == "charge.z") {  // 3D: the third coordinate of a charge
+    if (const std::string e = need(2); !e.empty()) return e;
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    long long i = 0;
+    double z = 0;
+    if (!parseApiInt(tok[1], i) || i < 0 || static_cast<std::size_t>(i) >= t->field.charges.size()) return "error: invalid charge index";
+    if (!parseApiDouble(tok[2], z)) return "error: charge.z needs <index> <z>";
+    if (!efapp::editor::setChargeZ(*t, static_cast<std::size_t>(i), z)) return "error: the tab is computing";
+    return "ok";
+  }
+  if (cmd == "view.angle") {  // 3D: camera yaw and pitch in degrees
+    if (const std::string e = need(2); !e.empty()) return e;
+    efapp::Tab* t = activeTab();
+    if (!t) return e;
+    double yaw = 0, pitch = 0;
+    if (!parseApiDouble(tok[1], yaw) || !parseApiDouble(tok[2], pitch) || yaw < -360 || yaw > 360 || pitch < -90 || pitch > 90)
+      return "error: view.angle needs <yaw -360..360> <pitch -90..90> in degrees";
+    if (!efapp::editor::setCamera(*t, yaw * ef::kPi / 180., pitch * ef::kPi / 180.)) return "error: the tab is computing";
     return "ok";
   }
 

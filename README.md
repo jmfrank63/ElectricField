@@ -103,16 +103,33 @@ the inside of a ball is not drawn. Balls that touch or overlap melt into one bod
 radius is saved with the
 configuration and the open tabs.
 
-### 3D (core and MCP server)
+### 3D
 
-The physics core handles charges in space: each charge has a z coordinate, the field and potential can be
-evaluated at any point in space, and `ef/forces.hpp` gives the force on every charge and the interaction
-energy of the system, including the rule for overlapping balls. Field lines of a 3D system are traced in
-space and drawn through an orthographic camera that can be turned (yaw and pitch). A system that lies in
-the drawing plane with the default camera uses the original 2D pipeline unchanged.
+Every charge has a z coordinate (the **Z** field in the editor panel, `charge.z` in scripts, `z` in the
+MCP server), and each tab has a view angle: drag **View angle** in the editor panel, or hold **Alt** and
+drag on the canvas, to turn the camera (yaw and pitch, orthographic, about the origin). While you turn,
+only the charges move; the field lines are recalculated afterwards (at once with Continuous calculation,
+otherwise with Calculate). Dragging a charge moves it in the plane of the screen at any view angle.
 
-Today this is reachable through the [MCP server](docs/mcp.md#3d) (`z` on charges, `view_yaw`,
-`view_pitch`, the `compute_forces` tool). The desktop app still edits planar configurations only.
+A configuration with a charge off the plane, or with a turned view, is computed in 3D: field lines start
+evenly spread over a sphere around each source charge, are traced in space and drawn as their projection.
+Equipotentials are surfaces in space and are not drawn in a 3D view. A planar configuration seen from
+the front uses the original 2D pipeline unchanged. z and the view angle are saved with the configuration
+and the open tabs.
+
+`ef/forces.hpp` gives the force on every charge and the interaction energy of the system.
+
+### Numbers as CSV
+
+**File > Export Configuration > CSV...** (script: `export.csv <path>`, MCP: `export_csv`) writes two
+tables for the calculated configuration:
+
+- `<name>.csv`: one row per point of every field line and equipotential, with `x, y, z`, the position on
+  screen, the potential, the field vector and its magnitude, and the field direction as azimuth and
+  elevation in degrees.
+- `<name>-charges.csv`: one row per charge, with its position, the melted body it belongs to, the
+  potential and field of the other charges at its centre, the force on it, the view angles and the
+  interaction energy of the system.
 
 ## Building
 

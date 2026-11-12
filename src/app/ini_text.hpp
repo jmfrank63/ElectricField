@@ -6,6 +6,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace efapp {
 namespace ini {
@@ -55,6 +56,17 @@ inline std::vector<std::string> splitCsv(const std::string& value) {
   std::string part;
   while (std::getline(vs, part, ',')) parts.push_back(trim(part));
   return parts;
+}
+
+// "a, b, c" as numbers; false when any part is not a finite number.
+inline bool parseDoubleList(const std::string& value, std::vector<double>& out) {
+  out.clear();
+  for (const std::string& part : splitCsv(value)) {
+    double v = 0;
+    if (!parseDouble(part, v)) return false;
+    out.push_back(v);
+  }
+  return !out.empty();
 }
 
 // IN-03: the longest prefix of s that fits maxBytes without splitting a UTF-8 code point. Continuation

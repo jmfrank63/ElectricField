@@ -36,6 +36,16 @@ inline std::string chargeDisplayName(const ef::Charge& c, std::size_t index) {
 // charge, nothing selected). Positions are clamped to [-1e5, 1e5] world units.
 
 bool moveCharge(Tab& t, std::size_t index, ef::Vec2 world);
+// 3D: the same move for the third coordinate (history, stale and drag rules of moveCharge).
+bool setChargeZ(Tab& t, std::size_t index, double z);
+// 3D: moves the charge to the point that appears at `screen` (the view plane's coordinates), keeping
+// its depth, so a mouse drag moves it in the plane of the screen at any view angle. With the default
+// view this is exactly moveCharge.
+bool moveChargeOnScreen(Tab& t, std::size_t index, ef::Vec2 screen);
+// 3D: turns the tab's camera (radians; pitch is clamped to +-90 degrees). A view change, so it records
+// no undo entry, but the drawn lines belong to the old angle: the tab becomes stale and the charges
+// follow at once. False while the tab is computing.
+bool setCamera(Tab& t, double yaw, double pitch);
 // v2.6 phase 3: charge identity. nextChargeId is the pure "max over the system + 1" (empty -> 1);
 // assignChargeIds fills ONLY the id == 0 charges, monotonically (persisted ids are never touched),
 // saturating at ef::kMaxChargeId - past the parsers' shared ceiling a charge stays id 0 (unassigned)
@@ -47,7 +57,7 @@ void assignChargeIds(ef::ChargeSystem& field);
 // and never below the tab's high-water mark: a removed charge's id is not reused) and stores
 // `defaultSizePx` after validating (0 or 2..120 px; anything else degrades to 0 = inherit the
 // Options default - the caller passes it).
-bool addCharge(Tab& t, ef::Vec2 world, int value, float defaultSizePx = 0.f);
+bool addCharge(Tab& t, ef::Vec2 world, int value, float defaultSizePx = 0.f, double z = 0);
 // Removes the selected charge; refuses when it is the last one (EDIT-04: at least one charge remains).
 bool removeSelected(Tab& t);
 // Nudges the selected charge by `delta` (arrow keys; the caller owns the step size incl. Shift).

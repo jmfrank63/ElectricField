@@ -1,0 +1,32 @@
+# 48-3d-csv: 3D through the API: z per charge, the view angle, save and reload, and the CSV export.
+collection.open Original
+config.open Dipole
+app.wait-done
+app.expect angle=0,0
+app.expect z=0;0
+charge.z 1 1.5
+app.expect z=0;1.5
+app.expect stale=1
+app.expect-error "invalid charge index" charge.z 7 1
+app.expect-error "charge.z needs" charge.z 0 abc
+view.angle 30 -20
+app.expect angle=30,-20
+app.expect-error "view.angle needs" view.angle 0 120
+editor.undo
+app.expect z=0;0
+app.expect angle=30,-20
+editor.redo
+app.expect z=0;1.5
+tab.calculate
+app.wait-done
+app.expect stale=0
+app.expect lines=16
+export.csv numbers.csv
+config.save
+app.expect dirty=0
+tab.close
+config.open Dipole
+app.wait-done
+app.expect z=0;1.5
+app.expect angle=30,-20
+app.quit force

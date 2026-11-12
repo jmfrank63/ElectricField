@@ -51,6 +51,8 @@ struct View {
 struct ScenePath {
   std::vector<Vec2> points;  // world units; layout p0,[c1,c2,p3],[c4,c5,p6],... (+ up to 2 trailing line points)
   bool closed = false;       // equipotential whose first and last point coincide (MFC: isPotential && front==back)
+  std::vector<Vec3> space{}; // lines traced in space: the 3D points (FieldLine::space); numeric export only
+  double label = 0;          // equipotentials: the potential the line was traced for
 };
 
 struct SceneCharge {
@@ -70,6 +72,9 @@ struct FieldScene {
   std::vector<ScenePath> potential;
   std::vector<SceneCharge> charges;
   double chargeRadius = 0;  // ChargeSystem::radius: > 0 outlines each charge's ball (world units)
+  // The camera the LINES were computed for (set by buildScene only). The charges follow the field's
+  // current camera at once (syncSceneCharges); a view shows the lines only while the two agree.
+  Camera camera;
 };
 
 FieldScene buildScene(const ChargeSystem& field, const FieldResult& result);

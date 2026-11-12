@@ -68,7 +68,7 @@ struct UiState {
   std::string switchToCollection;   // set by the switcher; consumed by App::frame
   // v2.1 editor panel: Add-charge section and the per-tab rename buffer
   int addValue = 1;
-  double addX = 0.0, addY = 0.0;
+  double addX = 0.0, addY = 0.0, addZ = 0.0;
   std::string addError;  // 261020-ef2: why the last Add was refused (a 0 value, a computing tab)
   char tabNameBuf[128] = "";
   unsigned tabNameBufSerial = 0;
@@ -84,7 +84,7 @@ struct UiState {
   unsigned chargeSizeBufSerial = 0;
   int chargeSizeBufSelected = -1;
   ImVec2 chargeSizeMin{0, 0}, chargeSizeMax{0, 0};  // the Size field's rect this frame (smoke clicks it)
-  int exportRequest = 0;     // File > Export / dialog kinds (consumed by App::frame): 1 = PNG, 2 = SVG, 3 = PDF
+  int exportRequest = 0;     // File > Export / dialog kinds (consumed by App::frame): 1 = PNG, 2 = SVG, 3 = PDF, 4 = CSV
                              // (the active tab) and 10 = Open Collection..., 11 = Save Collection As...,
                              // 12 = New Collection..., 13 = Export Collection (v2.5 OPEN-01/EXP-03)
   unsigned closeSerial = 0;  // request to close a tab (0 = none)
@@ -101,6 +101,7 @@ struct UiState {
   unsigned activeSerial = 0;   // selected tab during the last frame
   unsigned selectSerial = 0;   // programmatic selection request (new tab)
   bool canvasDrag = false;     // v2 editor: a charge drag that started on the canvas is in progress
+  bool canvasTurn = false;  // 3D: an Alt-drag that started on the canvas keeps turning the view
   std::string linkNote;        // About: "Could not open a browser..." (cleared when the modal closes)
   // outputs for the loop / tests
   std::string wantedTitle;     // SDL window title for this frame

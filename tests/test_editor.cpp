@@ -1098,3 +1098,49 @@ TEST_CASE("setChargeRadius: physics edit with one history entry, undo restores i
   CHECK(efapp::editor::undo(t));
   CHECK(t.field.radius == 0);
 }
+
+TEST_CASE("3d editing: z, moving on the screen plane, and turning the camera") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);
+  REQUIRE(efapp::editor::setChargeZ(t, 0, 1.5));
+  CHECK(t.field.charges[0].z == 1.5);
+  CHECK(t.field.charges[0].position.X == -2.0);  // x and y untouched
+  CHECK(t.stale);
+  CHECK(t.scene.charges[0].depth == 1.5);
+  CHECK(efapp::editor::undo(t));
+  CHECK(t.field.charges[0].z == 0.0);
+  CHECK_FALSE(efapp::editor::setChargeZ(t, 9, 1));
+
+  // default view: a screen move is a plain move and keeps z
+  REQUIRE(efapp::editor::setChargeZ(t, 0, 1.5));
+  REQUIRE(efapp::editor::moveChargeOnScreen(t, 0, ef::Vec2{-1, 0.5}));
+  CHECK(t.field.charges[0].position.X == -1.0);
+  CHECK(t.field.charges[0].position.Y == 0.5);
+  CHECK(t.field.charges[0].z == 1.5);
+
+  // turning records no history, moves the drawn charges, and makes the lines stale
+  const std::size_t entries = t.undo.size();
+  REQUIRE(efapp::editor::setCamera(t, ef::kPi / 2, 0));  // the z axis now runs to the right
+  CHECK(t.undo.size() == entries);
+  CHECK(t.stale);
+  CHECK(t.scene.charges[0].position.X == doctest::Approx(1.5));
+  CHECK_FALSE(t.scene.camera == t.field.camera);  // the cached lines belong to the old angle
+  // the hit test follows the drawn position
+  CHECK(efapp::editor::hitCharge(t.field, ef::Vec2{1.5, 0.5}, 100.0, 25.0) == 0);
+  // a screen move keeps the depth: only z changes when dragging along the screen's x here
+  const double depth = t.field.camera.depth(t.field.charges[0].position3());
+  REQUIRE(efapp::editor::moveChargeOnScreen(t, 0, ef::Vec2{3, 0.5}));
+  CHECK(t.field.charges[0].z == doctest::Approx(3.0));
+  CHECK(t.field.charges[0].position.X == doctest::Approx(-1.0));
+  CHECK(t.field.camera.depth(t.field.charges[0].position3()) == doctest::Approx(depth));
+  // undo restores the charge but keeps the view angle
+  CHECK(efapp::editor::undo(t));
+  CHECK(t.field.charges[0].z == 1.5);
+  CHECK(t.field.camera.yaw == doctest::Approx(ef::kPi / 2));
+  // pitch is clamped to straight up or down
+  REQUIRE(efapp::editor::setCamera(t, 0, 5));
+  CHECK(t.field.camera.pitch == doctest::Approx(ef::kPi / 2));
+  // a charge added with a z keeps it
+  REQUIRE(efapp::editor::addCharge(t, ef::Vec2{0, 3}, 2, 0.f, -4));
+  CHECK(t.field.charges.back().z == -4.0);
+}

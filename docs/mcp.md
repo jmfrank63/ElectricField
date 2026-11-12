@@ -46,6 +46,7 @@ Clients configured through JSON (replace the command with the path for your plat
 | `evaluate_field` | E vector, magnitude and potential at up to 10000 points |
 | `compute_forces` | The force on every charge from the others, in space, and the interaction energy |
 | `compute_field_lines` | Traces a configuration and returns line counts and, with `include_lines`, the geometry |
+| `export_csv` | The numbers as a CSV table: the points of the lines, or the charges with forces |
 | `render_field` | Computes and renders a PNG, SVG or PDF, inline or to a file |
 
 Every tool that takes a configuration needs exactly one of:
@@ -91,7 +92,15 @@ charge, `fx`, `fy`, `fz`, `magnitude` and `body` (the index of the melted body i
 `U = q1*q2/R * (6/5 - s^2/2 + 3s^3/16 - s^5/160)`. The force goes to 0 as the centres meet and the
 energy stays finite. The self energy of the balls is not included.
 
-`compute_field_lines` and `render_field` also accept:
+`export_csv` takes the same arguments as `compute_field_lines` plus `table` (`lines`, the default, or
+`charges`), and optionally `output_path` (absolute, ending in `.csv`) and `overwrite`. Without
+`output_path` the CSV comes back inline as a second text block. The `lines` table has one row per point
+of every line: `kind, line, point, x, y, z, screen_x, screen_y, potential, ex, ey, ez, magnitude,
+azimuth_deg, elevation_deg, label`. The `charges` table has one row per charge: `index, name, charge,
+x, y, z, radius, body, potential, ex, ey, ez, fx, fy, fz, force, screen_x, screen_y, view_yaw_deg,
+view_pitch_deg, system_energy`, where potential and field are those of the other charges at its centre.
+
+`compute_field_lines`, `export_csv` and `render_field` also accept:
 
 | Argument | Default | Range |
 |---|---|---|

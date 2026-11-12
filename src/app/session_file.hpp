@@ -12,6 +12,8 @@
 //   charge = 1, -2, 0
 //   charge = -1, 2, 0
 //   radius = 1          # optional: ball radius of the charges (absent = 0, point charges)
+//   view = 30, 20       # optional: camera yaw and pitch in degrees
+//   z = 0, 1.5          # optional, after the charge lines: the z of each charge in order
 #include <cstddef>
 #include <filesystem>
 #include <string>
@@ -34,6 +36,7 @@ struct SavedTab {
   GridSettings grid;               // v2.3 GRID: snap grid settings
   std::vector<ef::PresetCharge> charges;
   double radius = 0;               // ef::ChargeSystem::radius; written only when > 0
+  ef::Camera camera{};             // view angles; written only when turned ("view = yaw, pitch" in degrees)
   std::string source{};            // h22: the configuration the tab came from; empty = derive from the title on restore (the pre-change convention)
 };
 

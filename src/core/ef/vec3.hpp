@@ -57,6 +57,12 @@ struct Camera {
     return Vec2(p * right(), p * up());
   }
   double depth(const Vec3& p) const { return isDefault() ? p.Z : p * towardsViewer(); }  // larger = nearer
+  // The point in space that appears at `screen` at the given depth (the inverse of project + depth).
+  Vec3 unproject(const Vec2& screen, double atDepth = 0) const {
+    if (isDefault()) return Vec3(screen.X, screen.Y, atDepth);
+    return right() * screen.X + up() * screen.Y + towardsViewer() * atDepth;
+  }
+  friend bool operator==(const Camera& a, const Camera& b) { return a.yaw == b.yaw && a.pitch == b.pitch; }
 };
 
 }  // namespace ef

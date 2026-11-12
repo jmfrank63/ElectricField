@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "app/options.hpp"  // the GUI's Options ranges: the same limits apply here
+#include "ef/csv.hpp"
 #include "ef/forces.hpp"
 #include "ef/method.hpp"
 #include "ef/pdf.hpp"
@@ -216,18 +217,6 @@ Computed compute(const Computation& c, const std::atomic<bool>* cancel) {
   return out;
 }
 
-// A line's stored layout is p0,[c1,c2,p3],... + up to 2 trailing line points (see ef::ScenePath): the agent gets only
-// the points that lie ON the curve.
-std::vector<ef::Vec2> onCurvePoints(const std::vector<ef::Vec2>& points) {
-  std::vector<ef::Vec2> out;
-  if (points.empty()) return out;
-  const std::size_t segments = (points.size() - 1) / 3;
-  out.reserve(segments + 3);
-  for (std::size_t k = 0; k <= segments; ++k) out.push_back(points[3 * k]);
-  for (std::size_t i = 3 * segments + 1; i < points.size(); ++i) out.push_back(points[i]);
-  return out;
-}
-
 // Evenly thins to at most `limit` points, always keeping both endpoints.
 json pointsJson(const std::vector<ef::Vec2>& points, std::size_t limit) {
   json out = json::array();
@@ -345,7 +334,7 @@ json computeFieldLines(const json& args, const std::atomic<bool>* cancel) {
 
   std::size_t returned = 0;
   const auto add = [&](const std::vector<ef::Vec2>& points) {
-    const std::vector<ef::Vec2> curve = onCurvePoints(points);
+    const std::vector<ef::Vec2> curve = ef::onCurvePoints(points);
     returned += std::min(curve.size(), limit);
     if (returned > kMaxReturnedPoints)
       throw ToolError("the geometry exceeds " + std::to_string(kMaxReturnedPoints) + " points; lower 'max_points_per_line' or the line density");
@@ -465,6 +454,40 @@ json renderField(const json& args, const PngEncoder& encodePng, const std::atomi
   return okResult(data, std::move(extra));
 }
 
+json exportCsv(const json& args, const std::atomic<bool>* cancel) {
+  checkKeys(args, {"preset", "charges", "charge_radius", "method", "lines_per_unit_charge", "equipotentials", "potential_interval", "threads", "timeout_ms", "view_yaw", "view_pitch", "table", "output_path", "overwrite"}, "arguments");
+  const Computation c = parseComputation(args);
+  const std::string table = getString(args, "table", "lines");
+  if (table != "lines" && table != "charges") throw ToolError("'table' must be lines or charges");
+  const std::string outputText = getString(args, "output_path", "");
+  const bool overwrite = getBool(args, "overwrite", false);
+  if (args.contains("overwrite") && outputText.empty()) throw ToolError("'overwrite' needs 'output_path'");
+  fs::path outputPath;
+  if (!outputText.empty()) outputPath = validateOutputPath(outputText, "csv", overwrite);
+
+  json data = json::object({{"table", table}, {"charges", c.field.charges.size()}, {"dimensions", c.field.is3D() ? 3 : 2}});
+  std::string csv;
+  if (table == "charges") {
+    csv = ef::chargesCsv(c.field);
+  } else {
+    const Computed done = compute(c, cancel);
+    csv = ef::linesCsv(c.field, ef::buildScene(c.field, done.result));
+    data = computationSummary(c, done);
+    data["table"] = table;
+  }
+  data["rows"] = static_cast<std::size_t>(std::count(csv.begin(), csv.end(), '\n')) - 1;
+  data["bytes"] = csv.size();
+  if (!outputText.empty()) {
+    writeFile(outputPath, csv);
+    data["output_path"] = outputText;
+    return okResult(data);
+  }
+  if (csv.size() > kMaxInlineBytes) throw ToolError("the CSV is too large to return inline; pass 'output_path'");
+  json extra = json::array();
+  extra.push_back(json::object({{"type", "text"}, {"text", csv}}));
+  return okResult(data, std::move(extra));
+}
+
 const char* const kFieldProperties = R"json({
   "preset": {"type": "string", "description": "Slug of a built-in configuration (see list_presets). Provide exactly one of preset or charges."},
   "charges": {
@@ -549,11 +572,19 @@ json toolDefinitions(bool pngAvailable) {
     "overwrite": {"type": "boolean", "default": false, "description": "Allow output_path to replace an existing file."}
   })json"));
   tools.push_back(toolEntry("render_field", "Render field image", "Computes a configuration and renders field lines, equipotentials and charges as PNG, SVG or PDF, inline or to a file.", objectSchema(std::move(render)), false));
+  json csv = fieldProperties;
+  csv.update(computeProperties);
+  csv.update(json::parse(R"json({
+    "table": {"type": "string", "enum": ["lines", "charges"], "default": "lines", "description": "lines: one row per point of every field line and equipotential with x, y, z, screen position, potential, field vector, magnitude and direction angles. charges: one row per charge with position, body, potential and field of the other charges at its centre, the force on it and the system energy."},
+    "output_path": {"type": "string", "description": "Absolute path of a .csv file to write, in an existing directory. Omit to get the CSV inline."},
+    "overwrite": {"type": "boolean", "default": false, "description": "Allow output_path to replace an existing file."}
+  })json"));
+  tools.push_back(toolEntry("export_csv", "Export numbers as CSV", "Computes a configuration and returns its numbers as a CSV table: the points of the lines, or the charges with forces.", objectSchema(std::move(csv)), false));
   return tools;
 }
 
 bool isKnownTool(const std::string& name) {
-  return name == "list_presets" || name == "list_methods" || name == "evaluate_field" || name == "compute_forces" || name == "compute_field_lines" || name == "render_field";
+  return name == "list_presets" || name == "list_methods" || name == "evaluate_field" || name == "compute_forces" || name == "compute_field_lines" || name == "export_csv" || name == "render_field";
 }
 
 json callTool(const std::string& name, const json& arguments, const PngEncoder& encodePng, const std::atomic<bool>* cancel) {
@@ -563,6 +594,7 @@ json callTool(const std::string& name, const json& arguments, const PngEncoder& 
     if (name == "evaluate_field") return evaluateField(arguments);
     if (name == "compute_forces") return computeForces(arguments);
     if (name == "compute_field_lines") return computeFieldLines(arguments, cancel);
+    if (name == "export_csv") return exportCsv(arguments, cancel);
     if (name == "render_field") return renderField(arguments, encodePng, cancel);
     return errorResult("unknown tool '" + name + "'");
   } catch (const std::exception& e) {

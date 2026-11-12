@@ -2,12 +2,14 @@
 #include "doctest/doctest.h"
 
 #include <cmath>
+#include <vector>
 
 #include "app/configs.hpp"
 #include "app/session_file.hpp"
 #include "ef/charge_system.hpp"
 #include "ef/presets.hpp"
 #include "ef/scene.hpp"
+#include "ef/seeds.hpp"
 #include "ef/session.hpp"
 #include "test_params.hpp"
 
@@ -71,7 +73,7 @@ TEST_CASE("radius: 0 keeps the point-charge system bit-identical") {
     CHECK(point.E(p).X == zero.E(p).X);
     CHECK(point.Potential(p) == zero.Potential(p));
   }
-  CHECK_FALSE(zero.AtBallNull(Vec2(2, 0), 1.0));
+  CHECK(zero.BallAt(Vec3(2, 0, 0)) == -1);
 }
 
 TEST_CASE("radius: a dipole of balls computes and its lines end in the sink ball") {
@@ -81,30 +83,34 @@ TEST_CASE("radius: a dipole of balls computes and its lines end in the sink ball
   CHECK(r.electric.size() == 4);
   for (const auto& line : r.electric) {
     REQUIRE(line.points.size() > 2);
-    CHECK((line.points.back() - field.charges[1].position).Length() < 1.0);
+    CHECK((line.points.front() - field.charges[0].position).Length() == doctest::Approx(1.0));  // born on the surface
+    CHECK((line.points.back() - field.charges[1].position).Length() == doctest::Approx(1.0));   // ends on the surface
   }
   CHECK_FALSE(r.potential.empty());
   // the scene carries the radius so the renderers outline the balls
   CHECK(buildScene(field, r).chargeRadius == 1.0);
 }
 
-TEST_CASE("radius: a line flowing into a ball ends on the field null inside it, not at the centre") {
-  // A -1 ball in the strong field of a +20 ball: inside the -1 ball the outside field wins over most of
-  // the volume, and the null where the two cancel sits well off the centre (about 0.56 towards +x).
-  const ChargeSystem field = ballSystem(1, {Charge{20, Vec2(-6, 0)}, Charge{-1, Vec2(0, 0)}});
+TEST_CASE("radius: touching balls melt into one body; no line starts or ends inside it") {
+  // +1 and +1 overlapping (centres 1 apart, R = 1), and a -2 far away: two bodies.
+  const ChargeSystem field = ballSystem(1, {Charge{1, Vec2(-0.5, 0)}, Charge{1, Vec2(0.5, 0)}, Charge{-2, Vec2(6, 0)}});
+  CHECK(field.bodies() == std::vector<int>{0, 0, 1});
+  CHECK(ballSystem(1, {Charge{1, Vec2(0, 0)}, Charge{1, Vec2(2, 0)}}).bodies() == std::vector<int>{0, 0});      // touching
+  CHECK(ballSystem(1, {Charge{1, Vec2(0, 0)}, Charge{1, Vec2(2.01, 0)}}).bodies() == std::vector<int>{0, 1});   // apart
+  CHECK(ballSystem(0, {Charge{1, Vec2(0, 0)}, Charge{1, Vec2(0.1, 0)}}).bodies() == std::vector<int>{0, 1});    // points never melt
+
   ComputeParams p = lightParams();
+  p.linesPerUnitCharge = 8;
   p.calculateEquipotentials = false;
+  for (const Seed& s : planSeeds(field, p)) CHECK(field.BallAt(Vec3(s.point.X, s.point.Y, 0)) == -1);
   const FieldResult r = computeAll(field, p);
-  int endedAtNull = 0;
-  for (const auto& line : r.electric) {
-    const Vec2 last = line.points.back();
-    if (last.Length() >= 1.0) continue;  // escaped to infinity (total charge +19)
-    CHECK(field.E(last).Length() < 0.05);
-    CHECK(last.X > 0.3);
-    CHECK_FALSE(field.HitCharge(last, p));
-    ++endedAtNull;
-  }
-  CHECK(endedAtNull >= 1);
+  CHECK_FALSE(r.electric.empty());
+  for (const auto& line : r.electric)
+    for (std::size_t i = 0; i < line.points.size(); i += 3)  // the on-curve points
+      for (const Charge& c : field.charges) CHECK((line.points[i] - c.position).Length() >= 1.0 - 1e-9);
+  const FieldScene scene = buildScene(field, r);
+  CHECK(scene.charges[0].body == scene.charges[1].body);
+  CHECK(scene.charges[2].body != scene.charges[0].body);
 }
 
 TEST_CASE("radius: collections and sessions round-trip the radius; absent means 0") {

@@ -60,6 +60,9 @@ struct SceneCharge {
   float sizePx = 0.f;
   // Distance towards the viewer (Camera::depth); nearer charges are drawn over farther ones. 0 in the plane.
   double depth = 0;
+  // Index of the melted body the ball belongs to (ChargeSystem::bodies); balls of one body are outlined
+  // as one shape.
+  int body = -1;
 };
 
 struct FieldScene {
@@ -70,6 +73,9 @@ struct FieldScene {
 };
 
 FieldScene buildScene(const ChargeSystem& field, const FieldResult& result);
+// Rebuilds only scene.charges and scene.chargeRadius from the field (projection, depth, bodies); the
+// lines are untouched. The editor calls it after every edit so the charges follow at once.
+void syncSceneCharges(FieldScene& scene, const ChargeSystem& field);
 
 struct PointF {
   float x = 0, y = 0;

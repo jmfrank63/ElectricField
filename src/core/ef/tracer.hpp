@@ -147,8 +147,7 @@ FieldLine traceElectricLine(Solver& solver, const ChargeSystem& field, const Com
     point = solver.SolveStep(functorE, point, t, step, next_step, precision, max_step);
 
     if (record) line.addPoint(point, px);
-    // Point charges end on the drawn dot; a ball has a finite field everywhere, so a line may cross its
-    // centre region and ends only on the field null below.
+    // Point charges end on the drawn dot; balls end the line on their surface (below).
     if (field.radius <= 0 && field.HitCharge(point, p)) {
       // Point thinning may have dropped the hit sample. Keep the actual endpoint so the drawn
       // field line reaches the charge instead of stopping at the previous retained point.
@@ -156,10 +155,13 @@ FieldLine traceElectricLine(Solver& solver, const ChargeSystem& field, const Com
         line.points.push_back(point);
       break;
     }
-    // Finite charges: the line has converged on the field null inside a ball. Within a few steps of it
-    // the unit-speed direction field only oscillates, so the line ends here.
-    if (field.AtBallNull(point, std::min(field.radius, std::max(0.01 * field.radius, 4. * std::abs(step))))) {
-      if (record && (line.points.empty() || !(line.points.back() == point))) line.points.push_back(point);
+    // Finite charges: the line ends where it enters a ball, on that ball's surface.
+    if (const int ball = field.BallAt(Vec3(point.X, point.Y, 0)); ball >= 0) {
+      if (record) {
+        const Vec3 end = field.OnSurface(ball, Vec3(point.X, point.Y, 0));
+        if (!line.points.empty() && line.points.back() == point) line.points.pop_back();
+        line.points.push_back(Vec2(end.X, end.Y));
+      }
       break;
     }
 
@@ -226,8 +228,10 @@ FieldLine traceElectricLine3(Solver& solver, const ChargeSystem& field, const Co
       endAt(point);
       break;
     }
-    if (field.AtBallNull(point, std::min(field.radius, std::max(0.01 * field.radius, 4. * std::abs(step))))) {
-      endAt(point);
+    if (const int ball = field.BallAt(point); ball >= 0) {
+      const Vec2 flat = field.camera.project(point);
+      if (!line.points.empty() && line.points.back() == flat) line.points.pop_back();
+      endAt(field.OnSurface(ball, point));
       break;
     }
 
@@ -261,6 +265,8 @@ PotentialLine traceEquipotential(Solver& solver, const ChargeSystem& field, cons
 
   line.addPoint(startPoint, recordPx);
   line.weightCenter = startPoint;
+  bool reversed = false;  // balls only: the second arm of an arc that ends on ball surfaces
+  double length = 0;
 
   for (std::size_t i = 0; i < numSteps; ++i) {
     if ((i % kCancelStride) == 0 && hooks.cancelled()) {
@@ -269,11 +275,32 @@ PotentialLine traceEquipotential(Solver& solver, const ChargeSystem& field, cons
     }
     point = solver.SolveStep(functorV, point, t, step, next_step, 1E-3, 0.01);
 
+    // Finite charges: the inside of a ball is not part of the field, so the equipotential stops on the
+    // ball's surface. The first time, the trace restarts at the start point in the other direction, so
+    // both arms of the open arc are drawn; the second time it is complete.
+    if (const int ball = field.BallAt(Vec3(point.X, point.Y, 0)); ball >= 0) {
+      const Vec3 end = field.OnSurface(ball, Vec3(point.X, point.Y, 0));
+      line.points.push_back(Vec2(end.X, end.Y));
+      if (reversed) {
+        if (length > 0) line.weightCenter /= length;
+        break;
+      }
+      reversed = true;
+      std::reverse(line.points.begin(), line.points.end());
+      point = startPoint;
+      t = 0;
+      step = solver.IsAdaptive() ? -0.001 : -0.0001;
+      next_step = step;
+      continue;
+    }
+
     line.addPoint(point, recordPx);
-    line.weightCenter += point * step;  // 'step' plays the role of the portion of the curve 'weight'
+    line.weightCenter += point * std::abs(step);  // 'step' plays the role of the portion of the curve 'weight'
+    length += std::abs(step);
 
     t += step;
     if (solver.IsAdaptive()) step = next_step;
+    if (reversed) continue;  // an open arc never closes
 
     const double dist = (startPoint - point).Length();
     // 261020-ef1: the "within 6 px of the start" close test must be measured at the scale the ring is

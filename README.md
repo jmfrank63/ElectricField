@@ -98,8 +98,9 @@ preserved in history and on the `v1.0` tag.
 Each configuration has a charge radius (the editor panel's **Charge radius** field, the script command
 `charge.radius <r>`, the MCP argument `charge_radius`). 0, the default, keeps point charges. Above 0 every
 charge becomes a uniformly charged ball of that radius in world units: the field outside is unchanged,
-the field inside is finite (`E = q r / R^3`), and the canvas outlines each ball. Field lines may pass
-through a ball and end on the field null inside the ball they flow into. The radius is saved with the
+and the canvas outlines each ball. Field lines start on a ball's surface and end where they meet one;
+the inside of a ball is not drawn. Balls that touch or overlap melt into one body with one outline. The
+radius is saved with the
 configuration and the open tabs.
 
 ### 3D (core and MCP server)

@@ -60,8 +60,10 @@ constant: `E = sum q*r/|r|^3` and `V = sum q/|r|`.
 `charge_radius` (default 0, at most 1000, world units) works with a preset or with `charges` and gives
 every charge a physical size: each becomes a uniformly charged ball of that radius. Outside a ball the
 field is unchanged; inside it is finite, `E = q*r/R^3` and `V = q*(3R^2 - r^2)/(2R^3)`, so
-`evaluate_field` never reports a point as singular. Field lines may pass through a ball and end on the
-field null inside the ball they flow into, which is not necessarily its centre.
+`evaluate_field` never reports a point as singular. The inside of a ball is not part of the traced field:
+field lines start on a ball's surface and end where they meet a surface, and equipotentials stop there
+too. Balls whose centres are at most `2R` apart touch or overlap and melt into one body: it is outlined
+as one shape, and no line starts or ends inside it.
 
 ### 3D
 
@@ -82,7 +84,7 @@ it always gave.
 carries `z` and `ez`, and `magnitude` is the length of the full vector.
 
 `compute_forces` takes the configuration (`preset` or `charges`, and `charge_radius`) and returns, per
-charge, `fx`, `fy`, `fz` and `magnitude`, plus `potential_energy` for the whole system, with
+charge, `fx`, `fy`, `fz`, `magnitude` and `body` (the index of the melted body it belongs to), plus `potential_energy` for the whole system, with
 `F = q1*q2/d^2` and `U = q1*q2/d`. With `charge_radius` above 0, balls whose centres are closer than
 `2R` overlap: they are treated as rigid balls that pass through each other, which gives, with
 `s = d/R`, `F = q1*q2/R^2 * (s - 9s^2/16 + s^4/32)` and

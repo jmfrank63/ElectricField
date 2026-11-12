@@ -9,6 +9,13 @@
 //    force on it (ef/forces.hpp); body is the melted body it belongs to; screen_* is where the camera
 //    draws it; the view angles and the system's interaction energy repeat on every row.
 //
+//  bodiesCsv: one row per body (a group of balls that touch or overlap; a point charge is its own body)
+//    body, balls, charge, x, y, z, px, py, pz, dipole, flux_out, flux_in
+//    charge is the net charge; x, y, z the mean of the ball centres; p* the dipole moment about that
+//    point and dipole its length; flux_out and flux_in the field leaving and entering the body's outer
+//    surface in charge units, so flux_out - flux_in is the net charge and the number of field lines
+//    leaving the body is about flux_out times the lines per unit charge.
+//
 //  linesCsv: one row per point of every drawn line
 //    kind, line, point, x, y, z, screen_x, screen_y, potential, ex, ey, ez, magnitude, azimuth_deg,
 //    elevation_deg, label
@@ -24,6 +31,7 @@
 namespace ef {
 
 std::string chargesCsv(const ChargeSystem& field);
+std::string bodiesCsv(const ChargeSystem& field);
 // `scene` must have been built from `field` (buildScene).
 std::string linesCsv(const ChargeSystem& field, const FieldScene& scene);
 

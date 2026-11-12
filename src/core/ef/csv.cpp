@@ -5,6 +5,7 @@
 #include <cstdio>
 
 #include "ef/forces.hpp"
+#include "ef/seeds.hpp"
 
 namespace ef {
 
@@ -106,6 +107,38 @@ std::string chargesCsv(const ChargeSystem& field) {
     cell(out, field.camera.yaw * kDeg);
     cell(out, field.camera.pitch * kDeg);
     cell(out, energy);
+    out += '\n';
+  }
+  return out;
+}
+
+std::string bodiesCsv(const ChargeSystem& field) {
+  std::string out = "body,balls,charge,x,y,z,px,py,pz,dipole,flux_out,flux_in\n";
+  const std::vector<int> body = field.bodies();
+  const std::vector<BodyFlux> flux = bodyFlux(field);
+  for (std::size_t b = 0; b < flux.size(); ++b) {
+    int balls = 0, charge = 0;
+    Vec3 centre;
+    for (std::size_t i = 0; i < body.size(); ++i) {
+      if (body[i] != static_cast<int>(b)) continue;
+      ++balls;
+      charge += field.charges[i].charge;
+      centre += field.charges[i].position3();
+    }
+    centre /= static_cast<double>(std::max(balls, 1));
+    Vec3 dipole;
+    for (std::size_t i = 0; i < body.size(); ++i)
+      if (body[i] == static_cast<int>(b)) dipole += (field.charges[i].position3() - centre) * static_cast<double>(field.charges[i].charge);
+    out += std::to_string(b) + ',' + std::to_string(balls) + ',' + std::to_string(charge);
+    cell(out, centre.X);
+    cell(out, centre.Y);
+    cell(out, centre.Z);
+    cell(out, dipole.X);
+    cell(out, dipole.Y);
+    cell(out, dipole.Z);
+    cell(out, dipole.Length());
+    cell(out, flux[b].out);
+    cell(out, flux[b].in);
     out += '\n';
   }
   return out;

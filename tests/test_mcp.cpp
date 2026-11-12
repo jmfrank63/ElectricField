@@ -243,6 +243,12 @@ TEST_CASE("mcp: export_csv returns the tables inline") {
   CHECK(lines["structuredContent"]["rows"].get<int>() > 10);
   CHECK(lines["content"][1]["text"].get<std::string>().rfind("kind,line,point,x,y,z", 0) == 0);
   CHECK(errorText(callModern(server, "export_csv", json::object({{"preset", "dipole"}, {"table", "nope"}}))).find("'table'") != std::string::npos);
+  // balls may share a centre (their charges add); point charges may not
+  const json same = json::array({json::object({{"charge", 1}, {"x", 0}, {"y", 0}}), json::object({{"charge", -1}, {"x", 0}, {"y", 0}})});
+  const json bodies = callModern(server, "export_csv", json::object({{"charges", same}, {"charge_radius", 1}, {"table", "bodies"}}));
+  REQUIRE(bodies["isError"] == false);
+  CHECK(bodies["structuredContent"]["rows"] == 1);
+  CHECK(errorText(callModern(server, "export_csv", json::object({{"charges", same}, {"table", "bodies"}}))).find("same position") != std::string::npos);
 }
 
 TEST_CASE("mcp: invalid arguments come back as tool errors") {

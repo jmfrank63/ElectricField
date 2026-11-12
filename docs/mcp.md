@@ -62,9 +62,13 @@ constant: `E = sum q*r/|r|^3` and `V = sum q/|r|`.
 every charge a physical size: each becomes a uniformly charged ball of that radius. Outside a ball the
 field is unchanged; inside it is finite, `E = q*r/R^3` and `V = q*(3R^2 - r^2)/(2R^3)`, so
 `evaluate_field` never reports a point as singular. The inside of a ball is not part of the traced field:
-field lines start on a ball's surface and end where they meet a surface, and equipotentials stop there
-too. Balls whose centres are at most `2R` apart touch or overlap and melt into one body: it is outlined
-as one shape, and no line starts or ends inside it.
+equipotentials stop at ball surfaces. Each ball keeps its uniform charge and overlapping charges add.
+Balls whose centres are at most `2R` apart form one body, whatever their signs, and balls may share a
+centre. Field lines are placed on a body's outer surface in proportion to the field flowing through it
+(`lines_per_unit_charge` lines per unit of flux): with a total charge of 0 or more they start where the
+field leaves a surface and are traced along it, with a negative total they start where it enters and are
+traced against it. An isolated ball gets the same number of lines as a point charge; a neutral body with
+both signs gets the lines that loop from its positive to its negative side.
 
 ### 3D
 
@@ -92,13 +96,17 @@ charge, `fx`, `fy`, `fz`, `magnitude` and `body` (the index of the melted body i
 `U = q1*q2/R * (6/5 - s^2/2 + 3s^3/16 - s^5/160)`. The force goes to 0 as the centres meet and the
 energy stays finite. The self energy of the balls is not included.
 
-`export_csv` takes the same arguments as `compute_field_lines` plus `table` (`lines`, the default, or
-`charges`), and optionally `output_path` (absolute, ending in `.csv`) and `overwrite`. Without
+`export_csv` takes the same arguments as `compute_field_lines` plus `table` (`lines`, the default,
+`charges` or `bodies`), and optionally `output_path` (absolute, ending in `.csv`) and `overwrite`. Without
 `output_path` the CSV comes back inline as a second text block. The `lines` table has one row per point
 of every line: `kind, line, point, x, y, z, screen_x, screen_y, potential, ex, ey, ez, magnitude,
 azimuth_deg, elevation_deg, label`. The `charges` table has one row per charge: `index, name, charge,
 x, y, z, radius, body, potential, ex, ey, ez, fx, fy, fz, force, screen_x, screen_y, view_yaw_deg,
 view_pitch_deg, system_energy`, where potential and field are those of the other charges at its centre.
+
+The `bodies` table has one row per body: `body, balls, charge, x, y, z, px, py, pz, dipole,
+flux_out, flux_in`, with the net charge, the mean of the ball centres, the dipole moment about it, and
+the flux leaving and entering the outer surface in charge units (`flux_out - flux_in` is the net charge).
 
 `compute_field_lines`, `export_csv` and `render_field` also accept:
 

@@ -98,9 +98,11 @@ preserved in history and on the `v1.0` tag.
 Each configuration has a charge radius (the editor panel's **Charge radius** field, the script command
 `charge.radius <r>`, the MCP argument `charge_radius`). 0, the default, keeps point charges. Above 0 every
 charge becomes a uniformly charged ball of that radius in world units: the field outside is unchanged,
-and the canvas outlines each ball. Field lines start on a ball's surface and end where they meet one;
-the inside of a ball is not drawn. Balls that touch or overlap melt into one body with one outline. The
-radius is saved with the
+and the canvas outlines each ball. Each ball keeps its uniform charge, and where balls overlap the
+charges add. Balls that touch or overlap form one body with one outline, whatever their signs. Field
+lines are placed on a body's outer surface in proportion to the field flowing through it: they start
+where the field leaves the surface and end where it enters one, and the inside is not drawn. An isolated
+ball gets the same number of lines as a point charge. The radius is saved with the
 configuration and the open tabs.
 
 ### 3D
@@ -121,12 +123,14 @@ and the open tabs.
 
 ### Numbers as CSV
 
-**File > Export Configuration > CSV...** (script: `export.csv <path>`, MCP: `export_csv`) writes two
+**File > Export Configuration > CSV...** (script: `export.csv <path>`, MCP: `export_csv`) writes three
 tables for the calculated configuration:
 
 - `<name>.csv`: one row per point of every field line and equipotential, with `x, y, z`, the position on
   screen, the potential, the field vector and its magnitude, and the field direction as azimuth and
   elevation in degrees.
+- `<name>-bodies.csv`: one row per body (balls that touch or overlap), with its net charge, dipole
+  moment, and the field flux leaving and entering its surface.
 - `<name>-charges.csv`: one row per charge, with its position, the melted body it belongs to, the
   potential and field of the other charges at its centre, the force on it, the view angles and the
   interaction energy of the system.

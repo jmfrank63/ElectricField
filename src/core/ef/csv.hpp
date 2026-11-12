@@ -10,11 +10,17 @@
 //    draws it; the view angles and the system's interaction energy repeat on every row.
 //
 //  bodiesCsv: one row per body (a group of balls that touch or overlap; a point charge is its own body)
-//    body, balls, charge, x, y, z, px, py, pz, dipole, flux_out, flux_in
+//    body, balls, charge, x, y, z, px, py, pz, dipole, flux_out, flux_in, fx, fy, fz, force, model,
+//    potential, surface_error
 //    charge is the net charge; x, y, z the mean of the ball centres; p* the dipole moment about that
 //    point and dipole its length; flux_out and flux_in the field leaving and entering the body's outer
 //    surface in charge units, so flux_out - flux_in is the net charge and the number of field lines
-//    leaving the body is about flux_out times the lines per unit charge.
+//    leaving the body is about flux_out times the lines per unit charge. f* is the force on the body.
+//    model is "uniform" or "conductor"; with the conductor model, potential is the body's constant
+//    surface potential and surface_error how far the solved surface is from an equipotential (the
+//    largest deviation relative to the largest body potential).
+//    In the charge table, with the conductor model, potential is the body's and the force is the ball's
+//    share of the force on its body.
 //
 //  linesCsv: one row per point of every drawn line
 //    kind, line, point, x, y, z, screen_x, screen_y, potential, ex, ey, ez, magnitude, azimuth_deg,

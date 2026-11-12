@@ -251,6 +251,28 @@ TEST_CASE("mcp: export_csv returns the tables inline") {
   CHECK(errorText(callModern(server, "export_csv", json::object({{"charges", same}, {"table", "bodies"}}))).find("same position") != std::string::npos);
 }
 
+TEST_CASE("mcp: charge_model conductor makes the ball surfaces equipotentials") {
+  Server server("1", nullptr);
+  const json pair = json::array({json::object({{"charge", 1}, {"x", -1.5}, {"y", 0}}), json::object({{"charge", -1}, {"x", 1.5}, {"y", 0}})});
+  // two points on the surface of the left ball: the same potential with the conductor model only
+  const json points = json::array({json::object({{"x", -0.4999}, {"y", 0}}), json::object({{"x", -2.5001}, {"y", 0}}), json::object({{"x", -1.5}, {"y", 0}})});
+  const json c = callModern(server, "evaluate_field", json::object({{"charges", pair}, {"charge_radius", 1}, {"charge_model", "conductor"}, {"points", points}}));
+  REQUIRE(c["isError"] == false);
+  const json& cv = c["structuredContent"]["values"];
+  CHECK(cv[0]["potential"].get<double>() == doctest::Approx(cv[1]["potential"].get<double>()).epsilon(0.01));
+  CHECK(cv[2]["magnitude"].get<double>() == 0.0);  // no field inside
+  const json u = callModern(server, "evaluate_field", json::object({{"charges", pair}, {"charge_radius", 1}, {"points", points}}));
+  const json& uv = u["structuredContent"]["values"];
+  CHECK(uv[0]["potential"].get<double>() < uv[1]["potential"].get<double>() - 0.1);
+  const json forces = callModern(server, "compute_forces", json::object({{"charges", pair}, {"charge_radius", 1}, {"charge_model", "conductor"}}));
+  REQUIRE(forces["isError"] == false);
+  CHECK(forces["structuredContent"]["forces"][0]["fx"].get<double>() > 1.0 / 9);
+  const json lines = callModern(server, "compute_field_lines", json::object({{"charges", pair}, {"charge_radius", 1}, {"charge_model", "conductor"}, {"lines_per_unit_charge", 4}, {"equipotentials", false}}));
+  REQUIRE(lines["isError"] == false);
+  CHECK(lines["structuredContent"]["field_lines"].get<int>() >= 4);
+  CHECK(errorText(callModern(server, "compute_forces", json::object({{"charges", pair}, {"charge_model", "nope"}}))).find("charge_model") != std::string::npos);
+}
+
 TEST_CASE("mcp: invalid arguments come back as tool errors") {
   Server server("1", nullptr);
   const auto fails = [&](json arguments, const char* expected) {

@@ -102,7 +102,21 @@ and the canvas outlines each ball. Each ball keeps its uniform charge, and where
 charges add. Balls that touch or overlap form one body with one outline, whatever their signs. Field
 lines are placed on a body's outer surface in proportion to the field flowing through it: they start
 where the field leaves the surface and end where it enters one, and the inside is not drawn. An isolated
-ball gets the same number of lines as a point charge. The radius is saved with the
+ball gets the same number of lines as a point charge.
+
+With a radius above 0 the editor panel offers a **Charge model** (script: `charge.model`, MCP:
+`charge_model`):
+
+- **Uniform balls** (the default): as described above. The field outside is the sum of the Coulomb
+  fields of the centres, and field lines meet a surface at whatever angle the field has there.
+- **Equipotential surface**: the charge of each body shifts over its outer surface until the surface is
+  an equipotential, as on a conductor, so every field line ends at a right angle. Only the total charge
+  of a body is fixed, and balls that touch share their charge (a +1 touching a -1 neutralises). The
+  field inside is zero, and the force acts on a body as a whole. The field is solved numerically; it is
+  accurate to about 1% while the gap between separate balls is at least a fifth of the radius, and less
+  accurate for balls that almost touch (the bodies CSV table reports the error).
+
+The radius and the charge model are saved with the
 configuration and the open tabs.
 
 ### 3D

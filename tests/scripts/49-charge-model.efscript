@@ -1,0 +1,25 @@
+# 49-charge-model: the charge model of the balls through the API: set, compute, save and reload.
+collection.open Original
+config.open Dipole
+app.wait-done
+app.expect model=uniform
+charge.radius 1
+charge.model conductor
+app.expect model=conductor
+app.expect stale=1
+app.expect-error "uniform or conductor" charge.model metal
+editor.undo
+app.expect model=uniform
+editor.redo
+app.expect model=conductor
+tab.calculate
+app.wait-done
+app.expect stale=0
+export.csv conductor.csv
+config.save
+tab.close
+config.open Dipole
+app.wait-done
+app.expect model=conductor
+app.expect radius=1
+app.quit force

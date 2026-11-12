@@ -1144,3 +1144,19 @@ TEST_CASE("3d editing: z, moving on the screen plane, and turning the camera") {
   REQUIRE(efapp::editor::addCharge(t, ef::Vec2{0, 3}, 2, 0.f, -4));
   CHECK(t.field.charges.back().z == -4.0);
 }
+
+TEST_CASE("setChargeModel: a physics edit with one history entry") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);
+  CHECK(t.field.model == ef::ChargeModel::Uniform);
+  const std::size_t entries = t.undo.size();
+  REQUIRE(efapp::editor::setChargeModel(t, ef::ChargeModel::Conductor));
+  CHECK(t.field.model == ef::ChargeModel::Conductor);
+  CHECK(t.stale);
+  CHECK(t.dirty);
+  CHECK(t.undo.size() == entries + 1);
+  REQUIRE(efapp::editor::setChargeModel(t, ef::ChargeModel::Conductor));  // identical: nothing recorded
+  CHECK(t.undo.size() == entries + 1);
+  CHECK(efapp::editor::undo(t));
+  CHECK(t.field.model == ef::ChargeModel::Uniform);
+}

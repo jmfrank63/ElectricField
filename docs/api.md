@@ -43,7 +43,7 @@ the derived `Charge N`; names are comma-free on disk). Older dumps' `v,x,y` pref
 containing ';' or '=' makes the dump ambiguous for consumers that split on them - avoid such names
 in scripts.
 
-`angle=yaw,pitch` is the view angle in degrees and `z=` lists the z coordinate of each charge, separated by `;`.
+`model=` is the charge model of the balls (`uniform` or `conductor`). `angle=yaw,pitch` is the view angle in degrees and `z=` lists the z coordinate of each charge, separated by `;`.
 `drawsize=` is the drawn charge radius in px (valid range 2-120; legacy `chargeSize = 1` is upgraded to 2).
 
 `couple=` is the value-and-size coupling flag (261020-ef2, `coupleValueSize` in options.ini).
@@ -110,6 +110,7 @@ REC-02).
 | `charge.name <i> <name...>` | set the charge's name (v2.6 phase 3): remaining tokens joined with single spaces, quoted names arrive as one token, ',' is stripped, empty resets to the derived "Charge N"; marks the tab dirty without invalidating the drawn lines |
 | `charge.z <index> <z>` | set the third coordinate of a charge (`error: charge.z needs <index> <z>`); a charge off the plane makes the configuration 3D; one undo entry; marks the tab for recalculation |
 | `view.angle <yaw> <pitch>` | turn the tab's camera, in degrees (`error: view.angle needs <yaw -360..360> <pitch -90..90> in degrees`); a view change, so no undo entry, but the lines belong to the old angle: the tab becomes stale and shows only the charges until it is calculated again |
+| `charge.model uniform\|conductor` | how the charge of the balls is distributed (only matters with a charge radius above 0; `error: charge.model needs uniform or conductor`): `uniform` keeps each ball's uniform charge, `conductor` lets the charge of each body shift until its surface is an equipotential, so field lines end at a right angle; one undo entry; saved with the configuration and the session; marks the tab for recalculation |
 | `charge.radius <r>` | set the active tab's physical charge radius in world units, 0 to 1000 (`error: charge.radius needs a radius from 0 to 1000`): 0 = point charges; above 0 every charge is a uniformly charged ball (Coulomb outside); overlapping charges add, balls that touch or overlap form one body, and field lines are placed on its outer surface in proportion to the field flowing through it; saved with the configuration and the session; marks the tab for recalculation |
 | `charge.size <i> <px>` | set the charge's own drawn radius (v2.6 phase 3): 0 = the Options default, else 2-120 px (`error: charge size must be 0 or 2-120`); marks the tab for recalculation (the per-charge seed/hit circles follow the size); with `options.set couple-value-size on` a resize also sets the charge's value to the size (sign preserved) |
 | `editor.undo` / `editor.redo` | step through charge and method changes |

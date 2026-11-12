@@ -36,6 +36,7 @@ struct SavedTab {
   GridSettings grid;               // v2.3 GRID: snap grid settings
   std::vector<ef::PresetCharge> charges;
   double radius = 0;               // ef::ChargeSystem::radius; written only when > 0
+  ef::ChargeModel model = ef::ChargeModel::Uniform;  // "model = conductor" when not the default
   ef::Camera camera{};             // view angles; written only when turned ("view = yaw, pitch" in degrees)
   std::string source{};            // h22: the configuration the tab came from; empty = derive from the title on restore (the pre-change convention)
 };

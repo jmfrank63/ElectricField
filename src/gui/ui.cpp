@@ -532,6 +532,7 @@ void saveAsModal(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
     candidate.name = ui.saveAsName;
     candidate.radius = t->field.radius;
     candidate.camera = t->field.camera;
+    candidate.model = t->field.model;
     candidate.charges.reserve(t->field.charges.size());
     for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::toPresetCharge(c));
     // Check on a scratch copy: upsert is the single decision core (also used by App::frame for the real write).
@@ -562,6 +563,7 @@ void saveAsModal(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
       candidate.name = ui.saveAsName;
       candidate.radius = t->field.radius;
       candidate.camera = t->field.camera;
+      candidate.model = t->field.model;
     candidate.charges.reserve(t->field.charges.size());
       for (const ef::Charge& c : t->field.charges) candidate.charges.push_back(ef::toPresetCharge(c));
       ui.saveAsApply = candidate;
@@ -989,6 +991,19 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
       ImGui::SetTooltip("Physical radius of every charge in world units. 0 = point charges; above 0 each charge is a\n"
                         "uniformly charged ball: field lines start and end on its surface, and balls that touch melt together.");
   }
+  if (t.field.radius > 0) {  // how the charge of the balls is distributed
+    int model = t.field.model == ef::ChargeModel::Conductor ? 1 : 0;
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f);
+    if (ImGui::Combo("Charge model", &model, "Uniform balls\0Equipotential surface\0")) {
+      if (efapp::editor::setChargeModel(t, model == 1 ? ef::ChargeModel::Conductor : ef::ChargeModel::Uniform)) armAutoRecalc(t);
+    }
+    if (ImGui::IsItemHovered())
+      ImGui::SetTooltip("Uniform balls: every ball keeps its uniform charge, overlapping charges add;\n"
+                        "field lines meet a surface at any angle.\n"
+                        "Equipotential surface: the charge of each body shifts over its surface until the\n"
+                        "surface is an equipotential, so every field line ends at a right angle. Only the\n"
+                        "total charge of a body is fixed; balls that touch share their charge.");
+  }
   const int mIdx = static_cast<int>(t.params.method);
   const std::string mCurrent(ef::kMethods[static_cast<std::size_t>(mIdx)].display);
   ImGui::SetNextItemWidth(-FLT_MIN);
@@ -1218,7 +1233,7 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
   if (ui.openUserConfig >= 0) {  // v2 CFG-02: a user configuration from the chooser
     if (static_cast<std::size_t>(ui.openUserConfig) < ui.userConfigs.size()) {
       const efapp::UserConfig& c = ui.userConfigs[static_cast<std::size_t>(ui.openUserConfig)];
-      ui.selectSerial = ws.openUser(c.name, c.charges, c.radius, c.camera);
+      ui.selectSerial = ws.openUser(c.name, c.charges, c.radius, c.camera, c.model);
     }
     ui.openUserConfig = -1;
   }
@@ -1228,7 +1243,7 @@ void drawUi(efapp::Workspace& ws, UiState& ui, const UiEnv& env) {
   }
   if (ui.calculateAll) {  // v2.2 COL-03: open every configuration of the current collection in tabs
     ws.closeAll();
-    for (const efapp::UserConfig& c : ui.userConfigs) ws.openUser(c.name, c.charges, c.radius, c.camera);
+    for (const efapp::UserConfig& c : ui.userConfigs) ws.openUser(c.name, c.charges, c.radius, c.camera, c.model);
     ui.calculateAll = false;
   }
   if (ui.undoRequest || ui.redoRequest) {  // v2.3 EDIT-12

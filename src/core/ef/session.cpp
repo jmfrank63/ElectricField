@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <exception>
+#include <type_traits>
 #include <utility>
 
 #include "ef/method.hpp"
@@ -35,7 +36,7 @@ struct ComputeSession::JobHooks {
 };
 
 ComputeSession::ComputeSession(ChargeSystem field, ComputeParams params) : field_(std::move(field)), params_(params) {
-  const std::vector<Seed> seeds = planSeeds(field_, params_);
+  const std::vector<Seed> seeds = field_.is3D() ? planSeeds3(field_, params_) : planSeeds(field_, params_);
   for (std::size_t i = 0; i < seeds.size(); ++i) {
     Job j;
     j.seed = seeds[i];
@@ -88,7 +89,11 @@ void ComputeSession::fail(const char* what) {
 
 void ComputeSession::workerMain() {
   try {
-    withSolver(params_.method, [this](auto& solver) { workerLoop(solver); });  // one solver per thread: K[] is per-instance state
+    // one solver per thread: K[] is per-instance state. A 3D system integrates in space.
+    if (field_.is3D())
+      withSolverFor<Vec3>(params_.method, [this](auto& solver) { workerLoop(solver); });
+    else
+      withSolver(params_.method, [this](auto& solver) { workerLoop(solver); });
   } catch (const std::exception& e) {
     fail(e.what());
   } catch (...) {
@@ -114,7 +119,10 @@ void ComputeSession::workerLoop(Solver& solver) {
     TraceStatus st;
     std::shared_ptr<const KeyedElectricLine> e;
     std::shared_ptr<const KeyedPotentialLine> p;
-    if (job.isEquipotential) {
+    if constexpr (std::is_same_v<typename Solver::State, Vec3>) {
+      auto line = traceElectricLine3(solver, field_, params_, job.seed, hooks, &st);
+      if (!st.cancelled) e = std::make_shared<const KeyedElectricLine>(KeyedElectricLine{job.key, std::move(line)});
+    } else if (job.isEquipotential) {
       auto line = traceEquipotential(solver, field_, params_, job.start, job.potentialLabel, hooks, &st);
       if (!st.cancelled) p = std::make_shared<const KeyedPotentialLine>(KeyedPotentialLine{job.key, std::move(line)});
     } else {

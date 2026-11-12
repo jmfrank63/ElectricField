@@ -57,6 +57,7 @@ const test_sources = [_][]const u8{
     "test_scene.cpp",
     "test_mcp.cpp",
     "test_radius.cpp",
+    "test_3d.cpp",
 };
 
 const mcp_sources = [_][]const u8{

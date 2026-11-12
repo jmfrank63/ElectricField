@@ -111,7 +111,7 @@ TEST_CASE("mcp: initialize opens a legacy session") {
     CHECK(init["result"]["protocolVersion"] == "2025-06-18");
     CHECK(init["result"]["serverInfo"]["name"] == "electric-field");
     const json list = send(server, request("tools/list"));
-    CHECK(list["result"]["tools"].size() == 5);
+    CHECK(list["result"]["tools"].size() == 6);
     CHECK_FALSE(list["result"].contains("resultType"));
   }
   SUBCASE("an unknown version falls back to the latest legacy one") {
@@ -193,6 +193,42 @@ TEST_CASE("mcp: charge_radius makes the field finite at the charges") {
   REQUIRE(preset["isError"] == false);
   CHECK(preset["structuredContent"]["field_lines"] == 4);
   CHECK(errorText(callModern(server, "evaluate_field", json::object({{"charges", kDipole}, {"charge_radius", -1}, {"points", points}}))).find("charge_radius") != std::string::npos);
+}
+
+TEST_CASE("mcp: z coordinates, a turned view and compute_forces") {
+  Server server("1", nullptr);
+  // forces on the planar dipole: attraction 1/16 along x, energy -1/4
+  const json forces = callModern(server, "compute_forces", json::object({{"charges", kDipole}}));
+  REQUIRE(forces["isError"] == false);
+  const json& f = forces["structuredContent"]["forces"];
+  REQUIRE(f.size() == 2);
+  CHECK(f[0]["fx"].get<double>() == doctest::Approx(1.0 / 16));
+  CHECK(f[1]["fx"].get<double>() == doctest::Approx(-1.0 / 16));
+  CHECK(f[0]["fz"].get<double>() == 0.0);
+  CHECK(forces["structuredContent"]["potential_energy"].get<double>() == doctest::Approx(-0.25));
+
+  const json space = json::array({json::object({{"charge", 1}, {"x", 0}, {"y", 0}, {"z", -2}}), json::object({{"charge", -1}, {"x", 0}, {"y", 0}, {"z", 2}})});
+  const json value = callModern(server, "evaluate_field", json::object({{"charges", space}, {"points", json::array({json::object({{"x", 0}, {"y", 0}})})}}));
+  REQUIRE(value["isError"] == false);
+  const json& mid = value["structuredContent"]["values"][0];
+  CHECK(mid["ez"].get<double>() == doctest::Approx(0.5));
+  CHECK(mid["z"].get<double>() == 0.0);
+  CHECK(mid["magnitude"].get<double>() == doctest::Approx(0.5));
+  // a planar system at a plane point keeps the 2D answer
+  const json flat = callModern(server, "evaluate_field", json::object({{"charges", kDipole}, {"points", json::array({json::object({{"x", 0}, {"y", 1}})})}}));
+  CHECK_FALSE(flat["structuredContent"]["values"][0].contains("ez"));
+
+  const json lines = callModern(server, "compute_field_lines", json::object({{"charges", space}, {"lines_per_unit_charge", 4}}));
+  REQUIRE(lines["isError"] == false);
+  CHECK(lines["structuredContent"]["dimensions"] == 3);
+  CHECK(lines["structuredContent"]["field_lines"] == 4);
+  CHECK(lines["structuredContent"]["equipotentials"] == 0);
+  const json turned = callModern(server, "compute_field_lines", json::object({{"preset", "dipole"}, {"lines_per_unit_charge", 4}, {"view_yaw", 30}, {"view_pitch", 20}}));
+  REQUIRE(turned["isError"] == false);
+  CHECK(turned["structuredContent"]["dimensions"] == 3);
+  const json plain = callModern(server, "compute_field_lines", json::object({{"preset", "dipole"}, {"lines_per_unit_charge", 4}}));
+  CHECK(plain["structuredContent"]["dimensions"] == 2);
+  CHECK(errorText(callModern(server, "compute_field_lines", json::object({{"preset", "dipole"}, {"view_pitch", 120}}))).find("view_pitch") != std::string::npos);
 }
 
 TEST_CASE("mcp: invalid arguments come back as tool errors") {

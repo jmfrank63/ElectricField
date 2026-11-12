@@ -60,9 +60,9 @@ inline constexpr std::optional<Method> methodFromName(std::string_view name) {
 
 // Calls visitor(solver) with a freshly constructed solver of the right static type (one per thread).
 // Mirrors FieldLinesCalculator::StartComputingThread's switch, but keeps the hot loop non-virtual.
-template <typename V>
-decltype(auto) withSolver(Method m, V&& visitor) {
-  using S = Vec2;
+// S is the integrated value type: Vec2 for lines in the plane, Vec3 for lines in space.
+template <typename S, typename V>
+decltype(auto) withSolverFor(Method m, V&& visitor) {
   switch (m) {
     case Method::Euler: { rk::Euler<S> s; return visitor(s); }
     case Method::Midpoint: { rk::Midpoint<S> s; return visitor(s); }
@@ -78,5 +78,8 @@ decltype(auto) withSolver(Method m, V&& visitor) {
   }
   throw std::invalid_argument("ef::withSolver: invalid Method value");  // D-15: no silent fallback to Euler
 }
+
+template <typename V>
+decltype(auto) withSolver(Method m, V&& visitor) { return withSolverFor<Vec2>(m, static_cast<V&&>(visitor)); }
 
 }  // namespace ef

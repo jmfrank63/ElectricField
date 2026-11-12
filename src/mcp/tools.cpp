@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "app/options.hpp"  // the GUI's Options ranges: the same limits apply here
+#include "ef/forces.hpp"
 #include "ef/method.hpp"
 #include "ef/pdf.hpp"
 #include "ef/presets.hpp"
@@ -116,12 +117,13 @@ std::string presetSlugs() {
 ef::Charge parseCharge(const json& item, std::size_t index) {
   const std::string where = "charges[" + std::to_string(index) + "]";
   if (!item.is_object()) throw ToolError(where + " must be an object");
-  checkKeys(item, {"charge", "x", "y", "size_px"}, where);
+  checkKeys(item, {"charge", "x", "y", "z", "size_px"}, where);
   ef::Charge c;
   c.charge = static_cast<int>(getInt(item, "charge", -kMaxChargeValue, kMaxChargeValue, 0, true));
   if (c.charge == 0) throw ToolError(where + ": 'charge' must not be 0");
   c.position.X = getNumber(item, "x", -kMaxCoordinate, kMaxCoordinate, 0, true);
   c.position.Y = getNumber(item, "y", -kMaxCoordinate, kMaxCoordinate, 0, true);
+  c.z = getNumber(item, "z", -kMaxCoordinate, kMaxCoordinate, 0);
   const double size = getNumber(item, "size_px", 0, efapp::kChargeSizeMax, 0);
   if (size != 0 && size < ef::kMinChargeSizePx)
     throw ToolError(where + ": 'size_px' must be 0 (default) or between " + json(ef::kMinChargeSizePx).dump() + " and " + std::to_string(efapp::kChargeSizeMax));
@@ -153,7 +155,7 @@ ef::ChargeSystem parseField(const json& args) {
   for (std::size_t i = 0; i < list.size(); ++i) {
     ef::Charge c = parseCharge(list[i], i);
     for (std::size_t j = 0; j < field.charges.size(); ++j)
-      if ((field.charges[j].position - c.position).Length() < kMinSeparation)
+      if ((field.charges[j].position3() - c.position3()).Length() < kMinSeparation)
         throw ToolError("charges[" + std::to_string(j) + "] and charges[" + std::to_string(i) + "] are at the same position");
     field.charges.push_back(std::move(c));
   }
@@ -169,6 +171,8 @@ struct Computation {
 Computation parseComputation(const json& args) {
   Computation c;
   c.field = parseField(args);
+  c.field.camera.yaw = getNumber(args, "view_yaw", -360, 360, 0) * ef::kPi / 180.;
+  c.field.camera.pitch = getNumber(args, "view_pitch", -90, 90, 0) * ef::kPi / 180.;
   const std::string method = getString(args, "method", std::string(ef::info(c.params.method).name));
   const auto m = ef::methodFromName(method);
   if (!m) throw ToolError("unknown method '" + method + "'; call list_methods for the valid names");
@@ -240,6 +244,7 @@ const char* methodName(const Computation& c) { return ef::info(c.params.method).
 
 json computationSummary(const Computation& c, const Computed& done) {
   return json::object({{"charges", c.field.charges.size()},
+                       {"dimensions", c.field.is3D() ? 3 : 2},
                        {"method", methodName(c)},
                        {"field_lines", done.result.electric.size()},
                        {"equipotentials", done.result.potential.size()},
@@ -288,20 +293,25 @@ json evaluateField(const json& args) {
   if (it == args.end()) throw ToolError("missing required field 'points'");
   if (!it->is_array() || it->empty() || it->size() > kMaxEvaluationPoints)
     throw ToolError("'points' must be an array of 1 to " + std::to_string(kMaxEvaluationPoints) + " points");
+  const bool spatial = field.is3D();
   json values = json::array();
   for (std::size_t i = 0; i < it->size(); ++i) {
     const json& point = (*it)[i];
     const std::string where = "points[" + std::to_string(i) + "]";
     if (!point.is_object()) throw ToolError(where + " must be an object");
-    checkKeys(point, {"x", "y"}, where);
-    const ef::Vec2 pos{getNumber(point, "x", -1e9, 1e9, 0, true), getNumber(point, "y", -1e9, 1e9, 0, true)};
-    const ef::Vec2 e = field.E(pos);
+    checkKeys(point, {"x", "y", "z"}, where);
+    const ef::Vec3 pos{getNumber(point, "x", -1e9, 1e9, 0, true), getNumber(point, "y", -1e9, 1e9, 0, true), getNumber(point, "z", -1e9, 1e9, 0)};
+    // A point of the drawing plane of a planar system keeps the 2D answer (no z, no ez).
+    const bool space = spatial || point.contains("z");
+    const ef::Vec3 e = field.E(pos);
     const double potential = field.Potential(pos);
-    const double magnitude = std::hypot(e.X, e.Y);
+    const double magnitude = space ? e.Length() : std::hypot(e.X, e.Y);
     const bool singular = !std::isfinite(potential) || !std::isfinite(magnitude);
     json value = json::object({{"x", pos.X}, {"y", pos.Y}, {"singular", singular}});
+    if (space) value["z"] = pos.Z;
     value["ex"] = singular ? json(nullptr) : json(e.X);
     value["ey"] = singular ? json(nullptr) : json(e.Y);
+    if (space) value["ez"] = singular ? json(nullptr) : json(e.Z);
     value["magnitude"] = singular ? json(nullptr) : json(magnitude);
     value["potential"] = singular ? json(nullptr) : json(potential);
     values.push_back(std::move(value));
@@ -309,8 +319,21 @@ json evaluateField(const json& args) {
   return okResult(json::object({{"values", std::move(values)}}));
 }
 
+json computeForces(const json& args) {
+  checkKeys(args, {"preset", "charges", "charge_radius"}, "arguments");
+  const ef::ChargeSystem field = parseField(args);
+  const std::vector<ef::Vec3> f = ef::forces(field);
+  json list = json::array();
+  for (std::size_t i = 0; i < f.size(); ++i) {
+    const ef::Charge& c = field.charges[i];
+    list.push_back(json::object({{"charge", c.charge}, {"x", c.position.X}, {"y", c.position.Y}, {"z", c.z},
+                                 {"fx", f[i].X}, {"fy", f[i].Y}, {"fz", f[i].Z}, {"magnitude", f[i].Length()}}));
+  }
+  return okResult(json::object({{"forces", std::move(list)}, {"potential_energy", ef::potentialEnergy(field)}}));
+}
+
 json computeFieldLines(const json& args, const std::atomic<bool>* cancel) {
-  checkKeys(args, {"preset", "charges", "charge_radius", "method", "lines_per_unit_charge", "equipotentials", "potential_interval", "threads", "timeout_ms", "include_lines", "max_points_per_line"}, "arguments");
+  checkKeys(args, {"preset", "charges", "charge_radius", "method", "lines_per_unit_charge", "equipotentials", "potential_interval", "threads", "timeout_ms", "view_yaw", "view_pitch", "include_lines", "max_points_per_line"}, "arguments");
   const Computation c = parseComputation(args);
   const bool includeLines = getBool(args, "include_lines", false);
   const auto limit = static_cast<std::size_t>(getInt(args, "max_points_per_line", 2, 5000, 200));
@@ -389,7 +412,7 @@ void writeFile(const fs::path& path, const std::string& bytes) {
 }
 
 json renderField(const json& args, const PngEncoder& encodePng, const std::atomic<bool>* cancel) {
-  checkKeys(args, {"preset", "charges", "charge_radius", "method", "lines_per_unit_charge", "equipotentials", "potential_interval", "threads", "timeout_ms", "format", "width", "height", "pixels_per_unit", "center_x", "center_y", "output_path", "overwrite"}, "arguments");
+  checkKeys(args, {"preset", "charges", "charge_radius", "method", "lines_per_unit_charge", "equipotentials", "potential_interval", "threads", "timeout_ms", "view_yaw", "view_pitch", "format", "width", "height", "pixels_per_unit", "center_x", "center_y", "output_path", "overwrite"}, "arguments");
   const Computation c = parseComputation(args);
   const std::string format = getString(args, "format", encodePng ? "png" : "svg");
   if (format != "png" && format != "svg" && format != "pdf") throw ToolError("'format' must be png, svg or pdf");
@@ -449,6 +472,7 @@ const char* const kFieldProperties = R"json({
     "items": {
       "type": "object", "additionalProperties": false, "required": ["charge", "x", "y"],
       "properties": {
+        "z": {"type": "number", "minimum": -1000, "maximum": 1000, "default": 0, "description": "World units, towards the viewer. Any charge with z other than 0 makes the system 3D."},
         "charge": {"type": "integer", "minimum": -1000, "maximum": 1000, "description": "Non-zero integer charge."},
         "x": {"type": "number", "minimum": -1000, "maximum": 1000, "description": "World units, x to the right."},
         "y": {"type": "number", "minimum": -1000, "maximum": 1000, "description": "World units, y up."},
@@ -465,7 +489,9 @@ const char* const kComputeProperties = R"json({
   "equipotentials": {"type": "boolean", "default": true, "description": "Also compute equipotential lines."},
   "potential_interval": {"type": "number", "minimum": 0.01, "maximum": 0.5, "default": 0.1, "description": "Potential difference between equipotentials."},
   "threads": {"type": "integer", "minimum": 1, "maximum": 128, "default": 4},
-  "timeout_ms": {"type": "integer", "minimum": 100, "maximum": 600000, "default": 60000}
+  "timeout_ms": {"type": "integer", "minimum": 100, "maximum": 600000, "default": 60000},
+  "view_yaw": {"type": "number", "minimum": -360, "maximum": 360, "default": 0, "description": "Camera turn about the vertical (y) axis in degrees. The view is orthographic and turns about the world origin. A turned camera, or a charge with z other than 0, selects the 3D pipeline: field lines start evenly spread over a sphere around each source charge, are traced in space and returned or drawn as their projection; equipotentials (surfaces in space) are not drawn."},
+  "view_pitch": {"type": "number", "minimum": -90, "maximum": 90, "default": 0, "description": "Camera tilt about the screen's horizontal axis in degrees."}
 })json";
 
 json objectSchema(json properties, std::initializer_list<const char*> required = {}) {
@@ -493,13 +519,15 @@ json toolDefinitions(bool pngAvailable) {
   json evaluate = fieldProperties;
   evaluate["points"] = json::parse(R"json({
     "type": "array", "minItems": 1, "maxItems": 10000,
-    "items": {"type": "object", "additionalProperties": false, "required": ["x", "y"], "properties": {"x": {"type": "number"}, "y": {"type": "number"}}}
+    "items": {"type": "object", "additionalProperties": false, "required": ["x", "y"], "properties": {"x": {"type": "number"}, "y": {"type": "number"}, "z": {"type": "number", "default": 0}}}
   })json");
-  tools.push_back(toolEntry("evaluate_field", "Evaluate field at points", "Electric field vector, magnitude and potential at world points, with E = sum q*r/|r|^3 and V = sum q/|r| (unit Coulomb constant). A point on a charge is reported with singular=true and null values.", objectSchema(std::move(evaluate), {"points"}), true));
+  tools.push_back(toolEntry("evaluate_field", "Evaluate field at points", "Electric field vector, magnitude and potential at world points, with E = sum q*r/|r|^3 and V = sum q/|r| (unit Coulomb constant). A point on a charge is reported with singular=true and null values. When a charge or the point has a z coordinate the answer also carries z and ez.", objectSchema(std::move(evaluate), {"points"}), true));
+
+  tools.push_back(toolEntry("compute_forces", "Compute forces between charges", "The force on every charge from all the others, in space, and the interaction energy of the system (unit Coulomb constant: F = q1 q2 / d^2, U = q1 q2 / d). With charge_radius above 0, overlapping balls (d < 2R) are rigid and interpenetrate: F = q1 q2 / R^2 * (s - 9 s^2/16 + s^4/32) and U = q1 q2 / R * (6/5 - s^2/2 + 3 s^3/16 - s^5/160) with s = d / R.", objectSchema(fieldProperties), true));
 
   json computeLines = fieldProperties;
   computeLines.update(computeProperties);
-  computeLines["include_lines"] = json::parse(R"json({"type": "boolean", "default": false, "description": "Also return the line geometry as [x, y] world points on each curve."})json");
+  computeLines["include_lines"] = json::parse(R"json({"type": "boolean", "default": false, "description": "Also return the line geometry as [x, y] world points on each curve (in 3D: the projection through the camera)."})json");
   computeLines["max_points_per_line"] = json::parse(R"json({"type": "integer", "minimum": 2, "maximum": 5000, "default": 200, "description": "Thin each returned line to at most this many points."})json");
   tools.push_back(toolEntry("compute_field_lines", "Compute field lines", "Traces the electric field lines and equipotentials of a configuration and returns the line counts, optionally with the geometry.", objectSchema(std::move(computeLines)), true));
 
@@ -524,7 +552,7 @@ json toolDefinitions(bool pngAvailable) {
 }
 
 bool isKnownTool(const std::string& name) {
-  return name == "list_presets" || name == "list_methods" || name == "evaluate_field" || name == "compute_field_lines" || name == "render_field";
+  return name == "list_presets" || name == "list_methods" || name == "evaluate_field" || name == "compute_forces" || name == "compute_field_lines" || name == "render_field";
 }
 
 json callTool(const std::string& name, const json& arguments, const PngEncoder& encodePng, const std::atomic<bool>* cancel) {
@@ -532,6 +560,7 @@ json callTool(const std::string& name, const json& arguments, const PngEncoder& 
     if (name == "list_presets") return listPresets(arguments);
     if (name == "list_methods") return listMethods(arguments);
     if (name == "evaluate_field") return evaluateField(arguments);
+    if (name == "compute_forces") return computeForces(arguments);
     if (name == "compute_field_lines") return computeFieldLines(arguments, cancel);
     if (name == "render_field") return renderField(arguments, encodePng, cancel);
     return errorResult("unknown tool '" + name + "'");

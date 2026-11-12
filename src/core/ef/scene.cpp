@@ -13,7 +13,8 @@ FieldScene buildScene(const ChargeSystem& field, const FieldResult& result) {
   s.potential.reserve(result.potential.size());
   for (const auto& l : result.potential)
     s.potential.push_back(ScenePath{l.points, l.points.size() > 1 && l.points.front() == l.points.back()});
-  for (const auto& c : field.charges) s.charges.push_back(SceneCharge{c.position, c.charge, c.sizePx});
+  for (const auto& c : field.charges)
+    s.charges.push_back(SceneCharge{field.camera.project(c.position3()), c.charge, c.sizePx, field.camera.depth(c.position3())});
   s.chargeRadius = field.radius;
   return s;
 }
@@ -305,7 +306,13 @@ void renderScene(Painter& painter, const FieldScene& scene, const DrawStyle& sty
       painter.strokePath(pts.data(), pts.size(), 0, true, c.charge > 0 ? style.positiveCharge : style.negativeCharge, 1.f);
     }
   }
-  for (const auto& c : scene.charges) {
+  // Farther charges first, so nearer dots cover them (stable: a planar scene keeps its charge order).
+  std::vector<const SceneCharge*> order;
+  order.reserve(scene.charges.size());
+  for (const auto& c : scene.charges) order.push_back(&c);
+  std::stable_sort(order.begin(), order.end(), [](const SceneCharge* a, const SceneCharge* b) { return a->depth < b->depth; });
+  for (const SceneCharge* pc : order) {
+    const SceneCharge& c = *pc;
     const PointF center{static_cast<float>(cx + c.position.X * view.pixelsPerUnit), static_cast<float>(cy - c.position.Y * view.pixelsPerUnit)};
     // v2.6 phase 3: a charge with its own size draws at it; 0 inherits the style radius (draw-only).
     // CR-01: sizePx is LOGICAL px - view.styleScale carries the device/logical ratio, and

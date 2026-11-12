@@ -102,6 +102,17 @@ the field inside is finite (`E = q r / R^3`), and the canvas outlines each ball.
 through a ball and end on the field null inside the ball they flow into. The radius is saved with the
 configuration and the open tabs.
 
+### 3D (core and MCP server)
+
+The physics core handles charges in space: each charge has a z coordinate, the field and potential can be
+evaluated at any point in space, and `ef/forces.hpp` gives the force on every charge and the interaction
+energy of the system, including the rule for overlapping balls. Field lines of a 3D system are traced in
+space and drawn through an orthographic camera that can be turned (yaw and pitch). A system that lies in
+the drawing plane with the default camera uses the original 2D pipeline unchanged.
+
+Today this is reachable through the [MCP server](docs/mcp.md#3d) (`z` on charges, `view_yaw`,
+`view_pitch`, the `compute_forces` tool). The desktop app still edits planar configurations only.
+
 ## Building
 
 You need [Zig 0.17](https://ziglang.org/download/) - no other toolchain, no Visual Studio. SDL3 and Dear

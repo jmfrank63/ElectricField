@@ -58,6 +58,8 @@ struct SceneCharge {
   int charge = 0;
   // v2.6 phase 3: the charge's own drawn radius in px; 0 = inherit style.chargeRadiusPx.
   float sizePx = 0.f;
+  // Distance towards the viewer (Camera::depth); nearer charges are drawn over farther ones. 0 in the plane.
+  double depth = 0;
 };
 
 struct FieldScene {

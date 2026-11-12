@@ -44,6 +44,7 @@ Clients configured through JSON (replace the command with the path for your plat
 | `list_presets` | The 9 built-in configurations: slug, name, charges |
 | `list_methods` | The 11 integration methods: name, adaptive flag, order |
 | `evaluate_field` | E vector, magnitude and potential at up to 10000 points |
+| `compute_forces` | The force on every charge from the others, in space, and the interaction energy |
 | `compute_field_lines` | Traces a configuration and returns line counts and, with `include_lines`, the geometry |
 | `render_field` | Computes and renders a PNG, SVG or PDF, inline or to a file |
 
@@ -51,7 +52,7 @@ Every tool that takes a configuration needs exactly one of:
 
 - `preset`: a slug from `list_presets`, such as `"dipole"`
 - `charges`: 1 to 64 charges at distinct positions, each `{"charge": 1, "x": -2, "y": 0}` with an
-  optional drawn radius `size_px` (0, or 2 to 120)
+  optional `z` (default 0) and an optional drawn radius `size_px` (0, or 2 to 120)
 
 `charge` is a non-zero integer. World coordinates have y pointing up. The field uses a unit Coulomb
 constant: `E = sum q*r/|r|^3` and `V = sum q/|r|`.
@@ -61,6 +62,32 @@ every charge a physical size: each becomes a uniformly charged ball of that radi
 field is unchanged; inside it is finite, `E = q*r/R^3` and `V = q*(3R^2 - r^2)/(2R^3)`, so
 `evaluate_field` never reports a point as singular. Field lines may pass through a ball and end on the
 field null inside the ball they flow into, which is not necessarily its centre.
+
+### 3D
+
+A charge with `z` other than 0, or a turned view (`view_yaw`, `view_pitch`), makes the request 3D. z
+points towards the viewer. The 3D pipeline differs from the planar one in three ways:
+
+- Field lines start evenly spread over a sphere around each source charge (`|charge|` times
+  `lines_per_unit_charge` lines) and are traced in space with the same integration rules.
+- The view is orthographic and turns about the world origin: `view_yaw` about the vertical axis, then
+  `view_pitch` about the screen's horizontal axis, both in degrees. Lines are returned and drawn as their
+  projection onto the screen; nearer charges are drawn over farther ones.
+- Equipotentials are surfaces in space and are not drawn; `equipotentials` is reported as 0.
+
+Results carry `"dimensions": 2` or `3`. A planar request with the default view gives exactly the output
+it always gave.
+
+`evaluate_field` points take an optional `z`. When the point or any charge has one, each value also
+carries `z` and `ez`, and `magnitude` is the length of the full vector.
+
+`compute_forces` takes the configuration (`preset` or `charges`, and `charge_radius`) and returns, per
+charge, `fx`, `fy`, `fz` and `magnitude`, plus `potential_energy` for the whole system, with
+`F = q1*q2/d^2` and `U = q1*q2/d`. With `charge_radius` above 0, balls whose centres are closer than
+`2R` overlap: they are treated as rigid balls that pass through each other, which gives, with
+`s = d/R`, `F = q1*q2/R^2 * (s - 9s^2/16 + s^4/32)` and
+`U = q1*q2/R * (6/5 - s^2/2 + 3s^3/16 - s^5/160)`. The force goes to 0 as the centres meet and the
+energy stays finite. The self energy of the balls is not included.
 
 `compute_field_lines` and `render_field` also accept:
 
@@ -72,6 +99,8 @@ field null inside the ball they flow into, which is not necessarily its centre.
 | `potential_interval` | 0.1 | 0.01 to 0.5 |
 | `threads` | 4 | 1 to 128 |
 | `timeout_ms` | 60000 | 100 to 600000 |
+| `view_yaw` | 0 | -360 to 360 degrees |
+| `view_pitch` | 0 | -90 to 90 degrees |
 
 A request may need at most 10000 field lines in total (the sum of `|charge|` times
 `lines_per_unit_charge`).

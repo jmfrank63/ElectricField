@@ -7,6 +7,7 @@
 
 #include "ef/math.hpp"
 #include "ef/vec2.hpp"
+#include "ef/vec3.hpp"
 
 namespace ef {
 namespace rk {
@@ -14,6 +15,7 @@ namespace rk {
 inline double magnitude(double v) { return std::abs(v); }
 template <typename T>
 double magnitude(const Vector2D<T>& v) { return v.Length(); }
+inline double magnitude(const Vec3& v) { return v.Length(); }
 
 // Stages==1 (Euler) has no coefficient rows; keep array sizes >= 1.
 template <unsigned Stages>
@@ -31,6 +33,7 @@ class RungeKutta {
   std::array<T, Stages> K{};
 
  public:
+  using State = T;  // the integrated value type (Vec2 in the plane, Vec3 in space)
   explicit RungeKutta(const Tableau<Stages>& tab) : m_tab(tab) {}
 
   // Fixed step (this is the whole method for the 6 non-adaptive ones).

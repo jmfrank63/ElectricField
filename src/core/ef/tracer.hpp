@@ -171,6 +171,72 @@ FieldLine traceElectricLine(Solver& solver, const ChargeSystem& field, const Com
   return line;
 }
 
+// The electric line of a 3D system: the same stepping rules as traceElectricLine, integrated in space
+// from seed.point3 and recorded as its projection through the system's camera. No equipotentials are
+// posted (in space they are surfaces).
+template <typename Solver, typename Hooks>
+FieldLine traceElectricLine3(Solver& solver, const ChargeSystem& field, const ComputeParams& p, const Seed& seed, Hooks& hooks,
+                             TraceStatus* status = nullptr, std::size_t maxStepsOverride = 0) {
+  FieldLine line;
+  const ChargeSystem* f = &field;
+  const int chargeSign = sign(seed.charge);
+  const auto direction = [f, chargeSign](double /*t*/, const Vec3& pos) {
+    const Vec3 v = f->ENormalized(pos);
+    return chargeSign > 0 ? v : -v;
+  };
+  Vec3 point = seed.point3;
+
+  std::size_t steps = 40000;
+  double precision = 0.01;
+  double max_step = 0.1;
+  if (seed.hasDifferentSigns && seed.totalCharge == 0)
+    steps = 5000000;
+  else if (seed.hasDifferentSigns)
+    steps = 1000000;
+  if (maxStepsOverride != 0 && maxStepsOverride < steps) steps = maxStepsOverride;
+
+  double t = 0;
+  double step = 0.001;
+  double next_step = step;
+  const double px = static_cast<double>(p.pixelsPerUnit);
+  line.addPoint(field.camera.project(point), px);
+
+  const auto endAt = [&line, &field](const Vec3& at) {
+    const Vec2 flat = field.camera.project(at);
+    if (line.points.empty() || !(line.points.back() == flat)) line.points.push_back(flat);
+  };
+
+  for (std::size_t i = 0; i < steps; ++i) {
+    if ((i % kCancelStride) == 0 && hooks.cancelled()) {
+      if (status) status->cancelled = true;
+      break;
+    }
+    const bool needs_precision = (point.Length() * px < 3000);
+    if (solver.IsAdaptive()) {
+      precision = (needs_precision ? 0.001 : 0.1);
+      max_step = (needs_precision ? 0.001 : 0.1);
+    } else {
+      step = (needs_precision ? 0.001 : 0.5);
+    }
+
+    point = solver.SolveStep(direction, point, t, step, next_step, precision, max_step);
+    line.addPoint(field.camera.project(point), px);
+
+    if (field.radius <= 0 && field.HitCharge(point, p)) {
+      endAt(point);
+      break;
+    }
+    if (field.AtBallNull(point, std::min(field.radius, std::max(0.01 * field.radius, 4. * std::abs(step))))) {
+      endAt(point);
+      break;
+    }
+
+    t += step;
+    if (solver.IsAdaptive()) step = next_step;
+  }
+  return line;
+}
+
 // CalculateEquipotential (FieldLinesCalculator.cpp:113-150).
 template <typename Solver, typename Hooks>
 PotentialLine traceEquipotential(Solver& solver, const ChargeSystem& field, const ComputeParams& p, const Vec2& startPoint,

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <mutex>
 #include <vector>
 
 namespace ef {
@@ -47,10 +48,54 @@ bool choleskySolve(std::vector<double>& a, std::vector<double>& b, std::size_t n
   return true;
 }
 
+// The surface charges depend only on the charges, their positions and the radius, so a solution is
+// computed once and reused: turning the view, changing the line density or the method, exporting and the
+// force table all find it here. The few most recent systems are kept.
+struct Solved {
+  std::vector<double> key;
+  std::shared_ptr<const SurfaceSolution> solution;
+};
+std::mutex gCacheMutex;
+std::vector<Solved> gCache;  // most recent first
+constexpr std::size_t kCacheSize = 16;
+
+std::vector<double> keyOf(const ChargeSystem& field) {
+  std::vector<double> key{field.radius};
+  key.reserve(1 + 4 * field.charges.size());
+  for (const Charge& c : field.charges) {
+    key.push_back(c.charge);
+    key.push_back(c.position.X);
+    key.push_back(c.position.Y);
+    key.push_back(c.z);
+  }
+  return key;
+}
+
+std::shared_ptr<const SurfaceSolution> solveUncached(const ChargeSystem& field);
+
 }  // namespace
 
 std::shared_ptr<const SurfaceSolution> solveSurface(const ChargeSystem& field) {
   if (!field.conductor() || field.charges.empty()) return nullptr;
+  std::vector<double> key = keyOf(field);
+  {
+    std::lock_guard<std::mutex> lock(gCacheMutex);
+    for (std::size_t i = 0; i < gCache.size(); ++i)
+      if (gCache[i].key == key) {
+        std::rotate(gCache.begin(), gCache.begin() + static_cast<std::ptrdiff_t>(i), gCache.begin() + static_cast<std::ptrdiff_t>(i) + 1);
+        return gCache.front().solution;
+      }
+  }
+  std::shared_ptr<const SurfaceSolution> solution = solveUncached(field);  // outside the lock: other systems may solve meanwhile
+  std::lock_guard<std::mutex> lock(gCacheMutex);
+  gCache.insert(gCache.begin(), Solved{std::move(key), solution});
+  if (gCache.size() > kCacheSize) gCache.pop_back();
+  return solution;
+}
+
+namespace {
+
+std::shared_ptr<const SurfaceSolution> solveUncached(const ChargeSystem& field) {
   const double R = field.radius;
   const std::size_t n = field.charges.size();
   const std::vector<int> body = field.bodies();
@@ -168,6 +213,8 @@ std::shared_ptr<const SurfaceSolution> solveSurface(const ChargeSystem& field) {
   s.residual = scale > 0 ? worst / scale : worst;
   return solution;
 }
+
+}  // namespace
 
 void prepare(ChargeSystem& field) { field.surface = solveSurface(field); }
 

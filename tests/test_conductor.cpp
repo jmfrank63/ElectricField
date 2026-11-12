@@ -146,3 +146,25 @@ TEST_CASE("conductor: the surface error stays small down to a gap of a fifth of 
     CHECK(worstTilt(f, 0) < 0.01);
   }
 }
+
+TEST_CASE("conductor: the surface charges of a system are solved once and reused") {
+  ChargeSystem field;
+  field.radius = 1;
+  field.model = ChargeModel::Conductor;
+  field.charges = {at(1, -0.7, 0.123), at(1, 0.7, 0.123)};  // an 8: two overlapping balls, one body
+  const auto first = solveSurface(field);
+  ChargeSystem turned = field;
+  turned.camera.yaw = 0.5;  // the view is not part of the physics
+  CHECK(solveSurface(turned) == first);
+  ChargeSystem moved = field;
+  moved.charges[1].position.X = 0.8;
+  CHECK(solveSurface(moved) != first);
+  CHECK(solveSurface(field) == first);
+  // the 8 is one equipotential body carrying both charges, with lines perpendicular away from the waist
+  prepare(field);
+  REQUIRE(field.surface->bodyPotential.size() == 1);
+  CHECK(field.surface->residual < 0.02);
+  const std::vector<BodyFlux> flux = bodyFlux(field);
+  CHECK(flux[0].out == doctest::Approx(2.0).epsilon(0.02));
+  CHECK(flux[0].in < 0.01);
+}

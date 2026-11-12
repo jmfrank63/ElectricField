@@ -49,6 +49,7 @@ std::string serializeConfigs(const std::vector<UserConfig>& configs) {
       std::snprintf(r, sizeof(r), "%.10g", c.radius);
       os << "radius = " << r << '\n';
     }
+    if (c.model == ef::ChargeModel::Conductor) os << "model = conductor\n";
     if (!c.camera.isDefault()) {
       char a[32], b[32];
       std::snprintf(a, sizeof(a), "%.10g", c.camera.yaw * 180. / ef::kPi);
@@ -117,6 +118,10 @@ ParsedConfigs parseConfigs(const std::string& text) {
     if (const std::size_t eq = t.find('='); inSection && eq != std::string::npos) {
       const std::string key = trim(t.substr(0, eq));
       std::vector<double> list;
+      if (key == "model") {  // anything but "conductor" is the uniform default
+        if (ini::toLower(trim(t.substr(eq + 1))) == "conductor") cur.model = ef::ChargeModel::Conductor;
+        continue;
+      }
       if (key == "view") {  // camera yaw, pitch in degrees; anything malformed keeps the default view
         if (ini::parseDoubleList(trim(t.substr(eq + 1)), list) && list.size() == 2 && std::abs(list[0]) <= 360 && std::abs(list[1]) <= 90) {
           cur.camera.yaw = list[0] * ef::kPi / 180.;
@@ -227,6 +232,7 @@ UpsertResult upsertUserConfig(std::vector<UserConfig>& configs, const UserConfig
     configs[static_cast<std::size_t>(at)].name = name;  // keep the list position, adopt the new spelling
     configs[static_cast<std::size_t>(at)].charges = candidate.charges;
     configs[static_cast<std::size_t>(at)].radius = candidate.radius;
+    configs[static_cast<std::size_t>(at)].model = candidate.model;
     configs[static_cast<std::size_t>(at)].camera = candidate.camera;
     return UpsertResult::OK;
   }
@@ -252,6 +258,7 @@ SaveIntoResult saveIntoUserConfig(std::vector<UserConfig>& configs, const std::s
     configs[static_cast<std::size_t>(at)].name = name;  // keep the list position, adopt the new spelling
     configs[static_cast<std::size_t>(at)].charges = candidate.charges;
     configs[static_cast<std::size_t>(at)].radius = candidate.radius;
+    configs[static_cast<std::size_t>(at)].model = candidate.model;
     configs[static_cast<std::size_t>(at)].camera = candidate.camera;
     return SaveIntoResult::OK;
   }

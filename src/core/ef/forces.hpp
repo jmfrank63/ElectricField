@@ -11,10 +11,17 @@
 //        U(d) = q1 q2 / R   * (6/5 - s^2/2 + 3 s^3/16 - s^5/160)
 //        F(d) = q1 q2 / R^2 * (s - 9 s^2/16 + s^4/32)
 //    Both join Coulomb smoothly at d = 2R; at d = 0 the force is 0 and U = (6/5) q1 q2 / R.
+//
+// Conductor model (ChargeModel::Conductor): the force acts on a body as a whole. It is the field of all
+// OTHER bodies acting on the body's solved sources, which is exact for the solved field. forces() reports
+// each ball's share (the part acting on its own sources); only the sum over a body is meaningful.
+// potentialEnergy() is then the total electrostatic energy, (1/2) sum over bodies of charge * potential,
+// which includes each body's own energy.
 #include <cstddef>
 #include <vector>
 
 #include "ef/charge_system.hpp"
+#include "ef/conductor.hpp"
 
 namespace ef {
 
@@ -42,6 +49,23 @@ inline double pairEnergy(double d, double radius) {
 inline std::vector<Vec3> forces(const ChargeSystem& field) {
   const std::size_t n = field.charges.size();
   std::vector<Vec3> out(n);
+  if (field.conductor()) {
+    const std::shared_ptr<const SurfaceSolution> s = solveSurface(field);
+    for (const SurfaceSolution::Ball& ball : s->balls)
+      for (std::size_t k = ball.begin; k < ball.end; ++k) {
+        Vec3 e;
+        for (const SurfaceSolution::Ball& other : s->balls) {
+          if (other.body == ball.body) continue;
+          for (std::size_t j = other.begin; j < other.end; ++j) {
+            const Vec3 d = s->sources[k].at - s->sources[j].at;
+            const double d2 = d * d;
+            e += d * (s->sources[j].q / (d2 * std::sqrt(d2)));
+          }
+        }
+        out[ball.index] += e * s->sources[k].q;
+      }
+    return out;
+  }
   for (std::size_t i = 0; i < n; ++i) {
     for (std::size_t j = i + 1; j < n; ++j) {
       const Vec3 d = field.charges[i].position3() - field.charges[j].position3();
@@ -59,6 +83,12 @@ inline std::vector<Vec3> forces(const ChargeSystem& field) {
 // (it is the same constant for every arrangement).
 inline double potentialEnergy(const ChargeSystem& field) {
   double u = 0;
+  if (field.conductor()) {
+    const std::shared_ptr<const SurfaceSolution> s = solveSurface(field);
+    for (const SurfaceSolution::Ball& ball : s->balls)
+      u += 0.5 * field.charges[ball.index].charge * s->bodyPotential[static_cast<std::size_t>(ball.body)];
+    return u;
+  }
   const std::size_t n = field.charges.size();
   for (std::size_t i = 0; i < n; ++i)
     for (std::size_t j = i + 1; j < n; ++j)

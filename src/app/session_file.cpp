@@ -58,6 +58,7 @@ std::string serializeSession(const std::vector<SavedTab>& tabs, const std::strin
       std::snprintf(r, sizeof(r), "%.10g", t.radius);
       os << "radius = " << r << '\n';
     }
+    if (t.model == ef::ChargeModel::Conductor) os << "model = conductor\n";
     if (!t.camera.isDefault()) {
       char a[32], b[32];
       std::snprintf(a, sizeof(a), "%.10g", t.camera.yaw * 180. / ef::kPi);
@@ -133,6 +134,8 @@ ParsedSession parseSession(const std::string& text) {
       }
     } else if (key == "recent") {  // 261012-h26: a recently opened collection file (UTF-8 path, newest first)
       if (!value.empty() && r.recents.size() < 100) r.recents.push_back(value);
+    } else if (key == "model") {
+      if (inTab && ini::toLower(value) == "conductor") cur.model = ef::ChargeModel::Conductor;
     } else if (key == "view") {
       std::vector<double> list;
       if (inTab && ini::parseDoubleList(value, list) && list.size() == 2 && std::abs(list[0]) <= 360 && std::abs(list[1]) <= 90) {

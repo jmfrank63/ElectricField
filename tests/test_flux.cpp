@@ -129,7 +129,7 @@ TEST_CASE("flux: opposite balls sliding into each other lose their lines steadil
 TEST_CASE("flux: the bodies table lists charge, dipole moment and flux per body") {
   const ChargeSystem field = balls(1, {at(1, -0.6, 0), at(-1, 0.6, 0), at(2, 8, 0)});
   const std::string csv = bodiesCsv(field);
-  CHECK(csv.rfind("body,balls,charge,x,y,z,px,py,pz,dipole,flux_out,flux_in\n", 0) == 0);
+  CHECK(csv.rfind("body,balls,charge,x,y,z,px,py,pz,dipole,flux_out,flux_in,fx,", 0) == 0);
   CHECK(csv.find("\n0,2,0,0,0,0,-1.2,0,0,1.2,") != std::string::npos);  // neutral pair, dipole 1.2 towards -x
   CHECK(csv.find("\n1,1,2,8,0,0,0,0,0,0,") != std::string::npos);
 }

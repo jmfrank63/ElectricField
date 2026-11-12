@@ -14,6 +14,7 @@ struct UserConfig {
   std::string name;
   std::vector<ef::PresetCharge> charges;
   double radius = 0;  // ef::ChargeSystem::radius (world units); 0 = point charges, not written to the file
+  ef::ChargeModel model = ef::ChargeModel::Uniform;  // "model = conductor" when not the default
   ef::Camera camera{};  // the view angles; the default (0, 0) is not written to the file
 };
 

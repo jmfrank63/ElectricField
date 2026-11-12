@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "app/options.hpp"  // the GUI's Options ranges: the same limits apply here
+#include "ef/conductor.hpp"
 #include "ef/csv.hpp"
 #include "ef/forces.hpp"
 #include "ef/method.hpp"
@@ -137,12 +138,17 @@ ef::ChargeSystem parseField(const json& args) {
   const bool hasPreset = args.contains("preset"), hasCharges = args.contains("charges");
   if (hasPreset == hasCharges) throw ToolError("provide exactly one of 'preset' or 'charges'");
   const double radius = getNumber(args, "charge_radius", 0, ef::kMaxChargeRadius, 0);
+  const std::string modelName = getString(args, "charge_model", "uniform");
+  if (modelName != "uniform" && modelName != "conductor") throw ToolError("'charge_model' must be uniform or conductor");
+  const ef::ChargeModel model = modelName == "conductor" ? ef::ChargeModel::Conductor : ef::ChargeModel::Uniform;
   if (hasPreset) {
     const std::string slug = getString(args, "preset", "");
     for (const auto& p : ef::presets())
       if (p.slug == slug) {
         ef::ChargeSystem field = ef::makeSystem(p);
         field.radius = radius;
+        field.model = model;
+        ef::prepare(field);
         return field;
       }
     throw ToolError("unknown preset '" + slug + "'; available: " + presetSlugs());
@@ -152,6 +158,7 @@ ef::ChargeSystem parseField(const json& args) {
     throw ToolError("'charges' must be an array of 1 to " + std::to_string(kMaxCharges) + " charges");
   ef::ChargeSystem field;
   field.radius = radius;
+  field.model = model;
   field.charges.reserve(list.size());
   for (std::size_t i = 0; i < list.size(); ++i) {
     ef::Charge c = parseCharge(list[i], i);
@@ -160,6 +167,7 @@ ef::ChargeSystem parseField(const json& args) {
         throw ToolError("charges[" + std::to_string(j) + "] and charges[" + std::to_string(i) + "] are at the same position");
     field.charges.push_back(std::move(c));
   }
+  ef::prepare(field);
   return field;
 }
 
@@ -276,7 +284,7 @@ json listMethods(const json& args) {
 }
 
 json evaluateField(const json& args) {
-  checkKeys(args, {"preset", "charges", "charge_radius", "points"}, "arguments");
+  checkKeys(args, {"preset", "charges", "charge_radius", "charge_model", "points"}, "arguments");
   const ef::ChargeSystem field = parseField(args);
   const auto it = args.find("points");
   if (it == args.end()) throw ToolError("missing required field 'points'");
@@ -309,7 +317,7 @@ json evaluateField(const json& args) {
 }
 
 json computeForces(const json& args) {
-  checkKeys(args, {"preset", "charges", "charge_radius"}, "arguments");
+  checkKeys(args, {"preset", "charges", "charge_radius", "charge_model"}, "arguments");
   const ef::ChargeSystem field = parseField(args);
   const std::vector<ef::Vec3> f = ef::forces(field);
   const std::vector<int> body = field.bodies();
@@ -323,7 +331,7 @@ json computeForces(const json& args) {
 }
 
 json computeFieldLines(const json& args, const std::atomic<bool>* cancel) {
-  checkKeys(args, {"preset", "charges", "charge_radius", "method", "lines_per_unit_charge", "equipotentials", "potential_interval", "threads", "timeout_ms", "view_yaw", "view_pitch", "include_lines", "max_points_per_line"}, "arguments");
+  checkKeys(args, {"preset", "charges", "charge_radius", "charge_model", "method", "lines_per_unit_charge", "equipotentials", "potential_interval", "threads", "timeout_ms", "view_yaw", "view_pitch", "include_lines", "max_points_per_line"}, "arguments");
   const Computation c = parseComputation(args);
   const bool includeLines = getBool(args, "include_lines", false);
   const auto limit = static_cast<std::size_t>(getInt(args, "max_points_per_line", 2, 5000, 200));
@@ -402,7 +410,7 @@ void writeFile(const fs::path& path, const std::string& bytes) {
 }
 
 json renderField(const json& args, const PngEncoder& encodePng, const std::atomic<bool>* cancel) {
-  checkKeys(args, {"preset", "charges", "charge_radius", "method", "lines_per_unit_charge", "equipotentials", "potential_interval", "threads", "timeout_ms", "view_yaw", "view_pitch", "format", "width", "height", "pixels_per_unit", "center_x", "center_y", "output_path", "overwrite"}, "arguments");
+  checkKeys(args, {"preset", "charges", "charge_radius", "charge_model", "method", "lines_per_unit_charge", "equipotentials", "potential_interval", "threads", "timeout_ms", "view_yaw", "view_pitch", "format", "width", "height", "pixels_per_unit", "center_x", "center_y", "output_path", "overwrite"}, "arguments");
   const Computation c = parseComputation(args);
   const std::string format = getString(args, "format", encodePng ? "png" : "svg");
   if (format != "png" && format != "svg" && format != "pdf") throw ToolError("'format' must be png, svg or pdf");
@@ -455,7 +463,7 @@ json renderField(const json& args, const PngEncoder& encodePng, const std::atomi
 }
 
 json exportCsv(const json& args, const std::atomic<bool>* cancel) {
-  checkKeys(args, {"preset", "charges", "charge_radius", "method", "lines_per_unit_charge", "equipotentials", "potential_interval", "threads", "timeout_ms", "view_yaw", "view_pitch", "table", "output_path", "overwrite"}, "arguments");
+  checkKeys(args, {"preset", "charges", "charge_radius", "charge_model", "method", "lines_per_unit_charge", "equipotentials", "potential_interval", "threads", "timeout_ms", "view_yaw", "view_pitch", "table", "output_path", "overwrite"}, "arguments");
   const Computation c = parseComputation(args);
   const std::string table = getString(args, "table", "lines");
   if (table != "lines" && table != "charges" && table != "bodies") throw ToolError("'table' must be lines, charges or bodies");
@@ -506,6 +514,7 @@ const char* const kFieldProperties = R"json({
       }
     }
   },
+  "charge_model": {"type": "string", "enum": ["uniform", "conductor"], "default": "uniform", "description": "Only with charge_radius above 0. uniform: every ball keeps its uniform charge and overlapping charges add; field lines meet a surface at any angle. conductor: the charge of each body (balls that touch or overlap) shifts over its outer surface until that surface is an equipotential, so every field line ends at a right angle; only a body's total charge is fixed, the field inside is 0, and forces act on bodies. Accurate to about 1% while the gap between separate balls is at least 0.2 radii."},
   "charge_radius": {"type": "number", "minimum": 0, "maximum": 1000, "default": 0, "description": "Physical radius of every charge in world units. 0 = point charges. Above 0 each charge is a uniformly charged ball: Coulomb outside. Each ball keeps its uniform charge and overlapping charges add. Balls whose centres are at most 2R apart form one body (they may even share a centre); field lines are placed on a body's outer surface in proportion to the field flowing through it and end where they meet a surface; the inside is not traced."}
 })json";
 

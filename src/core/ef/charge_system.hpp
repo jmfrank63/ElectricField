@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -67,9 +68,95 @@ struct Charge {
 // Largest ball radius accepted from files, scripts and the MCP server (world units).
 inline constexpr double kMaxChargeRadius = 1000.;
 
+// How the charge of a ball (radius > 0) is distributed.
+//  Uniform:   every ball keeps its uniform charge and overlapping charges add. The field outside is the
+//             sum of the Coulomb fields of the centres; field lines meet a surface at any angle.
+//  Conductor: the charge of each body (balls that touch or overlap) sits on its outer surface and shifts
+//             until that surface is an equipotential, so every field line meets it at a right angle. Only
+//             the total charge of a body is fixed. Needs a solved SurfaceSolution (ef/conductor.hpp).
+enum class ChargeModel { Uniform, Conductor };
+
+// The solved field of a Conductor system: point sources inside the balls whose combined field makes
+// every body's outer surface an equipotential (method of fundamental solutions). Plain data, immutable
+// once built, shared by the copies of a ChargeSystem.
+struct SurfaceSolution {
+  struct Source {
+    Vec3 at;
+    double q = 0;
+  };
+  struct Ball {
+    Vec3 centre;
+    std::size_t begin = 0, end = 0;  // its sources: [begin, end) in `sources` (empty for a duplicate centre)
+    double charge = 0;               // the sum of its sources
+    Vec3 dipole;                     // their dipole moment about the centre
+    int body = 0;
+    std::size_t index = 0;           // the charge this ball is (ChargeSystem::charges)
+  };
+  std::vector<Source> sources;
+  std::vector<Ball> balls;             // one per charge, in charge order
+  std::vector<double> bodyPotential;   // the constant potential of each body
+  double radius = 0;
+  double residual = 0;  // largest deviation of the surface potential from its body's value, relative to the largest |body potential|
+
+  // Beyond this many radii from a ball its sources are summed as one charge plus one dipole.
+  static constexpr double kFar = 6.;
+
+  // Index of a ball containing pos, or -1.
+  int inside(const Vec3& pos) const {
+    for (std::size_t i = 0; i < balls.size(); ++i) {
+      const Vec3 d = pos - balls[i].centre;
+      if (d * d < radius * radius) return static_cast<int>(i);
+    }
+    return -1;
+  }
+  // Inside a body the field is zero and the potential is the body's.
+  Vec3 E(const Vec3& pos) const {
+    Vec3 e;
+    if (inside(pos) >= 0) return e;
+    for (const Ball& b : balls) {
+      const Vec3 d = pos - b.centre;
+      const double r2 = d * d;
+      if (r2 > kFar * kFar * radius * radius) {
+        const double r = std::sqrt(r2);
+        e += d * (b.charge / (r2 * r));
+        e += (d * (3. * (b.dipole * d) / r2) - b.dipole) / (r2 * r);
+      } else {
+        for (std::size_t k = b.begin; k < b.end; ++k) {
+          const Vec3 t = pos - sources[k].at;
+          const double t2 = t * t;
+          e += t * (sources[k].q / (t2 * std::sqrt(t2)));
+        }
+      }
+    }
+    return e;
+  }
+  double Potential(const Vec3& pos) const {
+    if (const int in = inside(pos); in >= 0) return bodyPotential[static_cast<std::size_t>(balls[static_cast<std::size_t>(in)].body)];
+    double v = 0;
+    for (const Ball& b : balls) {
+      const Vec3 d = pos - b.centre;
+      const double r2 = d * d;
+      if (r2 > kFar * kFar * radius * radius) {
+        const double r = std::sqrt(r2);
+        v += b.charge / r + (b.dipole * d) / (r2 * r);
+      } else {
+        for (std::size_t k = b.begin; k < b.end; ++k) v += sources[k].q / (pos - sources[k].at).Length();
+      }
+    }
+    return v;
+  }
+};
+
 class ChargeSystem {
  public:
   std::vector<Charge> charges;
+  // Balls only (radius > 0): how their charge is distributed. Point charges ignore it.
+  ChargeModel model = ChargeModel::Uniform;
+  // The solved Conductor field, set by ef::prepare (ef/conductor.hpp), which every computation calls on
+  // its own copy of the system. It belongs to the charges it was solved for: after changing charges,
+  // radius or model, prepare again. Null means the Uniform formulas below apply.
+  std::shared_ptr<const SurfaceSolution> surface;
+  bool conductor() const { return model == ChargeModel::Conductor && radius > 0; }
   // Ball radius of every charge in world units; 0 = point charges (presets, legacy files, parity).
   double radius = 0;
   // The view onto the system (orthographic, turned about the origin). Not physics.
@@ -85,11 +172,13 @@ class ChargeSystem {
   }
 
   double Potential(const Vec3& pos) const {
+    if (surface) return surface->Potential(pos);
     double P = 0;
     for (const auto& c : charges) P += c.Potential(pos, radius);
     return P;
   }
   Vec3 E(const Vec3& pos) const {
+    if (surface) return surface->E(pos);
     Vec3 result;
     for (const auto& c : charges) result += c.E(pos, radius);
     return result;
@@ -149,11 +238,16 @@ class ChargeSystem {
   }
 
   double Potential(const Vec2& pos) const {
+    if (surface) return surface->Potential(Vec3(pos.X, pos.Y, 0));
     double P = 0;
     for (const auto& c : charges) P += c.Potential(pos, radius);
     return P;
   }
   Vec2 E(const Vec2& pos) const {
+    if (surface) {
+      const Vec3 e = surface->E(Vec3(pos.X, pos.Y, 0));
+      return Vec2(e.X, e.Y);
+    }
     Vec2 result;
     for (const auto& c : charges) result += c.E(pos, radius);
     return result;

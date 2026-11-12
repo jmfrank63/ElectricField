@@ -315,13 +315,25 @@ bool setChargeRadius(Tab& t, double radius) {
   return true;
 }
 
+bool setChargeModel(Tab& t, ef::ChargeModel model) {
+  if (!editable(t)) return false;
+  if (model == t.field.model) return true;  // nothing to do, no history entry
+  recordHistory(t);
+  t.field.model = model;
+  t.field.surface.reset();
+  t.stale = true;
+  t.pendingRecalcAt = -2;
+  t.dirty = true;
+  return true;
+}
+
 // WR-04: the physics slice of a ChargeSystem - the only part the drawn lines depend on. Names are
 // excluded; the SIZE is included since the per-charge seed/hit radii (261020-ef1): undoing a size
 // edit restores lines whose start/end circles differ, so the tab must claim "the lines show the
 // previous calculation". Exact == comparisons, the same convention moveCharge and commitDrag use
 // for no-op detection.
 bool samePhysics(const ef::ChargeSystem& a, const ef::ChargeSystem& b) {
-  if (a.charges.size() != b.charges.size() || a.radius != b.radius || !(a.camera == b.camera)) return false;
+  if (a.charges.size() != b.charges.size() || a.radius != b.radius || a.model != b.model || !(a.camera == b.camera)) return false;
   for (std::size_t i = 0; i < a.charges.size(); ++i)
     if (a.charges[i].charge != b.charges[i].charge || a.charges[i].position.X != b.charges[i].position.X ||
         a.charges[i].position.Y != b.charges[i].position.Y || a.charges[i].z != b.charges[i].z || a.charges[i].sizePx != b.charges[i].sizePx)

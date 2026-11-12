@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 
+#include "ef/conductor.hpp"
 #include "ef/forces.hpp"
 #include "ef/seeds.hpp"
 
@@ -71,7 +72,8 @@ std::vector<Vec2> onCurvePoints(const std::vector<Vec2>& points) {
   return out;
 }
 
-std::string chargesCsv(const ChargeSystem& field) {
+std::string chargesCsv(const ChargeSystem& raw) {
+  const ChargeSystem field = prepared(raw);
   std::string out =
       "index,name,charge,x,y,z,radius,body,potential,ex,ey,ez,fx,fy,fz,force,screen_x,screen_y,view_yaw_deg,view_pitch_deg,system_energy\n";
   const std::vector<Vec3> f = forces(field);
@@ -82,10 +84,14 @@ std::string chargesCsv(const ChargeSystem& field) {
     const Vec3 at = c.position3();
     double potential = 0;
     Vec3 e;
-    for (std::size_t j = 0; j < field.charges.size(); ++j) {
-      if (j == i) continue;
-      potential += field.charges[j].Potential(at, field.radius);
-      e += field.charges[j].E(at, field.radius);
+    if (field.surface) {  // Conductor: the ball is at its body's potential and holds no field
+      potential = field.surface->bodyPotential[static_cast<std::size_t>(body[i])];
+    } else {
+      for (std::size_t j = 0; j < field.charges.size(); ++j) {
+        if (j == i) continue;
+        potential += field.charges[j].Potential(at, field.radius);
+        e += field.charges[j].E(at, field.radius);
+      }
     }
     const Vec2 screen = field.camera.project(at);
     out += std::to_string(i) + ',' + quoted(c.name.empty() ? "Charge " + std::to_string(i + 1) : c.name) + ',' + std::to_string(c.charge);
@@ -112,8 +118,10 @@ std::string chargesCsv(const ChargeSystem& field) {
   return out;
 }
 
-std::string bodiesCsv(const ChargeSystem& field) {
-  std::string out = "body,balls,charge,x,y,z,px,py,pz,dipole,flux_out,flux_in\n";
+std::string bodiesCsv(const ChargeSystem& raw) {
+  const ChargeSystem field = prepared(raw);
+  std::string out = "body,balls,charge,x,y,z,px,py,pz,dipole,flux_out,flux_in,fx,fy,fz,force,model,potential,surface_error\n";
+  const std::vector<Vec3> f = forces(field);
   const std::vector<int> body = field.bodies();
   const std::vector<BodyFlux> flux = bodyFlux(field);
   for (std::size_t b = 0; b < flux.size(); ++b) {
@@ -139,12 +147,23 @@ std::string bodiesCsv(const ChargeSystem& field) {
     cell(out, dipole.Length());
     cell(out, flux[b].out);
     cell(out, flux[b].in);
+    Vec3 force;
+    for (std::size_t i = 0; i < body.size(); ++i)
+      if (body[i] == static_cast<int>(b)) force += f[i];
+    cell(out, force.X);
+    cell(out, force.Y);
+    cell(out, force.Z);
+    cell(out, force.Length());
+    out += field.surface ? ",conductor" : ",uniform";
+    cell(out, field.surface ? field.surface->bodyPotential[b] : std::nan(""));
+    cell(out, field.surface ? field.surface->residual : std::nan(""));
     out += '\n';
   }
   return out;
 }
 
-std::string linesCsv(const ChargeSystem& field, const FieldScene& scene) {
+std::string linesCsv(const ChargeSystem& raw, const FieldScene& scene) {
+  const ChargeSystem field = prepared(raw);
   std::string out = "kind,line,point,x,y,z,screen_x,screen_y,potential,ex,ey,ez,magnitude,azimuth_deg,elevation_deg,label\n";
   const auto rows = [&](const std::vector<ScenePath>& paths, const char* kind, bool labelled) {
     for (std::size_t l = 0; l < paths.size(); ++l) {

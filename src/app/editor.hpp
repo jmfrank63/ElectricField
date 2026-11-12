@@ -84,6 +84,9 @@ bool setChargeSize(Tab& t, std::size_t index, float sizePx, bool coupleValue = f
 // The tab's ball radius (ef::ChargeSystem::radius, world units, 0 = point charges, at most
 // ef::kMaxChargeRadius; else false). Physics: one history entry, stale + pending recalculation, dirty.
 bool setChargeRadius(Tab& t, double radius);
+// The tab's charge model for balls (uniform charge or equipotential surface): a physics edit with one
+// history entry, like setChargeRadius.
+bool setChargeModel(Tab& t, ef::ChargeModel model);
 
 // Value edits (261020-ef2): 0 is not a charge. setValue refuses it (the typed field then refreshes
 // back to the model value); stepValue continues a step that would land on 0 to the neighbour

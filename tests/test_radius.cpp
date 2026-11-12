@@ -169,3 +169,22 @@ TEST_CASE("3d: collections and sessions round-trip z and the view angle; absent 
   CHECK(s.value[0].charges[1].z == 0);
   CHECK(s.value[0].camera.yaw == doctest::Approx(0.25));
 }
+
+TEST_CASE("charge model: collections and sessions round-trip it; absent means uniform") {
+  efapp::UserConfig c{"Conductors", {{1, -2, 0}, {-1, 2, 0}}};
+  c.radius = 1;
+  c.model = ef::ChargeModel::Conductor;
+  const efapp::ParsedConfigs configs = efapp::parseConfigs(efapp::serializeConfigs({c, efapp::UserConfig{"Plain", {{1, 0, 0}}}}));
+  REQUIRE(configs.value.size() == 2);
+  CHECK(configs.value[0].model == ef::ChargeModel::Conductor);
+  CHECK(configs.value[1].model == ef::ChargeModel::Uniform);
+  CHECK(efapp::serializeConfigs({configs.value[1]}).find("model") == std::string::npos);
+  efapp::SavedTab t;
+  t.title = "Conductors 1";
+  t.charges = {{1, -2, 0}};
+  t.radius = 1;
+  t.model = ef::ChargeModel::Conductor;
+  const efapp::ParsedSession s = efapp::parseSession(efapp::serializeSession({t}));
+  REQUIRE(s.value.size() == 1);
+  CHECK(s.value[0].model == ef::ChargeModel::Conductor);
+}

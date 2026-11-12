@@ -70,6 +70,16 @@ field leaves a surface and are traced along it, with a negative total they start
 traced against it. An isolated ball gets the same number of lines as a point charge; a neutral body with
 both signs gets the lines that loop from its positive to its negative side.
 
+`charge_model` (default `uniform`, only with `charge_radius` above 0) chooses how the charge of the
+balls is distributed. With `conductor`, the charge of each body shifts over its outer surface until the
+surface is an equipotential, so every field line ends at a right angle. Only the total charge of a body
+is fixed, touching balls share their charge, the field inside a body is 0 and its potential constant.
+`compute_forces` then reports the force on a body split over its balls (only the sum per body is
+meaningful) and `potential_energy` is the total electrostatic energy, half the sum of charge times
+potential over the bodies, which includes each body's own energy. The field is solved numerically
+(sources inside the balls fitted to the surface); it is accurate to about 1% while the gap between
+separate balls is at least 0.2 radii. The `bodies` CSV table reports the error as `surface_error`.
+
 ### 3D
 
 A charge with `z` other than 0, or a turned view (`view_yaw`, `view_pitch`), makes the request 3D. z
@@ -105,7 +115,7 @@ x, y, z, radius, body, potential, ex, ey, ez, fx, fy, fz, force, screen_x, scree
 view_pitch_deg, system_energy`, where potential and field are those of the other charges at its centre.
 
 The `bodies` table has one row per body: `body, balls, charge, x, y, z, px, py, pz, dipole,
-flux_out, flux_in`, with the net charge, the mean of the ball centres, the dipole moment about it, and
+flux_out, flux_in, fx, fy, fz, force, model, potential, surface_error`, with the net charge, the mean of the ball centres, the dipole moment about it, and
 the flux leaving and entering the outer surface in charge units (`flux_out - flux_in` is the net charge).
 
 `compute_field_lines`, `export_csv` and `render_field` also accept:

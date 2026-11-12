@@ -5,6 +5,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "ef/conductor.hpp"
 #include "ef/method.hpp"
 #include "ef/tracer.hpp"
 
@@ -35,7 +36,7 @@ struct ComputeSession::JobHooks {
   }
 };
 
-ComputeSession::ComputeSession(ChargeSystem field, ComputeParams params) : field_(std::move(field)), params_(params) {
+ComputeSession::ComputeSession(ChargeSystem field, ComputeParams params) : field_(prepared(std::move(field))), params_(params) {
   const std::vector<Seed> seeds = field_.is3D() ? planSeeds3(field_, params_) : planSeeds(field_, params_);
   for (std::size_t i = 0; i < seeds.size(); ++i) {
     Job j;

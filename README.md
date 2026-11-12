@@ -116,6 +116,26 @@ With a radius above 0 the editor panel offers a **Charge model** (script: `charg
   accurate to about 1% while the gap between separate balls is at least a fifth of the radius, and less
   accurate for balls that almost touch (the bodies CSV table reports the error).
 
+#### Shapes
+
+With the Equipotential surface model, balls can be combined into **shapes**: rigid groups that are
+placed, moved and turned as one unit and carry one total charge.
+
+- **Library:** Ball, Eight (two overlapping balls), Chain of three, Triangle and Tetrahedron are built
+  in. Their sizes follow the charge radius.
+- **Placing:** under *New charge*, pick a shape instead of *Single charge*, set the total charge
+  (Value) and the position, and press *Add shape*. A total of 0 is allowed: a neutral body still gets
+  polarised by its neighbours.
+- **Editing:** dragging any ball of a shape moves the whole shape; the X/Y/Z buttons next to the turn
+  step rotate it about its own centre; Value edits its total charge; Remove deletes it as a whole.
+- **Custom shapes:** select a ball and use *Save as shape* to keep the body it belongs to (all balls
+  that touch) under a name. Custom shapes are stored in `Shapes.ini` in the user folder and appear in
+  the list next to the built-in ones.
+- Scripts: `shape.insert`, `shape.rotate`, `shape.save`.
+
+The surface charge of a shape is not stored with it, because it changes with every neighbour; it is
+solved for the whole configuration, once per arrangement, and reused until something moves.
+
 The radius and the charge model are saved with the
 configuration and the open tabs.
 

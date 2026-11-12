@@ -20,16 +20,30 @@ FieldScene buildScene(const ChargeSystem& field, const FieldResult& result) {
 
 void syncSceneCharges(FieldScene& scene, const ChargeSystem& field) {
   const std::vector<int> body = field.bodies();
+  // Equipotential bodies are one conductor: every ball shows the sign of the body's total charge.
+  std::vector<int> bodyCharge;
+  if (field.conductor()) {
+    for (std::size_t i = 0; i < field.charges.size(); ++i) {
+      if (static_cast<std::size_t>(body[i]) >= bodyCharge.size()) bodyCharge.resize(static_cast<std::size_t>(body[i]) + 1, 0);
+      bodyCharge[static_cast<std::size_t>(body[i])] += field.charges[i].charge;
+    }
+  }
   scene.charges.clear();
   scene.charges.reserve(field.charges.size());
   for (std::size_t i = 0; i < field.charges.size(); ++i) {
     const Charge& c = field.charges[i];
-    scene.charges.push_back(SceneCharge{field.camera.project(c.position3()), c.charge, c.sizePx, field.camera.depth(c.position3()), body[i]});
+    const int shown = bodyCharge.empty() ? c.charge : bodyCharge[static_cast<std::size_t>(body[i])];
+    scene.charges.push_back(SceneCharge{field.camera.project(c.position3()), shown, c.sizePx, field.camera.depth(c.position3()), body[i]});
   }
   scene.chargeRadius = field.radius;
 }
 
 namespace {
+
+// A neutral body (total charge 0) is drawn in the line colour.
+Color chargeColor(const DrawStyle& style, int charge) {
+  return charge > 0 ? style.positiveCharge : charge < 0 ? style.negativeCharge : style.electricLine;
+}
 
 constexpr float kMargin = 10.f;  // FieldLine::Draw: irect.InflateRect(10, 10)
 
@@ -311,7 +325,7 @@ void renderScene(Painter& painter, const FieldScene& scene, const DrawStyle& sty
       if (x + ballPx < vis.l || x - ballPx > vis.r || y + ballPx < vis.t || y - ballPx > vis.b) continue;
       // Balls of one melted body are outlined as one shape: the part of this circle that lies inside
       // another ball of the same body is not drawn.
-      const Color color = c.charge > 0 ? style.positiveCharge : style.negativeCharge;
+      const Color color = chargeColor(style, c.charge);
       std::size_t run = 0, firstRun = 0;
       bool anyHidden = false;
       for (std::size_t k = 0; k < N; ++k) {
@@ -356,7 +370,7 @@ void renderScene(Painter& painter, const FieldScene& scene, const DrawStyle& sty
     // style.chargeRadiusPx arrives pre-scaled from the scaledStyle callers, so both branches are
     // device px and a custom-sized charge matches an inherited one of the same logical value.
     const float radius = c.sizePx > 0.f ? c.sizePx * view.styleScale : style.chargeRadiusPx;
-    painter.fillCircle(center, radius, c.charge > 0 ? style.positiveCharge : style.negativeCharge);
+    painter.fillCircle(center, radius, chargeColor(style, c.charge));
   }
   painter.end();
 }

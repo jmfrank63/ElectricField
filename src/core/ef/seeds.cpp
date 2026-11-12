@@ -84,7 +84,9 @@ std::vector<Seed> planFluxSeeds(const ChargeSystem& field, const ComputeParams& 
     double sum = 0, next = 0.5;  // the running weight over the whole body, and the next line's mark
     for (std::size_t ci = 0; ci < field.charges.size(); ++ci) {
       const Charge& charge = field.charges[ci];
-      if (body[ci] != b || charge.charge == 0) continue;
+      // An uncharged ball has no lines of its own under the Uniform model; as part of an equipotential
+      // body its surface carries the body's charge like any other.
+      if (body[ci] != b || (charge.charge == 0 && !field.conductor())) continue;
       const unsigned M = sampleCount(charge, p, space);
       const bool sourceBall = sign(charge.charge) == mode;
       bool firstGiven = false;

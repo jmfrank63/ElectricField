@@ -1,0 +1,32 @@
+# 50-shapes: the shape library through the API: insert a built-in shape, move and turn it as one unit,
+# save a body as a custom shape, reuse it, and reload everything with the configuration.
+collection.open Original
+config.open Dipole
+app.wait-done
+app.expect shapes=Ball|Eight|Chain of three|Triangle|Tetrahedron
+app.expect groups=0;0
+app.expect-error "conductor charge model" shape.insert 2 0 4 0 Eight
+charge.radius 1
+charge.model conductor
+app.expect-error "unknown shape" shape.insert 2 0 4 0 Nonsense
+shape.insert 3 0 4 0 Eight
+app.expect groups=0;0;1;1
+app.expect-error "not part of a shape" shape.rotate 0 z 90
+shape.rotate 2 z 90
+charge.move 3 1 5
+app.expect-error "built-in shape" shape.save 2 Eight
+shape.save 2 Lying eight
+app.expect shapes=Ball|Eight|Chain of three|Triangle|Tetrahedron|Lying eight
+shape.insert -1 0 -4 2 Lying eight
+app.expect groups=0;0;1;1;2;2
+tab.calculate
+app.wait-done
+app.expect stale=0
+export.csv shapes.csv
+config.save
+tab.close
+config.open Dipole
+app.wait-done
+app.expect groups=0;0;1;1;2;2
+app.expect model=conductor
+app.quit force

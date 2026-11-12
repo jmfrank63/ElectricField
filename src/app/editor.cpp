@@ -116,10 +116,18 @@ bool moveTo(Tab& t, std::size_t index, ef::Vec2 world, double z) {
   z = std::clamp(z, -kPositionLimit, kPositionLimit);
   ef::Charge& c = t.field.charges[index];
   if (c.position.X == target.X && c.position.Y == target.Y && c.z == z) return true;  // nothing to do, no history entry
+  const ef::Vec2 shift = target - c.position;  // a shape moves as one unit: its other balls follow
+  const double shiftZ = z - c.z;
+  const std::vector<std::size_t> members = groupMembers(t.field, index);
   // v2.5 (261012-h24): while a drag transaction is open for this index the moves are silent for history —
   // commitDrag records the whole drag as ONE entry (pre-drag state). Every other index keeps per-move
   // history, and everything after this line stays unconditional (realtime-draw semantics untouched).
   if (t.dragIndex < 0 || t.dragIndex != static_cast<int>(index)) recordHistory(t);
+  for (const std::size_t m : members) {
+    if (m == index) continue;
+    t.field.charges[m].position += shift;
+    t.field.charges[m].z += shiftZ;
+  }
   c.position = target;
   c.z = z;
   syncScene(t, index);
@@ -197,8 +205,11 @@ bool removeSelected(Tab& t) {
   if (!editable(t) || t.selected < 0 || static_cast<std::size_t>(t.selected) >= t.field.charges.size()) return false;
   if (t.field.charges.size() <= 1) return false;  // EDIT-04: at least one charge remains
   const std::size_t at = static_cast<std::size_t>(t.selected);
-  t.field.charges.erase(t.field.charges.begin() + static_cast<std::ptrdiff_t>(at));
-  t.scene.charges.erase(t.scene.charges.begin() + static_cast<std::ptrdiff_t>(at));
+  // A shape is removed as a whole (unless it is everything there is).
+  const std::vector<std::size_t> members = groupMembers(t.field, at);
+  if (members.size() >= t.field.charges.size()) return false;
+  for (std::size_t k = members.size(); k-- > 0;) t.field.charges.erase(t.field.charges.begin() + static_cast<std::ptrdiff_t>(members[k]));
+  ef::syncSceneCharges(t.scene, t.field);
   t.selected = -1;
   t.stale = true;
   t.dirty = true;
@@ -216,16 +227,28 @@ bool stepValue(Tab& t, int delta) {
   if (!editable(t) || t.selected < 0 || static_cast<std::size_t>(t.selected) >= t.field.charges.size()) return false;
   if (delta == 0) return true;  // 261020-ef2 review: a zero step is a no-op, even on a legacy 0 charge
   const std::size_t at = static_cast<std::size_t>(t.selected);
-  int target = std::clamp(t.field.charges[at].charge + delta, -1000000, 1000000);
+  int target = std::clamp(chargeValue(t.field, at) + delta, -1000000, 1000000);
   // 261020-ef2: 0 is not a charge - a step that would land on it continues to the neighbour.
-  if (target == 0) target = delta > 0 ? 1 : -1;
+  // (A shape may be neutral: its total steps through 0.)
+  if (target == 0 && t.field.charges[at].group == 0) target = delta > 0 ? 1 : -1;
   return setValue(t, at, target);
 }
 
 bool setValue(Tab& t, std::size_t index, int value) {
   if (!editable(t) || index >= t.field.charges.size()) return false;
-  if (value == 0) return false;  // 261020-ef2: 0 will not be allowed
   value = std::clamp(value, -1000000, 1000000);
+  if (t.field.charges[index].group != 0) {  // a shape: the value is the body's total, kept on its first ball
+    if (value == chargeValue(t.field, index)) return true;
+    recordHistory(t);
+    const std::vector<std::size_t> members = groupMembers(t.field, index);
+    for (std::size_t k = 0; k < members.size(); ++k) t.field.charges[members[k]].charge = k == 0 ? value : 0;
+    syncScene(t, index);
+    t.stale = true;
+    t.dirty = true;
+    t.pendingRecalcAt = -2;
+    return true;
+  }
+  if (value == 0) return false;  // 261020-ef2: 0 will not be allowed
   if (value == t.field.charges[index].charge) return true;  // nothing to do, no history entry
   recordHistory(t);
   t.field.charges[index].charge = value;
@@ -239,9 +262,9 @@ bool setValue(Tab& t, std::size_t index, int value) {
 bool flipSign(Tab& t) {
   if (!editable(t) || t.selected < 0 || static_cast<std::size_t>(t.selected) >= t.field.charges.size()) return false;
   const std::size_t at = static_cast<std::size_t>(t.selected);
-  if (t.field.charges[at].charge == 0) return true;  // nothing to flip, no history entry
+  if (chargeValue(t.field, at) == 0) return true;  // nothing to flip, no history entry
   recordHistory(t);
-  t.field.charges[at].charge = -t.field.charges[at].charge;  // +10 -> -10 and back; 0 stays 0
+  for (const std::size_t m : groupMembers(t.field, at)) t.field.charges[m].charge = -t.field.charges[m].charge;  // a shape flips as a whole
   syncScene(t, at);
   t.stale = true;
   t.dirty = true;
@@ -315,6 +338,78 @@ bool setChargeRadius(Tab& t, double radius) {
   return true;
 }
 
+std::vector<std::size_t> groupMembers(const ef::ChargeSystem& field, std::size_t index) {
+  std::vector<std::size_t> out;
+  if (index >= field.charges.size()) return out;
+  const unsigned group = field.charges[index].group;
+  if (group == 0) return {index};
+  for (std::size_t i = 0; i < field.charges.size(); ++i)
+    if (field.charges[i].group == group) out.push_back(i);
+  return out;
+}
+
+int chargeValue(const ef::ChargeSystem& field, std::size_t index) {
+  long long total = 0;
+  for (const std::size_t m : groupMembers(field, index)) total += field.charges[m].charge;
+  return static_cast<int>(std::clamp(total, -1000000LL, 1000000LL));
+}
+
+bool insertShape(Tab& t, const ef::Shape& shape, ef::Vec3 centre, int totalCharge) {
+  if (!editable(t) || !t.field.conductor() || !ef::validShape(shape)) return false;
+  if (!std::isfinite(centre.X) || !std::isfinite(centre.Y) || !std::isfinite(centre.Z)) return false;
+  recordHistory(t);
+  const std::size_t first = t.field.charges.size();
+  for (ef::Charge& c : ef::placeShape(shape, centre, t.field.radius, std::clamp(totalCharge, -1000000, 1000000), ef::nextGroup(t.field))) {
+    c.position = clamped(c.position);
+    c.z = std::clamp(c.z, -kPositionLimit, kPositionLimit);
+    const std::uint64_t next = std::max(nextChargeId(t.field), t.chargeIdWater + 1);  // the addCharge identity rule
+    t.chargeIdWater = next;
+    c.id = next <= ef::kMaxChargeId ? next : 0;
+    t.field.charges.push_back(std::move(c));
+  }
+  syncAllScene(t);
+  t.selected = static_cast<int>(first);
+  t.stale = true;
+  t.dirty = true;
+  t.pendingRecalcAt = -2;
+  return true;
+}
+
+bool rotateGroup(Tab& t, std::size_t index, int axis, double degrees) {
+  if (!editable(t) || index >= t.field.charges.size() || t.field.charges[index].group == 0) return false;
+  if (axis < 0 || axis > 2 || !std::isfinite(degrees)) return false;
+  if (degrees == 0) return true;
+  const std::vector<std::size_t> members = groupMembers(t.field, index);
+  ef::Vec3 centre;
+  for (const std::size_t m : members) centre += t.field.charges[m].position3();
+  centre /= static_cast<double>(members.size());
+  recordHistory(t);
+  const double a = degrees * ef::kPi / 180., co = std::cos(a), si = std::sin(a);
+  for (const std::size_t m : members) {
+    const ef::Vec3 d = t.field.charges[m].position3() - centre;
+    ef::Vec3 r = d;
+    if (axis == 0) r = ef::Vec3(d.X, d.Y * co - d.Z * si, d.Y * si + d.Z * co);
+    if (axis == 1) r = ef::Vec3(d.X * co + d.Z * si, d.Y, -d.X * si + d.Z * co);
+    if (axis == 2) r = ef::Vec3(d.X * co - d.Y * si, d.X * si + d.Y * co, d.Z);
+    t.field.charges[m].position = ef::Vec2(centre.X + r.X, centre.Y + r.Y);
+    t.field.charges[m].z = centre.Z + r.Z;
+  }
+  syncAllScene(t);
+  t.stale = true;
+  t.dirty = true;
+  t.pendingRecalcAt = -2;
+  return true;
+}
+
+ef::Shape shapeFromBody(const Tab& t, std::size_t index, const std::string& name) {
+  if (index >= t.field.charges.size()) return ef::Shape{name, {}};
+  const std::vector<int> body = t.field.bodies();
+  std::vector<std::size_t> members;
+  for (std::size_t i = 0; i < body.size(); ++i)
+    if (body[i] == body[index]) members.push_back(i);
+  return ef::shapeOf(t.field, members, name);
+}
+
 bool setChargeModel(Tab& t, ef::ChargeModel model) {
   if (!editable(t)) return false;
   if (model == t.field.model) return true;  // nothing to do, no history entry
@@ -336,7 +431,7 @@ bool samePhysics(const ef::ChargeSystem& a, const ef::ChargeSystem& b) {
   if (a.charges.size() != b.charges.size() || a.radius != b.radius || a.model != b.model || !(a.camera == b.camera)) return false;
   for (std::size_t i = 0; i < a.charges.size(); ++i)
     if (a.charges[i].charge != b.charges[i].charge || a.charges[i].position.X != b.charges[i].position.X ||
-        a.charges[i].position.Y != b.charges[i].position.Y || a.charges[i].z != b.charges[i].z || a.charges[i].sizePx != b.charges[i].sizePx)
+        a.charges[i].position.Y != b.charges[i].position.Y || a.charges[i].z != b.charges[i].z || a.charges[i].group != b.charges[i].group || a.charges[i].sizePx != b.charges[i].sizePx)
       return false;
   return true;
 }

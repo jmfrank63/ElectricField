@@ -135,8 +135,14 @@ std::string bodiesCsv(const ChargeSystem& raw) {
     }
     centre /= static_cast<double>(std::max(balls, 1));
     Vec3 dipole;
-    for (std::size_t i = 0; i < body.size(); ++i)
-      if (body[i] == static_cast<int>(b)) dipole += (field.charges[i].position3() - centre) * static_cast<double>(field.charges[i].charge);
+    if (field.surface) {  // Conductor: where the body's charge actually sits (its solved sources)
+      for (const SurfaceSolution::Ball& ball : field.surface->balls)
+        if (ball.body == static_cast<int>(b))
+          for (std::size_t k = ball.begin; k < ball.end; ++k) dipole += (field.surface->sources[k].at - centre) * field.surface->sources[k].q;
+    } else {
+      for (std::size_t i = 0; i < body.size(); ++i)
+        if (body[i] == static_cast<int>(b)) dipole += (field.charges[i].position3() - centre) * static_cast<double>(field.charges[i].charge);
+    }
     out += std::to_string(b) + ',' + std::to_string(balls) + ',' + std::to_string(charge);
     cell(out, centre.X);
     cell(out, centre.Y);

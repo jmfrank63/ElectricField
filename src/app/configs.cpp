@@ -67,6 +67,14 @@ std::string serializeConfigs(const std::vector<UserConfig>& configs) {
       chargeName.erase(std::remove(chargeName.begin(), chargeName.end(), ','), chargeName.end());
       os << "charge = " << ch.charge << ", " << x << ", " << y << ", " << s << ", " << ch.id << ", " << chargeName << '\n';
     }
+    if (std::any_of(c.charges.begin(), c.charges.end(), [](const ef::PresetCharge& q) { return q.group != 0; })) {
+      os << "group = ";
+      // A ball holding charge 0 (allowed inside a group only) is written with a negative group number:
+      // its charge line alone would load as +1, the rule for a 0 outside a group.
+      for (std::size_t i = 0; i < c.charges.size(); ++i)
+        os << (i ? ", " : "") << (c.charges[i].charge == 0 ? "-" : "") << c.charges[i].group;
+      os << '\n';
+    }
     if (std::any_of(c.charges.begin(), c.charges.end(), [](const ef::PresetCharge& q) { return q.z != 0; })) {
       os << "z = ";
       for (std::size_t i = 0; i < c.charges.size(); ++i) {
@@ -127,6 +135,15 @@ ParsedConfigs parseConfigs(const std::string& text) {
           cur.camera.yaw = list[0] * ef::kPi / 180.;
           cur.camera.pitch = list[1] * ef::kPi / 180.;
         }
+        continue;
+      }
+      if (key == "group") {  // the shape group of the charges read so far, in order (0 = none)
+        if (ini::parseDoubleList(trim(t.substr(eq + 1)), list))
+          for (std::size_t i = 0; i < list.size() && i < cur.charges.size(); ++i)
+            if (std::abs(list[i]) <= 1e6 && list[i] == std::floor(list[i])) {
+              cur.charges[i].group = static_cast<unsigned>(std::abs(list[i]));
+              if (list[i] < 0) cur.charges[i].charge = 0;  // negative: this ball of the group holds no charge
+            }
         continue;
       }
       if (key == "z") {  // the z of the charges read so far, in order

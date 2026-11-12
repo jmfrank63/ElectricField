@@ -28,6 +28,9 @@ struct Charge {
   // Third coordinate. 0 for every preset and legacy file: such a system lies in the drawing plane and
   // keeps the original 2D pipeline bit for bit (see ChargeSystem::is3D).
   double z = 0;
+  // Balls of one shape share a group number (ef/shapes.hpp) and move as one rigid unit; 0 = on its own.
+  // Inside a group a ball may hold charge 0: the body's total charge is what counts.
+  unsigned group = 0;
 
   Vec3 position3() const { return Vec3(position.X, position.Y, z); }
   // `radius` > 0 makes the charge a uniformly charged ball of that radius (world units): exact Coulomb

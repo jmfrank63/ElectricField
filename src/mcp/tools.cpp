@@ -116,13 +116,13 @@ std::string presetSlugs() {
   return out;
 }
 
-ef::Charge parseCharge(const json& item, std::size_t index) {
+ef::Charge parseCharge(const json& item, std::size_t index, bool allowZero) {
   const std::string where = "charges[" + std::to_string(index) + "]";
   if (!item.is_object()) throw ToolError(where + " must be an object");
   checkKeys(item, {"charge", "x", "y", "z", "size_px"}, where);
   ef::Charge c;
   c.charge = static_cast<int>(getInt(item, "charge", -kMaxChargeValue, kMaxChargeValue, 0, true));
-  if (c.charge == 0) throw ToolError(where + ": 'charge' must not be 0");
+  if (c.charge == 0 && !allowZero) throw ToolError(where + ": 'charge' must not be 0");
   c.position.X = getNumber(item, "x", -kMaxCoordinate, kMaxCoordinate, 0, true);
   c.position.Y = getNumber(item, "y", -kMaxCoordinate, kMaxCoordinate, 0, true);
   c.z = getNumber(item, "z", -kMaxCoordinate, kMaxCoordinate, 0);
@@ -161,7 +161,7 @@ ef::ChargeSystem parseField(const json& args) {
   field.model = model;
   field.charges.reserve(list.size());
   for (std::size_t i = 0; i < list.size(); ++i) {
-    ef::Charge c = parseCharge(list[i], i);
+    ef::Charge c = parseCharge(list[i], i, radius > 0 && model == ef::ChargeModel::Conductor);
     for (std::size_t j = 0; j < field.charges.size(); ++j)
       if (radius <= 0 && (field.charges[j].position3() - c.position3()).Length() < kMinSeparation)
         throw ToolError("charges[" + std::to_string(j) + "] and charges[" + std::to_string(i) + "] are at the same position");
@@ -507,7 +507,7 @@ const char* const kFieldProperties = R"json({
       "type": "object", "additionalProperties": false, "required": ["charge", "x", "y"],
       "properties": {
         "z": {"type": "number", "minimum": -1000, "maximum": 1000, "default": 0, "description": "World units, towards the viewer. Any charge with z other than 0 makes the system 3D."},
-        "charge": {"type": "integer", "minimum": -1000, "maximum": 1000, "description": "Non-zero integer charge."},
+        "charge": {"type": "integer", "minimum": -1000, "maximum": 1000, "description": "Integer charge. Non-zero, except with charge_model conductor, where an uncharged ball is part of a body or a neutral conductor."},
         "x": {"type": "number", "minimum": -1000, "maximum": 1000, "description": "World units, x to the right."},
         "y": {"type": "number", "minimum": -1000, "maximum": 1000, "description": "World units, y up."},
         "size_px": {"type": "number", "minimum": 0, "maximum": 120, "default": 0, "description": "Drawn radius in px: 0 (the 25 px default) or 2 to 120. Field lines start and end on this circle."}

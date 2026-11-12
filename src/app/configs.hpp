@@ -26,6 +26,8 @@ struct UserConfig {
 //   radius = 1          # optional: ball radius of the charges in world units (absent = 0, point charges)
 //   view = 30, 20       # optional: camera yaw and pitch in degrees (absent = 0, 0)
 //   z = 0, 1.5          # optional, after the charge lines: the z coordinate of each charge in order
+//   group = 1, 1        # optional, after the charge lines: the shape group of each charge (0 = none);
+//                       # a negative number marks a ball of the group that holds charge 0
 // Coordinates are written with %.10g (round-trips through stod far below any meaningful world-unit
 // precision). Double quotes inside names are stripped on save.
 //

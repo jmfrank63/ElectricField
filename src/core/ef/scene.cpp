@@ -13,10 +13,19 @@ FieldScene buildScene(const ChargeSystem& field, const FieldResult& result) {
   s.potential.reserve(result.potential.size());
   for (const auto& l : result.potential)
     s.potential.push_back(ScenePath{l.points, l.points.size() > 1 && l.points.front() == l.points.back()});
-  for (const auto& c : field.charges)
-    s.charges.push_back(SceneCharge{field.camera.project(c.position3()), c.charge, c.sizePx, field.camera.depth(c.position3())});
-  s.chargeRadius = field.radius;
+  syncSceneCharges(s, field);
   return s;
+}
+
+void syncSceneCharges(FieldScene& scene, const ChargeSystem& field) {
+  const std::vector<int> body = field.bodies();
+  scene.charges.clear();
+  scene.charges.reserve(field.charges.size());
+  for (std::size_t i = 0; i < field.charges.size(); ++i) {
+    const Charge& c = field.charges[i];
+    scene.charges.push_back(SceneCharge{field.camera.project(c.position3()), c.charge, c.sizePx, field.camera.depth(c.position3()), body[i]});
+  }
+  scene.chargeRadius = field.radius;
 }
 
 namespace {
@@ -299,11 +308,38 @@ void renderScene(Painter& painter, const FieldScene& scene, const DrawStyle& sty
     for (const auto& c : scene.charges) {
       const double x = cx + c.position.X * view.pixelsPerUnit, y = cy - c.position.Y * view.pixelsPerUnit;
       if (x + ballPx < vis.l || x - ballPx > vis.r || y + ballPx < vis.t || y - ballPx > vis.b) continue;
+      // Balls of one melted body are outlined as one shape: the part of this circle that lies inside
+      // another ball of the same body is not drawn.
+      const Color color = c.charge > 0 ? style.positiveCharge : style.negativeCharge;
+      std::size_t run = 0, firstRun = 0;
+      bool anyHidden = false;
       for (std::size_t k = 0; k < N; ++k) {
         const double a = static_cast<double>(k) * 6.283185307179586 / static_cast<double>(N);
+        const double wx = c.position.X + scene.chargeRadius * std::cos(a), wy = c.position.Y + scene.chargeRadius * std::sin(a);
+        bool hidden = false;
+        for (const auto& o : scene.charges) {
+          if (&o == &c || o.body != c.body || c.body < 0) continue;
+          const double dx = wx - o.position.X, dy = wy - o.position.Y;
+          if (dx * dx + dy * dy < scene.chargeRadius * scene.chargeRadius) { hidden = true; break; }
+        }
+        if (hidden) {
+          if (!anyHidden) firstRun = run;  // the run before the first gap continues the last one (wraps)
+          else if (run >= 2) painter.strokePath(pts.data() + (k - run), run, 0, false, color, 1.f);
+          anyHidden = true;
+          run = 0;
+          pts[k] = PointF{};
+          continue;
+        }
         pts[k] = PointF{static_cast<float>(x + ballPx * std::cos(a)), static_cast<float>(y - ballPx * std::sin(a))};
+        ++run;
       }
-      painter.strokePath(pts.data(), pts.size(), 0, true, c.charge > 0 ? style.positiveCharge : style.negativeCharge, 1.f);
+      if (!anyHidden) {
+        painter.strokePath(pts.data(), pts.size(), 0, true, color, 1.f);
+      } else if (run + firstRun >= 2) {  // the last run joined with the first across angle 0
+        std::vector<PointF> wrap(pts.begin() + static_cast<std::ptrdiff_t>(N - run), pts.end());
+        wrap.insert(wrap.end(), pts.begin(), pts.begin() + static_cast<std::ptrdiff_t>(firstRun));
+        painter.strokePath(wrap.data(), wrap.size(), 0, false, color, 1.f);
+      }
     }
   }
   // Farther charges first, so nearer dots cover them (stable: a planar scene keeps its charge order).

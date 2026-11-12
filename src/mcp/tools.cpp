@@ -323,11 +323,12 @@ json computeForces(const json& args) {
   checkKeys(args, {"preset", "charges", "charge_radius"}, "arguments");
   const ef::ChargeSystem field = parseField(args);
   const std::vector<ef::Vec3> f = ef::forces(field);
+  const std::vector<int> body = field.bodies();
   json list = json::array();
   for (std::size_t i = 0; i < f.size(); ++i) {
     const ef::Charge& c = field.charges[i];
     list.push_back(json::object({{"charge", c.charge}, {"x", c.position.X}, {"y", c.position.Y}, {"z", c.z},
-                                 {"fx", f[i].X}, {"fy", f[i].Y}, {"fz", f[i].Z}, {"magnitude", f[i].Length()}}));
+                                 {"fx", f[i].X}, {"fy", f[i].Y}, {"fz", f[i].Z}, {"magnitude", f[i].Length()}, {"body", body[i]}}));
   }
   return okResult(json::object({{"forces", std::move(list)}, {"potential_energy", ef::potentialEnergy(field)}}));
 }
@@ -480,7 +481,7 @@ const char* const kFieldProperties = R"json({
       }
     }
   },
-  "charge_radius": {"type": "number", "minimum": 0, "maximum": 1000, "default": 0, "description": "Physical radius of every charge in world units. 0 = point charges. Above 0 each charge is a uniformly charged ball: Coulomb outside, finite inside (E = q r / R^3), so field lines may pass through a ball."}
+  "charge_radius": {"type": "number", "minimum": 0, "maximum": 1000, "default": 0, "description": "Physical radius of every charge in world units. 0 = point charges. Above 0 each charge is a uniformly charged ball: Coulomb outside. Field lines start and end on ball surfaces; the inside is not traced. Balls whose centres are at most 2R apart melt into one body."}
 })json";
 
 const char* const kComputeProperties = R"json({

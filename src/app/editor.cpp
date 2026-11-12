@@ -16,17 +16,13 @@ bool editable(const Tab& t) { return t.session == nullptr; }  // Done/Failed onl
 
 // The scene mirror of one charge: index-aligned by buildScene (scene.cpp pushes field order 1:1).
 void syncScene(Tab& t, std::size_t index) {
-  if (index < t.scene.charges.size()) {
-    t.scene.charges[index].position = t.field.charges[index].position;
-    t.scene.charges[index].charge = t.field.charges[index].charge;
-    t.scene.charges[index].sizePx = t.field.charges[index].sizePx;
-  }
+  (void)index;  // moving one ball can change which balls touch: rebuild the whole mirror
+  ef::syncSceneCharges(t.scene, t.field);
 }
 
 // Rebuilds the whole charge mirror (undo/redo/revert change several charges at once). Lines are untouched.
 void syncAllScene(Tab& t) {
-  t.scene.charges.clear();
-  for (const auto& c : t.field.charges) t.scene.charges.push_back(ef::SceneCharge{c.position, c.charge, c.sizePx});
+  ef::syncSceneCharges(t.scene, t.field);
 }
 
 // EDIT-12: push the pre-mutation state (charges + method) onto the undo stack; a new branch clears redo.
@@ -149,7 +145,7 @@ bool addCharge(Tab& t, ef::Vec2 world, int value, float defaultSizePx) {
                         std::max(static_cast<float>(ef::kMinChargeSizePx), maxPx));
   }
   t.field.charges.push_back(ef::Charge{value, at, id, std::string(), sizePx});
-  t.scene.charges.push_back(ef::SceneCharge{at, value, sizePx});
+  ef::syncSceneCharges(t.scene, t.field);
   t.selected = static_cast<int>(t.field.charges.size()) - 1;
   t.stale = true;
   t.dirty = true;

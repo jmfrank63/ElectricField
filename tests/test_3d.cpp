@@ -125,14 +125,14 @@ TEST_CASE("3d: turning the camera on a planar system projects charges and lines"
   for (const auto& line : r.electric) CHECK((line.points.back() - Vec2(2, 0)).Length() < 0.2);
 }
 
-TEST_CASE("3d: balls in space end their lines on the null inside the sink ball") {
+TEST_CASE("3d: balls in space end their lines on the surface of the sink ball") {
   ChargeSystem field;
   field.radius = 1;
   field.charges.push_back(at(1, 0, 0, -2));
   field.charges.push_back(at(-1, 0, 3, 2));
   const FieldResult r = computeAll(field, lightParams());
   CHECK(r.electric.size() == 4);
-  for (const auto& line : r.electric) CHECK((line.points.back() - Vec2(0, 3)).Length() < 1.0);
+  for (const auto& line : r.electric) CHECK((line.points.back() - Vec2(0, 3)).Length() <= 1.0 + 1e-9);  // projected surface point
 }
 
 TEST_CASE("forces: Coulomb between points, equal and opposite, in space") {

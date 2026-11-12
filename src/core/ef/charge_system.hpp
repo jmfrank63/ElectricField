@@ -1,5 +1,7 @@
 #pragma once
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -93,19 +95,50 @@ class ChargeSystem {
     return result;
   }
   Vec3 ENormalized(const Vec3& pos) const { return E(pos).Normalize(); }
-  bool AtBallNull(const Vec3& pos, double tolerance) const {
-    if (radius <= 0) return false;
-    const double r3 = radius * radius * radius;
-    double weakest = 0;
-    bool inside = false;
-    for (const auto& c : charges) {
-      const Vec3 d = pos - c.position3();
-      if (d * d >= radius * radius) continue;
-      const double gradient = std::abs(static_cast<double>(c.charge)) / r3;
-      if (!inside || gradient < weakest) weakest = gradient;
-      inside = true;
+  // Finite charges: the index of a ball containing `pos` (strictly inside), or -1. A field line ends
+  // where it enters a ball; the inside of a ball is not part of the traced field.
+  int BallAt(const Vec3& pos) const {
+    if (radius <= 0) return -1;
+    for (std::size_t i = 0; i < charges.size(); ++i) {
+      const Vec3 d = pos - charges[i].position3();
+      if (d * d < radius * radius) return static_cast<int>(i);
     }
-    return inside && E(pos).Length() < weakest * tolerance;
+    return -1;
+  }
+  // The point where the ray from ball `index`'s centre through `pos` meets that ball's surface.
+  Vec3 OnSurface(int index, const Vec3& pos) const {
+    const Vec3 c = charges[static_cast<std::size_t>(index)].position3();
+    const Vec3 d = pos - c;
+    const double len = d.Length();
+    return len > 0 ? c + d * (radius / len) : pos;
+  }
+  // Balls that touch or overlap (centres at most 2R apart) melt into one body. Returns the body index
+  // of every charge, numbered from 0 in order of first appearance; point charges are each their own body.
+  std::vector<int> bodies() const {
+    const std::size_t n = charges.size();
+    std::vector<int> root(n);
+    for (std::size_t i = 0; i < n; ++i) root[i] = static_cast<int>(i);
+    const auto find = [&root](int i) {
+      while (root[static_cast<std::size_t>(i)] != i) i = root[static_cast<std::size_t>(i)];
+      return i;
+    };
+    if (radius > 0)
+      for (std::size_t i = 0; i < n; ++i)
+        for (std::size_t j = i + 1; j < n; ++j) {
+          const Vec3 d = charges[i].position3() - charges[j].position3();
+          if (d * d <= 4. * radius * radius) {
+            const int a = find(static_cast<int>(i)), b = find(static_cast<int>(j));
+            if (a != b) root[static_cast<std::size_t>(std::max(a, b))] = std::min(a, b);
+          }
+        }
+    std::vector<int> body(n, -1);
+    int next = 0;
+    for (std::size_t i = 0; i < n; ++i) {
+      const std::size_t r = static_cast<std::size_t>(find(static_cast<int>(i)));
+      if (body[r] < 0) body[r] = next++;
+      body[i] = body[r];
+    }
+    return body;
   }
   bool HitCharge(const Vec3& pos, const ComputeParams& p) const {
     for (const auto& c : charges) {
@@ -124,22 +157,6 @@ class ChargeSystem {
     Vec2 result;
     for (const auto& c : charges) result += c.E(pos, radius);
     return result;
-  }
-  // A field line flowing into a ball does not have to reach the centre: inside a ball the field has a
-  // null (where the ball's own field cancels the rest), and the line converges on it. True when `pos` lies
-  // inside a ball within `tolerance` of such a null, judged by the ball's own field gradient |q|/R^3.
-  bool AtBallNull(const Vec2& pos, double tolerance) const {
-    if (radius <= 0) return false;
-    const double r3 = radius * radius * radius;
-    double weakest = 0;  // the smallest own-field gradient among the balls containing pos
-    bool inside = false;
-    for (const auto& c : charges) {
-      if ((pos - c.position) * (pos - c.position) >= radius * radius) continue;
-      const double gradient = std::abs(static_cast<double>(c.charge)) / r3;
-      if (!inside || gradient < weakest) weakest = gradient;
-      inside = true;
-    }
-    return inside && E(pos).Length() < weakest * tolerance;
   }
   Vec2 ENormalized(const Vec2& pos) const { return E(pos).Normalize(); }
   bool HitCharge(const Vec2& pos, const ComputeParams& p) const {

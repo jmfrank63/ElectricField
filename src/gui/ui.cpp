@@ -926,7 +926,7 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     }
     if (ImGui::IsItemHovered())
       ImGui::SetTooltip("Physical radius of every charge in world units. 0 = point charges; above 0 each charge is a\n"
-                        "uniformly charged ball (Coulomb outside, finite inside) and field lines may pass through it.");
+                        "uniformly charged ball: field lines start and end on its surface, and balls that touch melt together.");
   }
   const int mIdx = static_cast<int>(t.params.method);
   const std::string mCurrent(ef::kMethods[static_cast<std::size_t>(mIdx)].display);

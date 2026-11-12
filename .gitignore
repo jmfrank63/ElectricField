@@ -19,3 +19,6 @@ x64/
 
 # ImGui writes imgui.ini to the working directory on shutdown (smoke / run)
 imgui.ini
+
+# ---- Python ----
+__pycache__/

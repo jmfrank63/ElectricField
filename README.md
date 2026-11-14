@@ -113,8 +113,8 @@ With a radius above 0 the editor panel offers a **Charge model** (script: `charg
   an equipotential, as on a conductor, so every field line ends at a right angle. Only the total charge
   of a body is fixed, and balls that touch share their charge (a +1 touching a -1 neutralises). The
   field inside is zero, and the force acts on a body as a whole. The field is solved numerically; it is
-  accurate to about 1% while the gap between separate balls is at least a fifth of the radius, and less
-  accurate for balls that almost touch (the bodies CSV table reports the error).
+  accurate to about 0.1%, also for balls that almost touch (checked against the exact two-sphere result
+  down to a gap of a hundredth of the radius; the bodies CSV table reports the error).
 
 #### Shapes
 

@@ -78,8 +78,8 @@ is fixed, touching balls share their charge, the field inside a body is 0 and it
 `compute_forces` then reports the force on a body split over its balls (only the sum per body is
 meaningful) and `potential_energy` is the total electrostatic energy, half the sum of charge times
 potential over the bodies, which includes each body's own energy. The field is solved numerically
-(sources inside the balls fitted to the surface); it is accurate to about 1% while the gap between
-separate balls is at least 0.2 radii. The `bodies` CSV table reports the error as `surface_error`.
+(sources inside the balls fitted to the surface); it is accurate to about 0.1%, also for balls that
+almost touch (gaps down to 0.01 radii). The `bodies` CSV table reports the error as `surface_error`.
 
 ### 3D
 

@@ -12,6 +12,8 @@ namespace {
 constexpr double kSourceDepth = 0.6;  // sources sit on a sphere of this fraction of R
 constexpr std::size_t kSourceBudget = 400;  // total sources: keeps the solve interactive
 constexpr std::size_t kMinSourcesPerBall = 24, kMaxSourcesPerBall = 160;
+constexpr double kCloseGap = 0.5;            // neighbours of another body within this many R get image sources
+constexpr std::size_t kImageSources = 24;    // at most this many per ball and neighbour
 
 Vec3 fibonacci(std::size_t i, std::size_t n) {
   const double goldenAngle = kPi * (3. - std::sqrt(5.));
@@ -119,6 +121,12 @@ std::shared_ptr<const SurfaceSolution> solveUncached(const ChargeSystem& field) 
   const std::size_t perBall = std::clamp(kSourceBudget / std::max<std::size_t>(unique, 1), kMinSourcesPerBall, kMaxSourcesPerBall);
 
   std::vector<int> sourceBody;
+  struct Gap {
+    Vec3 pole, axis;  // the point of the ball nearest its neighbour, and the direction to it
+    double width;
+    int body;
+  };
+  std::vector<Gap> gaps;
   for (std::size_t i = 0; i < n; ++i) {
     SurfaceSolution::Ball& ball = s.balls[i];
     ball.centre = field.charges[i].position3();
@@ -129,6 +137,26 @@ std::shared_ptr<const SurfaceSolution> solveUncached(const ChargeSystem& field) 
       for (std::size_t k = 0; k < perBall; ++k) {
         s.sources.push_back({ball.centre + fibonacci(k, perBall) * (kSourceDepth * R), 0.});
         sourceBody.push_back(body[i]);
+      }
+    // Close neighbours of another body: the charge crowds into the gap in a peak far narrower than the
+    // sphere of sources can form. The exact field of two spheres is a series of image charges on the line
+    // of centres, x' = R^2 / (d - x), so sources are put on those points.
+    if (!duplicate[i])
+      for (std::size_t j = 0; j < n; ++j) {
+        if (j == i || duplicate[j] || body[j] == body[i]) continue;
+        const Vec3 axis = field.charges[j].position3() - ball.centre;
+        const double d = axis.Length();
+        if (d > (2. + kCloseGap) * R) continue;
+        const Vec3 unit = axis / d;
+        double x = 0;
+        for (std::size_t k = 0; k < kImageSources; ++k) {
+          const double next = R * R / (d - x);
+          if (next - x < 1e-4 * R) break;
+          x = next;
+          s.sources.push_back({ball.centre + unit * x, 0.});
+          sourceBody.push_back(body[i]);
+        }
+        gaps.push_back({ball.centre + unit * R, unit, d - 2. * R, body[i]});
       }
     ball.end = s.sources.size();
   }
@@ -152,6 +180,29 @@ std::shared_ptr<const SurfaceSolution> solveUncached(const ChargeSystem& field) 
         hidden = d * d < R * R * (1. - 1e-9);
       }
       if (!hidden) points.push_back({at, body[i]});
+    }
+  }
+
+  // Extra points around each gap: rings whose spacing grows with the distance from the pole.
+  for (const Gap& gap : gaps) {
+    Vec3 u = cross(gap.axis, std::abs(gap.axis.X) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0));
+    u = u / u.Length();
+    const Vec3 v = cross(gap.axis, u);
+    const Vec3 centre = gap.pole - gap.axis * R;
+    const double first = 0.3 * std::sqrt(std::max(gap.width, 1e-3 * R) / R);
+    std::size_t ring = 0;
+    for (double theta = 0; theta < 1.2; theta = theta == 0 ? first : theta * 1.3, ++ring) {
+      const std::size_t around = theta == 0 ? 1 : 8;
+      for (std::size_t a = 0; a < around; ++a) {
+        const double phi = 2. * kPi * (static_cast<double>(a) + 0.5 * static_cast<double>(ring % 2)) / static_cast<double>(around);
+        const Vec3 at = centre + (gap.axis * std::cos(theta) + (u * std::cos(phi) + v * std::sin(phi)) * std::sin(theta)) * R;
+        bool hidden = false;  // a third ball may cover part of the gap
+        for (std::size_t j = 0; j < n && !hidden; ++j) {
+          const Vec3 d = at - s.balls[j].centre;
+          hidden = !duplicate[j] && d * d < R * R * (1. - 1e-6);
+        }
+        if (!hidden) points.push_back({at, gap.body});
+      }
     }
   }
 

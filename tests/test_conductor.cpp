@@ -139,12 +139,33 @@ TEST_CASE("conductor: a session computes it; lines start and end on surfaces") {
   CHECK(potentialEnergy(far) == doctest::Approx(1.0 - 0.01).epsilon(1e-3));
 }
 
-TEST_CASE("conductor: the surface error stays small down to a gap of a fifth of the radius") {
-  for (const double gap : {2.0, 0.5, 0.2}) {
-    const ChargeSystem f = conductors(1, {at(1, -1 - gap / 2, 0), at(-1, 1 + gap / 2, 0)});
-    CHECK(f.surface->residual < 0.01);
-    CHECK(worstTilt(f, 0) < 0.01);
+TEST_CASE("conductor: nearly touching balls of different potential stay accurate") {
+  // Exact potentials of two equal spheres (R = 1) from the series of image charges:
+  //   C11 = sinh b * sum 1 / sinh((2n-1) b),  C12 = -sinh b * sum 1 / sinh(2n b),  cosh b = d / 2R.
+  for (const double gap : {2.0, 0.5, 0.2, 0.05, 0.01}) {
+    const double b = std::acosh(1. + gap / 2.);
+    double c11 = 0, c12 = 0;
+    for (int k = 1; k * b < 700.; ++k) (k % 2 ? c11 : c12) += (k % 2 ? 1. : -1.) * std::sinh(b) / std::sinh(k * b);
+    const double det = c11 * c11 - c12 * c12;
+
+    const ChargeSystem opposite = conductors(1, {at(1, -1 - gap / 2, 0), at(-1, 1 + gap / 2, 0)});
+    CHECK(opposite.surface->residual < 1e-3);
+    CHECK(worstTilt(opposite, 0) < 1e-3);
+    CHECK(opposite.surface->bodyPotential[0] == doctest::Approx(1. / (c11 - c12)).epsilon(1e-3));
+
+    // a charged ball next to a neutral one
+    const ChargeSystem induced = conductors(1, {at(1, -1 - gap / 2, 0), at(0, 1 + gap / 2, 0)});
+    CHECK(induced.surface->residual < 1e-3);
+    CHECK(induced.surface->bodyPotential[0] == doctest::Approx(c11 / det).epsilon(1e-3));
+    CHECK(induced.surface->bodyPotential[1] == doctest::Approx(-c12 / det).epsilon(1e-3));
   }
+  // three in a row, two gaps on the middle ball, and a close pair off the axes
+  const ChargeSystem row = conductors(1, {at(1, -2.05, 0), at(-1, 0, 0), at(1, 2.05, 0)});
+  CHECK(row.surface->residual < 1e-3);
+  CHECK(worstTilt(row, 1) < 1e-3);
+  const ChargeSystem skew = conductors(0.5, {at(2, 0.1, 0.2, 0.3), at(-1, 0.7, 0.8, 0.9 + 0.02)});
+  CHECK(skew.surface->residual < 1e-3);
+  CHECK(worstTilt(skew, 0) < 1e-3);
 }
 
 TEST_CASE("conductor: the surface charges of a system are solved once and reused") {

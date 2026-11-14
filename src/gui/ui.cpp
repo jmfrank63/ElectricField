@@ -1032,7 +1032,8 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     if (ImGui::IsItemHovered())
       ImGui::SetTooltip("Yaw and pitch of the view. Drag here, or hold Alt and drag on the canvas.\n"
                         "While turning only the charges move; the lines are recalculated afterwards.\n"
-                        "A turned view, or a charge with Z other than 0, is computed in 3D (no equipotentials).");
+                        "A turned view, or a charge with Z other than 0, is computed in 3D;\n"
+                        "equipotentials are then cut by the plane through the centre of the charges, parallel to the screen.");
     if (!t.field.camera.isDefault()) {
       ImGui::SameLine();
       if (ImGui::SmallButton("Front")) {

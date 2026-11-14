@@ -63,8 +63,9 @@ struct FieldDirection {  // FunctorForE: unit field, flipped for negative charge
     return chargeSign > 0 ? v : -v;
   }
 };
+template <typename Field>
 struct PerpendicularDirection {  // FunctorForV: unit vector perpendicular to E
-  const ChargeSystem* field;
+  const Field* field;
   Vec2 operator()(double /*t*/, const Vec2& pos) const {
     Vec2 v = field->E(pos);
     const double temp = v.X;
@@ -80,8 +81,9 @@ struct PerpendicularDirection {  // FunctorForV: unit vector perpendicular to E
 // FIX CORE-07: the original posted `FieldLineJob job(job)` (self-copy; MSVC legacy lookup silently copied the parameter,
 // Clang/GCC/MSVC-/permissive- read an uninitialised object). The intended copy is of the PARENT job: the posted job
 // carries the parent's current point and the UPDATED label.
-inline bool shouldPostEquipotential(const ChargeSystem& field, const ComputeParams& p, const Seed& seed, const Vec2& point,
-                                    double& oldPotential) {
+// `Field` is a ChargeSystem, or its restriction to a plane (ef/cut_plane.hpp).
+template <typename Field>
+bool shouldPostEquipotential(const Field& field, const ComputeParams& p, const Seed& seed, const Vec2& point, double& oldPotential) {
   if (!seed.first || !p.calculateEquipotentials) return false;
   const double potential = field.Potential(point);
   // v2.6 (owner zoom report, replaces the phase-2 hard skip): in the adapted regime the effective
@@ -177,8 +179,8 @@ FieldLine traceElectricLine(Solver& solver, const ChargeSystem& field, const Com
 }
 
 // The electric line of a 3D system: the same stepping rules as traceElectricLine, integrated in space
-// from seed.point3 and recorded as its projection through the system's camera. No equipotentials are
-// posted (in space they are surfaces).
+// from seed.point3 and recorded as its projection through the system's camera. Equipotentials are
+// surfaces in space; their cut with one plane is traced separately (ef/cut_plane.hpp).
 template <typename Solver, typename Hooks>
 FieldLine traceElectricLine3(Solver& solver, const ChargeSystem& field, const ComputeParams& p, const Seed& seed, Hooks& hooks,
                              TraceStatus* status = nullptr, std::size_t maxStepsOverride = 0) {
@@ -257,13 +259,13 @@ FieldLine traceElectricLine3(Solver& solver, const ChargeSystem& field, const Co
 }
 
 // CalculateEquipotential (FieldLinesCalculator.cpp:113-150).
-template <typename Solver, typename Hooks>
-PotentialLine traceEquipotential(Solver& solver, const ChargeSystem& field, const ComputeParams& p, const Vec2& startPoint,
+template <typename Solver, typename Field, typename Hooks>
+PotentialLine traceEquipotential(Solver& solver, const Field& field, const ComputeParams& p, const Vec2& startPoint,
                                  double potentialLabel, Hooks& hooks, TraceStatus* status = nullptr,
                                  std::size_t maxStepsOverride = 0) {
   PotentialLine line;
   line.potential = potentialLabel;
-  detail::PerpendicularDirection functorV{&field};
+  detail::PerpendicularDirection<Field> functorV{&field};
   Vec2 point = startPoint;
   const double px = static_cast<double>(p.pixelsPerUnit);
   // v2.6 phase 2: record ring anchors every ~8 logical px at the TARGET view (legacy keeps the 100 px

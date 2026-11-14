@@ -149,7 +149,10 @@ otherwise with Calculate). Dragging a charge moves it in the plane of the screen
 
 A configuration with a charge off the plane, or with a turned view, is computed in 3D: field lines start
 evenly spread over a sphere around each source charge, are traced in space and drawn as their projection.
-Equipotentials are surfaces in space and are not drawn in a 3D view. A planar configuration seen from
+Equipotentials are surfaces in space; a 3D view draws their cut with the plane parallel to the screen
+through the centre of the charges (the mean of their positions), so turning the view also turns the cut.
+A ball appears in that plane as the circle it cuts out, which is smaller than its outline unless its
+centre lies in the plane. A planar configuration seen from
 the front uses the original 2D pipeline unchanged. z and the view angle are saved with the configuration
 and the open tabs.
 

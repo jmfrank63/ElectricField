@@ -23,7 +23,7 @@ std::vector<Seed> planSeeds(const ChargeSystem& field, const ComputeParams& p);
 
 // Seeds of a 3D system (ChargeSystem::is3D): |q| * linesPerUnitCharge points spread evenly over a sphere
 // around every source charge (Fibonacci lattice, deterministic). Sink charges get none: their lines arrive
-// from the sources, and equipotentials (surfaces in space) are not traced.
+// from the sources. Equipotentials are traced separately, in one plane (ef/cut_plane.hpp).
 std::vector<Seed> planSeeds3(const ChargeSystem& field, const ComputeParams& p);
 
 // Balls (ChargeSystem::radius > 0) are seeded per body, in proportion to the field flowing through the

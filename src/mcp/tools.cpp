@@ -525,7 +525,7 @@ const char* const kComputeProperties = R"json({
   "potential_interval": {"type": "number", "minimum": 0.01, "maximum": 0.5, "default": 0.1, "description": "Potential difference between equipotentials."},
   "threads": {"type": "integer", "minimum": 1, "maximum": 128, "default": 4},
   "timeout_ms": {"type": "integer", "minimum": 100, "maximum": 600000, "default": 60000},
-  "view_yaw": {"type": "number", "minimum": -360, "maximum": 360, "default": 0, "description": "Camera turn about the vertical (y) axis in degrees. The view is orthographic and turns about the world origin. A turned camera, or a charge with z other than 0, selects the 3D pipeline: field lines start evenly spread over a sphere around each source charge, are traced in space and returned or drawn as their projection; equipotentials (surfaces in space) are not drawn."},
+  "view_yaw": {"type": "number", "minimum": -360, "maximum": 360, "default": 0, "description": "Camera turn about the vertical (y) axis in degrees. The view is orthographic and turns about the world origin. A turned camera, or a charge with z other than 0, selects the 3D pipeline: field lines start evenly spread over a sphere around each source charge, are traced in space and returned or drawn as their projection; equipotentials are drawn as the cut of their surfaces with the plane parallel to the screen through the centre of the charges."},
   "view_pitch": {"type": "number", "minimum": -90, "maximum": 90, "default": 0, "description": "Camera tilt about the screen's horizontal axis in degrees."}
 })json";
 

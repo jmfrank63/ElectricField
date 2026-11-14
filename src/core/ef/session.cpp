@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "ef/conductor.hpp"
+#include "ef/cut_plane.hpp"
 #include "ef/method.hpp"
 #include "ef/tracer.hpp"
 
@@ -45,7 +46,24 @@ ComputeSession::ComputeSession(ChargeSystem field, ComputeParams params) : field
     j.key = JobKey{i, 0};
     queue_.push_back(std::move(j));
   }
-  jobsKnown_ = seeds.size();
+  // 3D: one walk per charge through the cut plane finds its equipotentials.
+  if (field_.is3D() && params_.calculateEquipotentials) {
+    bool hasDifferentSigns = false;
+    const int total = field_.totalCharge(hasDifferentSigns);
+    for (std::size_t i = 0; i < field_.charges.size(); ++i) {
+      if (field_.charges[i].charge == 0) continue;
+      Job j;
+      j.seed.chargeIndex = i;
+      j.seed.charge = field_.charges[i].charge;
+      j.seed.totalCharge = total;
+      j.seed.hasDifferentSigns = hasDifferentSigns;
+      j.seed.first = true;
+      j.isProbe = true;
+      j.key = JobKey{seeds.size() + i, 0};
+      queue_.push_back(std::move(j));
+    }
+  }
+  jobsKnown_ = queue_.size();
 
   const unsigned n = std::max(1u, params_.numThreads);
   activeWorkers_.store(n);
@@ -92,9 +110,11 @@ void ComputeSession::workerMain() {
   try {
     // one solver per thread: K[] is per-instance state. A 3D system integrates in space.
     if (field_.is3D())
-      withSolverFor<Vec3>(params_.method, [this](auto& solver) { workerLoop(solver); });
+      withSolverFor<Vec3>(params_.method, [this](auto& solver) {
+        withSolver(params_.method, [this, &solver](auto& flat) { this->workerLoop(solver, flat); });
+      });
     else
-      withSolver(params_.method, [this](auto& solver) { workerLoop(solver); });
+      withSolver(params_.method, [this](auto& solver) { workerLoop(solver, solver); });
   } catch (const std::exception& e) {
     fail(e.what());
   } catch (...) {
@@ -103,8 +123,9 @@ void ComputeSession::workerMain() {
   if (activeWorkers_.fetch_sub(1, std::memory_order_acq_rel) == 1) finish();
 }
 
-template <typename Solver>
-void ComputeSession::workerLoop(Solver& solver) {
+template <typename Solver, typename Flat>
+void ComputeSession::workerLoop(Solver& solver, Flat& flat) {
+  (void)flat;  // only a 3D system uses it
   for (;;) {
     Job job;
     {
@@ -121,8 +142,20 @@ void ComputeSession::workerLoop(Solver& solver) {
     std::shared_ptr<const KeyedElectricLine> e;
     std::shared_ptr<const KeyedPotentialLine> p;
     if constexpr (std::is_same_v<typename Solver::State, Vec3>) {
-      auto line = traceElectricLine3(solver, field_, params_, job.seed, hooks, &st);
-      if (!st.cancelled) e = std::make_shared<const KeyedElectricLine>(KeyedElectricLine{job.key, std::move(line)});
+      if (job.isProbe) {
+        probeCutPlane(CutPlane(field_), params_, job.seed, hooks, &st.cancelled);
+      } else if (job.isEquipotential) {
+        const CutPlane cut(field_);
+        auto line = traceEquipotential(flat, cut, params_, job.start, job.potentialLabel, hooks, &st);
+        line.space.reserve(line.points.size());
+        for (const Vec2& at : line.points) line.space.push_back(cut.lift(at));
+        // A ring only a few pixels wide (around a peak of the potential in the plane) closes at once: no line.
+        if (!st.cancelled && line.points.size() >= 4)
+          p = std::make_shared<const KeyedPotentialLine>(KeyedPotentialLine{job.key, std::move(line)});
+      } else {
+        auto line = traceElectricLine3(solver, field_, params_, job.seed, hooks, &st);
+        if (!st.cancelled) e = std::make_shared<const KeyedElectricLine>(KeyedElectricLine{job.key, std::move(line)});
+      }
     } else if (job.isEquipotential) {
       auto line = traceEquipotential(solver, field_, params_, job.start, job.potentialLabel, hooks, &st);
       if (!st.cancelled) p = std::make_shared<const KeyedPotentialLine>(KeyedPotentialLine{job.key, std::move(line)});

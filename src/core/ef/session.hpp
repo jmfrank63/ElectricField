@@ -75,6 +75,7 @@ class ComputeSession {
   struct Job {
     Seed seed;
     bool isEquipotential = false;
+    bool isProbe = false;       // 3D: walks the cut plane and posts its equipotentials (ef/cut_plane.hpp)
     double potentialLabel = 0;  // job.old_potential
     Vec2 start;                 // equipotential jobs: the point of the parent line at posting time
     JobKey key;
@@ -83,8 +84,8 @@ class ComputeSession {
   friend struct JobHooks;
 
   void workerMain();
-  template <typename Solver>
-  void workerLoop(Solver& solver);
+  template <typename Solver, typename Flat>
+  void workerLoop(Solver& solver, Flat& flat);  // flat: the 2D solver, for the equipotentials of a 3D system
   void fail(const char* what);
   void finish();  // last worker: sort by job key, finalize, publish
   SessionStatus statusLocked() const;

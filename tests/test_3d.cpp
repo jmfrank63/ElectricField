@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "ef/charge_system.hpp"
+#include "ef/cut_plane.hpp"
 #include "ef/forces.hpp"
 #include "ef/presets.hpp"
 #include "ef/scene.hpp"
@@ -103,7 +104,7 @@ TEST_CASE("3d: a dipole along the view axis computes; every line ends on the sin
   ComputeParams p = lightParams();
   const FieldResult r = computeAll(field, p);
   CHECK(r.electric.size() == 4);
-  CHECK(r.potential.empty());  // equipotentials are surfaces in space: not traced
+  CHECK(r.potential.empty());  // the plane between the two charges is at potential 0: no level crosses it
   for (const auto& line : r.electric) {
     REQUIRE(line.points.size() >= 2);
     CHECK(line.points.back().Length() < p.hitRadiusFor(p.chargeRadiusPx));  // both charges project onto the origin
@@ -181,4 +182,68 @@ TEST_CASE("forces: overlapping balls follow the rigid-ball rule and join Coulomb
         }
     CHECK(pairForce(d, R) == doctest::Approx(sum / static_cast<double>(count)).epsilon(0.01));
   }
+}
+
+// Equipotentials of a 3D system: the cut of the equipotential surfaces with the plane parallel to the
+// screen through the centre of the charges.
+TEST_CASE("3d equipotentials: one charge in a turned view gives circles of radius q / level") {
+  ChargeSystem field;
+  field.charges.push_back(at(2, 1, 0.5, 0.25));
+  field.camera.yaw = 0.6;
+  field.camera.pitch = -0.3;
+  const ComputeParams p = lightParams();
+  const FieldResult r = computeAll(field, p);
+  REQUIRE(r.potential.size() >= 5);
+  const Vec2 centre = field.camera.project(field.charges[0].position3());
+  for (const auto& line : r.potential) {
+    CHECK(line.potential > 0);
+    REQUIRE(line.space.size() >= 8);
+    for (const Vec3& at3 : line.space) {
+      CHECK(field.Potential(at3) == doctest::Approx(line.potential).epsilon(0.01));
+      CHECK((field.camera.project(at3) - centre).Length() == doctest::Approx(2. / line.potential).epsilon(0.01));
+      CHECK(field.camera.depth(at3) == doctest::Approx(CutPlane(field).depth));
+    }
+  }
+}
+
+TEST_CASE("3d equipotentials: charges off the cut plane; every line stays on its level, both signs appear") {
+  ChargeSystem field;
+  field.charges.push_back(at(1, -1, 0, 0.5));
+  field.charges.push_back(at(-1, 1, 0, -0.5));
+  field.charges.push_back(at(1, 0, 1.5, 0.3));
+  ComputeParams p = lightParams();
+  p.potentialInterval = 0.25;
+  const FieldResult r = computeAll(field, p);
+  const CutPlane cut(field);
+  CHECK(cut.depth == doctest::Approx(0.1));
+  bool positive = false, negative = false;
+  for (const auto& line : r.potential) {
+    (line.potential > 0 ? positive : negative) = true;
+    REQUIRE(line.space.size() >= 4);
+    for (const Vec3& at3 : line.space) {
+      CHECK(field.camera.depth(at3) == doctest::Approx(cut.depth));
+      CHECK(std::abs(field.Potential(at3) - line.potential) < 0.02);
+    }
+  }
+  CHECK(positive);
+  CHECK(negative);
+
+  p.calculateEquipotentials = false;
+  CHECK(computeAll(field, p).potential.empty());
+}
+
+TEST_CASE("3d equipotentials: with balls the lines stay outside and end on the cut circles") {
+  ChargeSystem field;
+  field.radius = 0.5;
+  field.model = ChargeModel::Conductor;
+  field.charges.push_back(at(1, -1.2, 0, 0.3));
+  field.charges.push_back(at(-1, 1.2, 0, -0.3));
+  field.camera.yaw = 0.3;
+  ComputeParams p = lightParams();
+  p.potentialInterval = 0.25;
+  const FieldResult r = computeAll(field, p);
+  REQUIRE_FALSE(r.potential.empty());
+  for (const auto& line : r.potential)
+    for (const Vec3& at3 : line.space)
+      for (const Charge& c : field.charges) CHECK((at3 - c.position3()).Length() >= field.radius - 1e-6);
 }

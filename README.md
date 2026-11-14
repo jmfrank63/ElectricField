@@ -143,16 +143,24 @@ configuration and the open tabs.
 
 Every charge has a z coordinate (the **Z** field in the editor panel, `charge.z` in scripts, `z` in the
 MCP server), and each tab has a view angle: drag **View angle** in the editor panel, or hold **Alt** and
-drag on the canvas, to turn the camera (yaw and pitch, orthographic, about the origin). While you turn,
-only the charges move; the field lines are recalculated afterwards (at once with Continuous calculation,
-otherwise with Calculate). Dragging a charge moves it in the plane of the screen at any view angle.
+drag on the canvas, to turn the camera (yaw and pitch, orthographic, about the origin). The whole scene turns
+with it at once; no new calculation is needed. Dragging a charge moves it in the plane of the screen at
+any view angle.
 
 A configuration with a charge off the plane, or with a turned view, is computed in 3D: field lines start
-evenly spread over a sphere around each source charge, are traced in space and drawn as their projection.
-Equipotentials are surfaces in space; a 3D view draws their cut with the plane parallel to the screen
-through the centre of the charges (the mean of their positions), so turning the view also turns the cut.
-A ball appears in that plane as the circle it cuts out, which is smaller than its outline unless its
-centre lies in the plane. A planar configuration seen from
+evenly spread over a sphere around each source charge and are traced in space. The 3D view is drawn in
+space, back to front:
+
+- **Balls** are shaded spheres and hide what lies behind them; a line that passes in front is drawn over
+  the ball.
+- **Lines** get thinner and paler with distance.
+- **Equipotentials** are surfaces in space; drawn is their cut with one plane, z = const through the
+  centre of the charges (the mean of their positions). The plane is shown as a tinted sheet with a unit
+  grid and turns with the scene; what lies behind it takes its tint, and a ring marks where it cuts a
+  ball.
+- **Axes:** a small x/y/z triad in the lower left corner shows how the scene is turned.
+
+The view stays orthographic, so equal lengths stay equal on screen. A planar configuration seen from
 the front uses the original 2D pipeline unchanged. z and the view angle are saved with the configuration
 and the open tabs.
 

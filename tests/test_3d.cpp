@@ -10,6 +10,7 @@
 #include "ef/scene.hpp"
 #include "ef/seeds.hpp"
 #include "ef/session.hpp"
+#include "ef/svg.hpp"
 #include "test_params.hpp"
 
 using namespace ef;
@@ -184,8 +185,8 @@ TEST_CASE("forces: overlapping balls follow the rigid-ball rule and join Coulomb
   }
 }
 
-// Equipotentials of a 3D system: the cut of the equipotential surfaces with the plane parallel to the
-// screen through the centre of the charges.
+// Equipotentials of a 3D system: the cut of the equipotential surfaces with the plane z = const through
+// the centre of the charges.
 TEST_CASE("3d equipotentials: one charge in a turned view gives circles of radius q / level") {
   ChargeSystem field;
   field.charges.push_back(at(2, 1, 0.5, 0.25));
@@ -194,14 +195,13 @@ TEST_CASE("3d equipotentials: one charge in a turned view gives circles of radiu
   const ComputeParams p = lightParams();
   const FieldResult r = computeAll(field, p);
   REQUIRE(r.potential.size() >= 5);
-  const Vec2 centre = field.camera.project(field.charges[0].position3());
   for (const auto& line : r.potential) {
     CHECK(line.potential > 0);
     REQUIRE(line.space.size() >= 8);
     for (const Vec3& at3 : line.space) {
       CHECK(field.Potential(at3) == doctest::Approx(line.potential).epsilon(0.01));
-      CHECK((field.camera.project(at3) - centre).Length() == doctest::Approx(2. / line.potential).epsilon(0.01));
-      CHECK(field.camera.depth(at3) == doctest::Approx(CutPlane(field).depth));
+      CHECK((at3 - field.charges[0].position3()).Length() == doctest::Approx(2. / line.potential).epsilon(0.01));
+      CHECK(at3.Z == doctest::Approx(CutPlane(field).z));
     }
   }
 }
@@ -215,13 +215,13 @@ TEST_CASE("3d equipotentials: charges off the cut plane; every line stays on its
   p.potentialInterval = 0.25;
   const FieldResult r = computeAll(field, p);
   const CutPlane cut(field);
-  CHECK(cut.depth == doctest::Approx(0.1));
+  CHECK(cut.z == doctest::Approx(0.1));
   bool positive = false, negative = false;
   for (const auto& line : r.potential) {
     (line.potential > 0 ? positive : negative) = true;
     REQUIRE(line.space.size() >= 4);
     for (const Vec3& at3 : line.space) {
-      CHECK(field.camera.depth(at3) == doctest::Approx(cut.depth));
+      CHECK(at3.Z == doctest::Approx(cut.z));
       CHECK(std::abs(field.Potential(at3) - line.potential) < 0.02);
     }
   }
@@ -246,4 +246,132 @@ TEST_CASE("3d equipotentials: with balls the lines stay outside and end on the c
   for (const auto& line : r.potential)
     for (const Vec3& at3 : line.space)
       for (const Charge& c : field.charges) CHECK((at3 - c.position3()).Length() >= field.radius - 1e-6);
+}
+
+// The 3D view: drawn in space, back to front.
+namespace {
+struct Recorder final : Painter {
+  struct Item {
+    char kind;  // 's'troke, 'c'ircle, 'p'olygon
+    std::vector<PointF> pts;
+    float size;
+    Color color;
+  };
+  std::vector<Item> items;
+  void begin(int, int, Color) override {}
+  void strokePath(const PointF* p, std::size_t n, std::size_t, bool, Color c, float width) override {
+    items.push_back({'s', std::vector<PointF>(p, p + n), width, c});
+  }
+  void fillCircle(PointF c, float r, Color color) override { items.push_back({'c', {c}, r, color}); }
+  void fillPolygon(const PointF* p, std::size_t n, Color c) override { items.push_back({'p', std::vector<PointF>(p, p + n), 0, c}); }
+  void end() override {}
+};
+
+// A line along the view axis through the origin: from z = -3 to z = 3, as a 3D path.
+ScenePath axisLine() {
+  ScenePath path;
+  for (int i = 0; i <= 60; ++i) {
+    path.space.push_back(Vec3(0.02, 0.02, -3. + 0.1 * i));
+    path.points.push_back(Vec2(0.02, 0.02));
+  }
+  return path;
+}
+}  // namespace
+
+TEST_CASE("3d view: a ball hides the line behind it, the line before it is drawn over it") {
+  ChargeSystem field;
+  field.radius = 0.5;
+  field.charges.push_back(at(1, 0, 0, 0.001));  // off the plane: a 3D system
+  FieldScene scene = buildScene(field, FieldResult{});
+  REQUIRE(scene.space);
+  scene.electric.push_back(axisLine());
+  Recorder rec;
+  View view;
+  renderScene(rec, scene, DrawStyle{}, view);
+
+  std::size_t firstDisc = rec.items.size(), lastDisc = 0, strokesBefore = 0, strokesAfter = 0;
+  for (std::size_t i = 0; i < rec.items.size(); ++i)
+    if (rec.items[i].kind == 'c') {
+      firstDisc = std::min(firstDisc, i);
+      lastDisc = i;
+    }
+  REQUIRE(firstDisc < rec.items.size());
+  CHECK(rec.items[firstDisc].size == doctest::Approx(50.f));  // the sphere at its true radius
+  CHECK(lastDisc > firstDisc);                                // shaded: more than one disc
+  float widthBehind = 0, widthBefore = 0;
+  for (std::size_t i = 0; i < rec.items.size(); ++i) {
+    if (rec.items[i].kind != 's' || rec.items[i].color.b > rec.items[i].color.r + 20) continue;  // skip the triad's blue z
+    if (rec.items[i].color.r > rec.items[i].color.g + 20 || rec.items[i].color.g > rec.items[i].color.r + 20) continue;  // and x, y
+    if (i < firstDisc) {
+      ++strokesBefore;
+      widthBehind = std::max(widthBehind, rec.items[i].size);
+    } else if (i > lastDisc) {
+      ++strokesAfter;
+      widthBefore = std::max(widthBefore, rec.items[i].size);
+    }
+  }
+  CHECK(strokesBefore > 0);  // the far half, under the ball
+  CHECK(strokesAfter > 0);   // the near half, over it
+  CHECK(widthBefore > widthBehind);  // nearer lines are thicker
+
+  // seen from the other side the same line is split the other way round: nothing was recalculated
+  field.camera.yaw = kPi;
+  syncSceneCharges(scene, field);
+  Recorder back;
+  renderScene(back, scene, DrawStyle{}, view);
+  CHECK(back.items.size() == rec.items.size());
+}
+
+TEST_CASE("3d view: the cut plane is a sheet, drawn first; a flat scene has none and keeps flat dots") {
+  ChargeSystem field;
+  field.charges.push_back(at(1, -1, 0, 0.5));
+  field.charges.push_back(at(-1, 1, 0, -0.5));
+  field.camera.yaw = 0.5;
+  ComputeParams p = lightParams();
+  const FieldResult r = computeAll(field, p);
+  REQUIRE_FALSE(r.potential.empty());
+  const FieldScene scene = buildScene(field, r);
+  Recorder rec;
+  renderScene(rec, scene, DrawStyle{}, View{});
+  REQUIRE_FALSE(rec.items.empty());
+  CHECK(rec.items.front().kind == 'p');
+  CHECK(rec.items.front().pts.size() == 4);
+  // the sheet is the plane z = 0 here, seen at an angle: its corners are not a screen rectangle's
+  CHECK(std::abs(rec.items.front().pts[1].x - rec.items.front().pts[0].x) < 0.95f * 100.f * 6.f);
+  CHECK(renderSvg(scene, DrawStyle{}, View{}).find("<path stroke=\"none\" fill=") != std::string::npos);
+
+  ChargeSystem flat;
+  flat.charges.push_back(at(1, -1, 0, 0));
+  flat.charges.push_back(at(-1, 1, 0, 0));
+  const FieldScene flatScene = buildScene(flat, computeAll(flat, p));
+  CHECK_FALSE(flatScene.space);
+  Recorder plain;
+  renderScene(plain, flatScene, DrawStyle{}, View{});
+  std::size_t discs = 0, polygons = 0;
+  for (const auto& item : plain.items) {
+    discs += item.kind == 'c';
+    polygons += item.kind == 'p';
+  }
+  CHECK(discs == 2);
+  CHECK(polygons == 0);
+}
+
+TEST_CASE("3d view: lines made by the flat pipeline turn with the view too") {
+  ChargeSystem flat;
+  flat.charges.push_back(at(1, -1, 0, 0));
+  flat.charges.push_back(at(-1, 1, 0, 0));
+  FieldScene scene = buildScene(flat, computeAll(flat, lightParams()));
+  flat.camera.yaw = kPi / 2;  // edge on: the plane of the lines is a vertical line on the screen now
+  syncSceneCharges(scene, flat);
+  REQUIRE(scene.space);
+  Recorder rec;
+  View view;
+  renderScene(rec, scene, DrawStyle{}, view);
+  std::size_t strokes = 0;
+  for (const auto& item : rec.items) {
+    if (item.kind != 's' || item.pts.front().y > static_cast<float>(view.heightPx) - 100.f) continue;  // not the triad
+    ++strokes;
+    for (const PointF& pt : item.pts) CHECK(pt.x == doctest::Approx(view.widthPx / 2.).epsilon(0.001));
+  }
+  CHECK(strokes > 0);
 }

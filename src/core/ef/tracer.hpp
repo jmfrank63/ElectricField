@@ -206,19 +206,23 @@ FieldLine traceElectricLine3(Solver& solver, const ChargeSystem& field, const Co
   double step = 0.001;
   double next_step = step;
   const double px = static_cast<double>(p.pixelsPerUnit);
-  // Records the projection (thinned like every line) and, for each kept point, the point in space.
+  // Records the point in space and its projection. Thinned like every line, but by the distance in
+  // space, so the line is as detailed from any view angle (the view turns without a new calculation).
   const auto record = [&line, &field, px](const Vec3& at) {
-    const std::size_t before = line.points.size();
-    line.addPoint(field.camera.project(at), px);
-    if (line.points.size() != before) line.space.push_back(at);
+    if (!line.space.empty()) {
+      const double dif = (line.space.back() - at).Length() * px;
+      const double len = at.Length();
+      if (!((dif >= 256. && len >= 2000 && len < 3000) || (dif >= 64. && len > 1000 && len < 2000) || (dif >= 8. && len <= 1000))) return;
+    }
+    line.space.push_back(at);
+    line.points.push_back(field.camera.project(at));
   };
   record(point);
 
   const auto endAt = [&line, &field](const Vec3& at) {
-    const Vec2 flat = field.camera.project(at);
-    if (line.points.empty() || !(line.points.back() == flat)) {
-      line.points.push_back(flat);
+    if (line.space.empty() || !(line.space.back() == at)) {
       line.space.push_back(at);
+      line.points.push_back(field.camera.project(at));
     }
   };
 
@@ -243,8 +247,7 @@ FieldLine traceElectricLine3(Solver& solver, const ChargeSystem& field, const Co
       break;
     }
     if (const int ball = field.BallAt(point); ball >= 0) {
-      const Vec2 flat = field.camera.project(point);
-      if (!line.points.empty() && line.points.back() == flat) {
+      if (!line.space.empty() && line.space.back() == point) {
         line.points.pop_back();
         line.space.pop_back();
       }

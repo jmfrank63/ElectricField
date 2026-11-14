@@ -125,16 +125,8 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   {
     efrender::ImGuiPainter painter(dl, p);
     // v2.4 BUG-01: the grid is a core pass inside renderScene (after the background, before the lines).
-    if (t.scene.camera == t.field.camera) {
-      ef::renderScene(painter, t.scene, style, view, t.grid.visible ? &t.grid : nullptr);
-    } else {
-      // The view was turned since the lines were computed: they belong to the old angle, so only the
-      // charges are shown until the next calculation.
-      ef::FieldScene balls;
-      balls.charges = t.scene.charges;
-      balls.chargeRadius = t.scene.chargeRadius;
-      ef::renderScene(painter, balls, style, view, t.grid.visible ? &t.grid : nullptr);
-    }
+    // A turned view draws the lines from their points in space, so they follow the camera at once.
+    ef::renderScene(painter, t.scene, style, view, t.grid.visible ? &t.grid : nullptr);
   }
   ui.canvasMin = p;
   ui.canvasMax = ImVec2(p.x + static_cast<float>(view.widthPx), p.y + static_cast<float>(view.heightPx));
@@ -149,7 +141,7 @@ void drawCanvas(efapp::Tab& t, UiState& ui, const UiEnv& env) {
   // Options value, so bounds are display-scale-independent and per-charge sizePx needs no scaling.
   const int hoverIdx = (canEdit && hovered) ? efapp::editor::hitCharge(t.field, mouseWorld, 100.0 * t.zoom, dotPx) : -1;
   // 3D: Alt + left-drag turns the view (yaw with the horizontal, pitch with the vertical movement).
-  // Only the charges follow while turning; the lines are recalculated afterwards.
+  // The whole scene follows at once: a 3D scene is drawn from its points in space.
   const bool turning = canEdit && io.KeyAlt && ImGui::IsMouseDragging(0) && (hovered || ui.canvasTurn);
   if (turning) {
     if (efapp::editor::setCamera(t, t.field.camera.yaw + static_cast<double>(io.MouseDelta.x) * 0.01,
@@ -1031,9 +1023,9 @@ void drawEditorPanel(efapp::Tab& t, UiState& ui, const UiEnv& env) {
     }
     if (ImGui::IsItemHovered())
       ImGui::SetTooltip("Yaw and pitch of the view. Drag here, or hold Alt and drag on the canvas.\n"
-                        "While turning only the charges move; the lines are recalculated afterwards.\n"
+                        "The scene turns with it at once; no new calculation is needed.\n"
                         "A turned view, or a charge with Z other than 0, is computed in 3D;\n"
-                        "equipotentials are then cut by the plane through the centre of the charges, parallel to the screen.");
+                        "equipotentials are then the cut with the plane z = const through the centre of the charges (the tinted sheet).");
     if (!t.field.camera.isDefault()) {
       ImGui::SameLine();
       if (ImGui::SmallButton("Front")) {

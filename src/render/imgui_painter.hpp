@@ -36,6 +36,12 @@ class ImGuiPainter final : public ef::Painter {
 
   void fillCircle(ef::PointF center, float radius, ef::Color c) override { dl_->AddCircleFilled(pt(center), radius, col(c), 0); }
 
+  void fillPolygon(const ef::PointF* p, std::size_t n, ef::Color c) override {
+    if (n < 3) return;
+    for (std::size_t i = 0; i < n; ++i) dl_->PathLineTo(pt(p[i]));
+    dl_->PathFillConvex(col(c));
+  }
+
   void end() override {
     if (clipPushed_) dl_->PopClipRect();
     clipPushed_ = false;

@@ -25,6 +25,7 @@ const core_sources = [_][]const u8{
     "ef/finalizer.cpp",
     "ef/session.cpp",
     "ef/scene.cpp",
+    "ef/scene3d.cpp",
     "ef/svg.cpp",
     "ef/pdf.cpp",
     "ef/csv.cpp",

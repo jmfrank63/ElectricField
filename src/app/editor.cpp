@@ -428,7 +428,7 @@ bool setChargeModel(Tab& t, ef::ChargeModel model) {
 // previous calculation". Exact == comparisons, the same convention moveCharge and commitDrag use
 // for no-op detection.
 bool samePhysics(const ef::ChargeSystem& a, const ef::ChargeSystem& b) {
-  if (a.charges.size() != b.charges.size() || a.radius != b.radius || a.model != b.model || !(a.camera == b.camera)) return false;
+  if (a.charges.size() != b.charges.size() || a.radius != b.radius || a.model != b.model || a.is3D() != b.is3D()) return false;  // the view angle alone needs no new lines: a 3D scene is drawn from its points in space
   for (std::size_t i = 0; i < a.charges.size(); ++i)
     if (a.charges[i].charge != b.charges[i].charge || a.charges[i].position.X != b.charges[i].position.X ||
         a.charges[i].position.Y != b.charges[i].position.Y || a.charges[i].z != b.charges[i].z || a.charges[i].group != b.charges[i].group || a.charges[i].sizePx != b.charges[i].sizePx)

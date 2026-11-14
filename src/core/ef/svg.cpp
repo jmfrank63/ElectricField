@@ -88,6 +88,18 @@ void SvgPainter::fillCircle(PointF c, float r, Color color) {
   out_ += "\"/>\n";
 }
 
+void SvgPainter::fillPolygon(const PointF* pts, std::size_t n, Color color) {
+  if (n < 3) return;
+  out_ += "<path stroke=\"none\" fill=\"";
+  appendColor(out_, color);
+  out_ += "\" d=\"M";
+  for (std::size_t i = 0; i < n; ++i) {
+    if (i) out_ += i == 1 ? "L" : " ";
+    appendPt(out_, pts[i]);
+  }
+  out_ += "Z\"/>\n";
+}
+
 void SvgPainter::end() { out_ += "</svg>\n"; }
 
 std::string renderSvg(const FieldScene& scene, const DrawStyle& style, const View& view) {

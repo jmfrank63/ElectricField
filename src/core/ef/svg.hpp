@@ -11,6 +11,7 @@ class SvgPainter final : public Painter {
   void begin(int widthPx, int heightPx, Color background) override;
   void strokePath(const PointF* pts, std::size_t n, std::size_t bezierSegments, bool closed, Color color, float width) override;
   void fillCircle(PointF center, float radius, Color color) override;
+  void fillPolygon(const PointF* pts, std::size_t n, Color color) override;
   void end() override;
 
   const std::string& str() const { return out_; }

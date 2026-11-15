@@ -147,8 +147,12 @@ void ComputeSession::workerLoop(Solver& solver, Flat& flat) {
       } else if (job.isEquipotential) {
         const CutPlane cut(field_);
         auto line = traceEquipotential(flat, cut, params_, job.start, job.potentialLabel, hooks, &st);
+        // traced in the plane's own x and y: keep the points in space, and their projection for drawing
         line.space.reserve(line.points.size());
-        for (const Vec2& at : line.points) line.space.push_back(cut.lift(at));
+        for (Vec2& at : line.points) {
+          line.space.push_back(cut.lift(at));
+          at = field_.camera.project(line.space.back());
+        }
         // A ring only a few pixels wide (around a peak of the potential in the plane) closes at once: no line.
         if (!st.cancelled && line.points.size() >= 4)
           p = std::make_shared<const KeyedPotentialLine>(KeyedPotentialLine{job.key, std::move(line)});

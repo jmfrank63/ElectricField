@@ -1,7 +1,9 @@
 #pragma once
 // Equipotentials of a 3D system. In space they are surfaces; what is drawn is their cut with one plane:
-// the plane parallel to the screen through the centre of the charges. Inside that plane the potential is
-// an ordinary function of two coordinates, so the 2D equipotential tracer follows its contours.
+// the plane z = const through the centre of the charges (for a planar configuration the plane the 2D app
+// has always drawn). The plane is fixed in space, so it turns with the scene when the view is turned.
+// Inside it the potential is an ordinary function of x and y, so the 2D equipotential tracer follows
+// its contours.
 #include <algorithm>
 #include <cmath>
 
@@ -12,29 +14,29 @@
 
 namespace ef {
 
-// The field of a ChargeSystem restricted to the cut plane, in screen coordinates (world units). It has
-// the members the 2D equipotential tracer uses of a ChargeSystem.
+// The field of a ChargeSystem restricted to the cut plane, in the plane's x and y. It has the members
+// the 2D equipotential tracer uses of a ChargeSystem.
 struct CutPlane {
   const ChargeSystem* field = nullptr;
-  double depth = 0;  // of the plane, along the camera's line of sight
+  double z = 0;  // the plane
 
   explicit CutPlane(const ChargeSystem& f) : field(&f) {
-    for (const Charge& c : f.charges) depth += f.camera.depth(c.position3());
-    if (!f.charges.empty()) depth /= static_cast<double>(f.charges.size());
+    for (const Charge& c : f.charges) z += c.z;
+    if (!f.charges.empty()) z /= static_cast<double>(f.charges.size());
   }
 
-  Vec3 lift(const Vec2& p) const { return field->camera.unproject(p, depth); }
+  Vec3 lift(const Vec2& p) const { return Vec3(p.X, p.Y, z); }
   double Potential(const Vec2& p) const { return field->Potential(lift(p)); }
   // The part of the field that lies in the plane.
   Vec2 E(const Vec2& p) const {
     const Vec3 e = field->E(lift(p));
-    return Vec2(e * field->camera.right(), e * field->camera.up());
+    return Vec2(e.X, e.Y);
   }
   int BallAt(const Vec3& flat) const { return field->BallAt(lift(Vec2(flat.X, flat.Y))); }
   // The circle a ball cuts out of the plane: its centre and radius (0 when the ball misses the plane).
-  Vec2 centre(std::size_t index) const { return field->camera.project(field->charges[index].position3()); }
+  Vec2 centre(std::size_t index) const { return field->charges[index].position; }
   double cutRadius(std::size_t index) const {
-    const double h = field->camera.depth(field->charges[index].position3()) - depth;
+    const double h = field->charges[index].z - z;
     return field->radius > std::abs(h) ? std::sqrt(field->radius * field->radius - h * h) : 0.;
   }
   // The point of ball `index`'s circle on the ray from its centre through `flat`.
@@ -71,7 +73,7 @@ void probeCutPlane(const CutPlane& cut, const ComputeParams& p, const Seed& seed
 
   // Start: next to the charge where it lies in the plane, else at the point of the plane nearest to it.
   const Vec2 c = cut.centre(seed.chargeIndex);
-  const double h = std::abs(field.camera.depth(charge.position3()) - cut.depth);
+  const double h = std::abs(charge.z - cut.z);
   const double dotPx = charge.sizePx > 0.f ? static_cast<double>(charge.sizePx) : p.chargeRadiusPx;
   double reach = 0.01;
   if (field.radius > 0) {

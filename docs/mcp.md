@@ -91,9 +91,12 @@ points towards the viewer. The 3D pipeline differs from the planar one in three 
 - The view is orthographic and turns about the world origin: `view_yaw` about the vertical axis, then
   `view_pitch` about the screen's horizontal axis, both in degrees. Lines are returned and drawn as their
   projection onto the screen; nearer charges are drawn over farther ones.
-- Equipotentials are surfaces in space. Drawn and returned is their cut with the plane parallel to the
-  screen through the centre of the charges (the mean of their positions); in the lines CSV their points
-  carry the coordinates in space.
+- Equipotentials are surfaces in space. Drawn and returned is their cut with the plane z = const through
+  the centre of the charges (the mean of their positions); in the lines CSV their points carry the
+  coordinates in space.
+- A rendered 3D image is drawn in space: shaded balls that hide what lies behind them, lines that get
+  thinner and paler with distance, the cut plane as a tinted sheet with a unit grid, and an x/y/z triad
+  in the lower left corner.
 
 Results carry `"dimensions": 2` or `3`. A planar request with the default view gives exactly the output
 it always gave.

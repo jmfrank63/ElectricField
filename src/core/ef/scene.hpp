@@ -65,6 +65,8 @@ struct SceneCharge {
   // Index of the melted body the ball belongs to (ChargeSystem::bodies); balls of one body are outlined
   // as one shape.
   int body = -1;
+  // The centre in space (a 3D view draws the ball as a sphere there).
+  Vec3 centre{};
 };
 
 struct FieldScene {
@@ -75,6 +77,12 @@ struct FieldScene {
   // The camera the LINES were computed for (set by buildScene only). The charges follow the field's
   // current camera at once (syncSceneCharges); a view shows the lines only while the two agree.
   Camera camera;
+  // 3D view (ChargeSystem::is3D, set by syncSceneCharges with the charges): the scene is drawn in space
+  // through `view`, the field's current camera - shaded balls that hide what lies behind them, lines
+  // that fade with distance, the cut plane of the equipotentials as a sheet, an axis triad. Lines are
+  // projected anew from their points in space on every draw, so turning the view needs no calculation.
+  bool space = false;
+  Camera view{};
 };
 
 FieldScene buildScene(const ChargeSystem& field, const FieldResult& result);
@@ -95,6 +103,8 @@ class Painter {
   // straight line-to points. bezierSegments == 0 => polyline. closed => connect the last point back to the first.
   virtual void strokePath(const PointF* pts, std::size_t n, std::size_t bezierSegments, bool closed, Color color, float width) = 0;
   virtual void fillCircle(PointF center, float radius, Color color) = 0;
+  // A filled convex polygon (3D view: the cut plane). Optional: a backend without it shows no sheet.
+  virtual void fillPolygon(const PointF* /*pts*/, std::size_t /*n*/, Color /*color*/) {}
   virtual void end() = 0;
 };
 

@@ -23,6 +23,7 @@ class PdfPainter final : public Painter {
   void begin(int widthPx, int heightPx, Color background) override;  // starts a page (a renderScene calls it)
   void strokePath(const PointF* pts, std::size_t n, std::size_t bezierSegments, bool closed, Color color, float width) override;
   void fillCircle(PointF center, float radius, Color color) override;
+  void fillPolygon(const PointF* pts, std::size_t n, Color color) override;
   void end() override;  // closes the page (a renderScene calls it too - one renderScene is one page)
 
   void setTitle(std::string title);  // bookmark title of the page most recently rendered

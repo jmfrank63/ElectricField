@@ -122,6 +122,23 @@ void PdfPainter::strokePath(const PointF* pts, const std::size_t n, const std::s
   s += "S Q\n";
 }
 
+void PdfPainter::fillPolygon(const PointF* pts, const std::size_t n, const Color color) {
+  if (!open_ || n < 3) return;
+  std::string& s = pages_.back().content;
+  s += "q ";
+  appendNum(s, color.r / 255.0);
+  s += ' ';
+  appendNum(s, color.g / 255.0);
+  s += ' ';
+  appendNum(s, color.b / 255.0);
+  s += " rg\n";
+  for (std::size_t i = 0; i < n; ++i) {
+    appendPt(s, pts[i]);
+    s += i == 0 ? " m\n" : " l\n";
+  }
+  s += "h f Q\n";
+}
+
 void PdfPainter::fillCircle(const PointF c, const float radius, const Color color) {
   if (!open_ || !(radius > 0.f)) return;
   std::string& s = pages_.back().content;

@@ -1145,6 +1145,28 @@ TEST_CASE("3d editing: z, moving on the screen plane, and turning the camera") {
   CHECK(t.field.charges.back().z == -4.0);
 }
 
+TEST_CASE("setCamera: turning a 3D scene needs no new calculation; leaving or entering the flat view does") {
+  ThrowFactory f;
+  efapp::Tab& t = dipoleTab(f);
+  t.computed = t.field;  // as after a calculation
+  t.stale = false;
+  // flat -> turned: the lines were made by the 2D pipeline, the 3D one seeds differently
+  REQUIRE(efapp::editor::setCamera(t, 0.4, 0.1));
+  CHECK(t.stale);
+  CHECK(t.scene.space);
+  CHECK(t.scene.view == t.field.camera);
+  t.computed = t.field;
+  t.stale = false;
+  // turned -> turned further: the same lines, seen from elsewhere
+  REQUIRE(efapp::editor::setCamera(t, 1.2, -0.5));
+  CHECK_FALSE(t.stale);
+  CHECK(t.scene.view == t.field.camera);
+  // back to the flat view
+  REQUIRE(efapp::editor::setCamera(t, 0, 0));
+  CHECK(t.stale);
+  CHECK_FALSE(t.scene.space);
+}
+
 TEST_CASE("setChargeModel: a physics edit with one history entry") {
   ThrowFactory f;
   efapp::Tab& t = dipoleTab(f);

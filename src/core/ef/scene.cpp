@@ -1,5 +1,6 @@
 #include <ef/grid.hpp>
 #include "ef/scene.hpp"
+#include "ef/scene_detail.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -33,17 +34,14 @@ void syncSceneCharges(FieldScene& scene, const ChargeSystem& field) {
   for (std::size_t i = 0; i < field.charges.size(); ++i) {
     const Charge& c = field.charges[i];
     const int shown = bodyCharge.empty() ? c.charge : bodyCharge[static_cast<std::size_t>(body[i])];
-    scene.charges.push_back(SceneCharge{field.camera.project(c.position3()), shown, c.sizePx, field.camera.depth(c.position3()), body[i]});
+    scene.charges.push_back(SceneCharge{field.camera.project(c.position3()), shown, c.sizePx, field.camera.depth(c.position3()), body[i], c.position3()});
   }
   scene.chargeRadius = field.radius;
+  scene.space = field.is3D();
+  scene.view = field.camera;
 }
 
 namespace {
-
-// A neutral body (total charge 0) is drawn in the line colour.
-Color chargeColor(const DrawStyle& style, int charge) {
-  return charge > 0 ? style.positiveCharge : charge < 0 ? style.negativeCharge : style.electricLine;
-}
 
 constexpr float kMargin = 10.f;  // FieldLine::Draw: irect.InflateRect(10, 10)
 
@@ -306,6 +304,7 @@ void drawGrid(Painter& painter, const GridSettings& g, const View& view) {
 }
 
 void renderScene(Painter& painter, const FieldScene& scene, const DrawStyle& style, const View& view, const GridSettings* grid) {
+  if (scene.space) return renderSceneSpace(painter, scene, style, view, grid);
   painter.begin(view.widthPx, view.heightPx, style.background);
   const Rect vis{-kMargin, -kMargin, static_cast<float>(view.widthPx) + kMargin, static_cast<float>(view.heightPx) + kMargin};
 
